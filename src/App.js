@@ -23,6 +23,8 @@ import Sales from './pages/Sales';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 
+import CustomerManagement from './components/customers/CustomerManagement';
+
 // Import constants
 import { APP_NAME } from './utils/constants';
 
@@ -408,6 +410,7 @@ function App() {
                     <Route path="/production" element={<Production />} />
                     <Route path="/inventory" element={<Inventory />} />
                     <Route path="/sales" element={<Sales />} />
+                    <Route path="/customers" element={<CustomerManagement />} />
                     <Route path="/reports" element={<Reports />} />
                     <Route path="/settings" element={<Settings />} />
                     

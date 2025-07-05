@@ -6,6 +6,19 @@ import { getAuth } from 'firebase/auth';
 // Import localStorage fallback
 import { localStorageUtils, initializeLocalStorage } from './localStorage';
 
+const validateFirebasePath = (path) => {
+  if (!path || path === '/') return path;
+  
+  // Remove any invalid characters and clean the path
+  const cleanPath = path
+    .replace(/\/+/g, '/') // Replace multiple slashes with single slash
+    .replace(/^\//, '') // Remove leading slash
+    .replace(/\/$/, '') // Remove trailing slash
+    .replace(/[.#$\[\]]/g, '_'); // Replace invalid Firebase characters
+  
+  return cleanPath;
+};
+
 // Check if Firebase is configured
 const isFirebaseConfigured = () => {
   return !!(
@@ -78,6 +91,16 @@ export const dbUtils = {
     try {
       if (useLocalStorage) {
         return await localStorageUtils.readData(path);
+      }
+
+      // Validate and clean the path
+      const cleanPath = validateFirebasePath(path);
+    
+      if (!cleanPath) {
+        // If path is empty or just '/', read the root
+        const snapshot = await get(ref(database));
+        const data = snapshot.exists() ? snapshot.val() : null;
+        return { success: true, data };
       }
       
       const dbRef = ref(database, path);

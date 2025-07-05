@@ -27,6 +27,8 @@ import {
   TableRow,
   Paper,
   LinearProgress,
+  useTheme,
+  alpha,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -37,6 +39,8 @@ import {
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon,
+  Refresh as RefreshIcon,
+  LocalShipping as TruckIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 
@@ -55,6 +59,7 @@ import {
 import { PRODUCTION_SHIFTS, QUALITY_GRADES } from "../utils/constants";
 
 function Production() {
+  const theme = useTheme();
   const { actions: appActions, settings } = useApp();
   const { cement, actions: inventoryActions } = useInventory();
 
@@ -69,6 +74,7 @@ function Production() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduction, setEditingProduction] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Form management
   const {
@@ -81,8 +87,7 @@ function Production() {
   } = useForm({
     defaultValues: {
       quantity: "",
-      shift: "morning", // This now matches the constants key
-      // quality: 'B', // REMOVED - no longer needed
+      shift: "morning",
       notes: "",
       overrideCement: false,
       cementUsed: "",
@@ -144,6 +149,20 @@ function Production() {
     }
   };
 
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadProductionData();
+      appActions.showNotification("Production data refreshed", "success");
+    } catch (error) {
+      console.error("Error refreshing production data:", error);
+      appActions.showNotification("Failed to refresh production data", "error");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // Handle form submission
   const onSubmit = async (data) => {
     try {
@@ -166,7 +185,6 @@ function Production() {
         quantity: parseInt(data.quantity),
         cementUsed: parseFloat(data.cementUsed),
         shift: data.shift,
-        quality: data.quality,
         notes: data.notes,
         overrideCementCalculation: data.overrideCement,
       };
@@ -200,7 +218,6 @@ function Production() {
     setValue("quantity", production.quantity);
     setValue("cementUsed", production.cement_used);
     setValue("shift", production.shift);
-    setValue("quality", production.quality);
     setValue("notes", production.notes || "");
     setDialogOpen(true);
   };
@@ -222,42 +239,41 @@ function Production() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
+    <Box>
+      {/* Header - Consistent with other pages */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Box>
-          <Typography
-            variant="h4"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: 600 }}
-          >
+          <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
             Production Management
           </Typography>
           <Typography variant="body1" color="textSecondary">
-            Track daily brick production and manage manufacturing operations
+            Track daily brick production and manage manufacturing operations.
           </Typography>
         </Box>
 
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setDialogOpen(true)}
-          sx={{ borderRadius: 2 }}
-        >
-          Record Production
-        </Button>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Tooltip title="Refresh production data">
+            <IconButton
+              onClick={handleRefresh}
+              disabled={refreshing}
+              color="primary"
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setDialogOpen(true)}
+            sx={{ borderRadius: 2 }}
+          >
+            Record Production
+          </Button>
+        </Box>
       </Box>
 
       {/* Loading indicator */}
-      {productionData.loading && <LinearProgress sx={{ mb: 2 }} />}
+      {(productionData.loading || refreshing) && <LinearProgress sx={{ mb: 2 }} />}
 
       {/* Error alert */}
       {productionData.error && (
@@ -266,164 +282,194 @@ function Production() {
         </Alert>
       )}
 
-      {/* Today's Production Status */}
+      {/* Stats Cards - Consistent Design with Fixed Heights */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}>
-          <Card>
+        {/* Today's Production */}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ height: "100%" }}>
             <CardContent>
               <Box
                 sx={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
-                  mb: 2,
+                  height: "100px", // Fixed height for consistency
                 }}
               >
-                <Typography variant="h6" color="primary">
-                  Today's Production
-                </Typography>
-                <FactoryIcon color="primary" />
-              </Box>
-
-              {productionData.todayProduction ? (
                 <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-                    {productionData.todayProduction.quantity.toLocaleString()}
-                  </Typography>
                   <Typography
-                    variant="body2"
                     color="textSecondary"
                     gutterBottom
+                    variant="overline"
                   >
-                    Bricks produced
+                    Today's Production
                   </Typography>
-                  <Box
-                    sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 2 }}
-                  >
-                    <Chip
-                      label={`${productionData.todayProduction.cement_used} bags cement`}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                    />
-                    <Chip
-                      label={`${productionData.todayProduction.efficiency}% efficiency`}
-                      size="small"
-                      color="success"
-                      variant="outlined"
-                    />
-                  </Box>
-                </Box>
-              ) : (
-                <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-                    0
+                  <Typography variant="h5" component="div">
+                    {productionData.todayProduction?.quantity?.toLocaleString() || 0}
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
-                    No production recorded today
+                    Bricks produced today
                   </Typography>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => setDialogOpen(true)}
-                    sx={{ mt: 2 }}
-                  >
-                    Record Production
-                  </Button>
                 </Box>
-              )}
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 2,
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    color: theme.palette.primary.main,
+                  }}
+                >
+                  <FactoryIcon />
+                </Box>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Card>
+        {/* Monthly Stats */}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ height: "100%" }}>
             <CardContent>
               <Box
                 sx={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
-                  mb: 2,
+                  height: "100px", // Fixed height for consistency
                 }}
               >
-                <Typography variant="h6" color="secondary">
-                  Monthly Stats
-                </Typography>
-                <TrendingUpIcon color="secondary" />
-              </Box>
-
-              {productionData.stats ? (
                 <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-                    {productionData.stats.total_quantity.toLocaleString()}
-                  </Typography>
                   <Typography
-                    variant="body2"
                     color="textSecondary"
                     gutterBottom
+                    variant="overline"
                   >
+                    Monthly Production
+                  </Typography>
+                  <Typography variant="h5" component="div">
+                    {productionData.stats?.total_quantity?.toLocaleString() || 0}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
                     Total bricks this month
                   </Typography>
-                  <Box
-                    sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 2 }}
-                  >
-                    <Chip
-                      label={`${productionData.stats.production_days} days`}
-                      size="small"
-                      color="secondary"
-                      variant="outlined"
-                    />
-                    <Chip
-                      label={`${productionData.stats.average_daily_production}/day avg`}
-                      size="small"
-                      color="info"
-                      variant="outlined"
-                    />
-                  </Box>
                 </Box>
-              ) : (
-                <Typography variant="body2" color="textSecondary">
-                  Loading stats...
-                </Typography>
-              )}
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 2,
+                    backgroundColor: alpha(theme.palette.success.main, 0.1),
+                    color: theme.palette.success.main,
+                  }}
+                >
+                  <TrendingUpIcon />
+                </Box>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Card>
+        {/* Cement Status */}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ height: "100%" }}>
             <CardContent>
               <Box
                 sx={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
-                  mb: 2,
+                  height: "100px", // Fixed height for consistency
                 }}
               >
-                <Typography variant="h6" color="warning.main">
-                  Cement Status
-                </Typography>
-                <WarningIcon color="warning" />
+                <Box>
+                  <Typography
+                    color="textSecondary"
+                    gutterBottom
+                    variant="overline"
+                  >
+                    Cement Available
+                  </Typography>
+                  <Typography variant="h5" component="div">
+                    {cement.total_bags}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Bags in stock
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 2,
+                    backgroundColor: alpha(theme.palette.warning.main, 0.1),
+                    color: theme.palette.warning.main,
+                  }}
+                >
+                  <TruckIcon />
+                </Box>
               </Box>
-
-              <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-                {cement.total_bags}
-              </Typography>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
-                Bags available
-              </Typography>
-
-              {cement.total_bags < 10 && (
-                <Alert severity="warning" sx={{ mt: 2 }}>
-                  Low cement stock!
-                </Alert>
-              )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
+
+      {/* Additional Info Cards */}
+      {productionData.todayProduction && (
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Today's Production Details
+                </Typography>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={4}>
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
+                        Cement Used
+                      </Typography>
+                      <Typography variant="h6">
+                        {productionData.todayProduction.cement_used} bags
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
+                        Production Efficiency
+                      </Typography>
+                      <Typography variant="h6">
+                        {productionData.todayProduction.efficiency}%
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
+                        Shift
+                      </Typography>
+                      <Typography variant="h6">
+                        {PRODUCTION_SHIFTS[productionData.todayProduction.shift]?.label || 
+                         productionData.todayProduction.shift}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
+
+      {/* Low Cement Alert */}
+      {cement.total_bags < 10 && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Low Cement Stock Alert
+          </Typography>
+          <Typography variant="body2">
+            Only {cement.total_bags} bags of cement remaining. Consider purchasing more cement to avoid production interruptions.
+          </Typography>
+        </Alert>
+      )}
 
       {/* Production History */}
       <Card>
@@ -450,20 +496,19 @@ function Production() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell align="right">Quantity</TableCell>
-                  <TableCell align="right">Cement Used</TableCell>
-                  <TableCell>Shift</TableCell>
-                  <TableCell>Quality</TableCell>
-                  <TableCell align="right">Efficiency</TableCell>
-                  <TableCell>Notes</TableCell>
-                  <TableCell align="center">Actions</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Quantity</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Cement Used</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Shift</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Efficiency</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Notes</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: "bold" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {productionData.history.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                       <Typography color="textSecondary">
                         No production history available
                       </Typography>
@@ -486,16 +531,6 @@ function Production() {
                             production.shift
                           }
                           size="small"
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={`Grade ${production.quality}`}
-                          size="small"
-                          color={
-                            production.quality === "A" ? "success" : "default"
-                          }
                           variant="outlined"
                         />
                       </TableCell>
@@ -598,23 +633,6 @@ function Production() {
                   </FormControl>
                 )}
               />
-
-              {/* <Controller
-                name="quality"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth>
-                    <InputLabel>Quality Grade</InputLabel>
-                    <Select {...field} label="Quality Grade">
-                      {Object.entries(QUALITY_GRADES).map(([key, grade]) => (
-                        <MenuItem key={key} value={key}>
-                          {grade.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-              /> */}
 
               <Controller
                 name="notes"

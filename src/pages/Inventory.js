@@ -30,6 +30,8 @@ import {
   Tab,
   LinearProgress,
   Divider,
+  useTheme,
+  alpha,
 } from '@mui/material';
 import {
   Inventory as InventoryIcon,
@@ -42,6 +44,7 @@ import {
   CheckCircle as CheckCircleIcon,
   AttachMoney as MoneyIcon,
   TrendingUp as TrendingUpIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 
@@ -53,9 +56,10 @@ import { useInventory, useBrickInventory, useCementInventory } from '../context/
 import InventoryCard from '../components/inventory/InventoryCard';
 import StockAlert from '../components/inventory/StockAlert';
 
-// ✅ NEW: Import services for calculated stock
+// Import services for calculated stock
 import { productionService } from '../services/productionService';
 import { salesService } from '../services/salesService';
+import { inventoryService } from '../services/inventoryService';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -72,6 +76,7 @@ function TabPanel({ children, value, index, ...other }) {
 }
 
 function Inventory() {
+  const theme = useTheme();
   const { actions: appActions, settings } = useApp();
   const { 
     status, 
@@ -85,8 +90,9 @@ function Inventory() {
   const { bricks } = useBrickInventory();
   const { cement } = useCementInventory();
 
-  // ✅ NEW: State for calculated brick stock
+  // State for calculated brick stock
   const [calculatedBrickStock, setCalculatedBrickStock] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   // State management
   const [currentTab, setCurrentTab] = useState(0);
@@ -111,10 +117,13 @@ function Inventory() {
     }
   });
 
-  // ✅ NEW: Function to calculate actual brick stock (same as Dashboard.js)
+  // Function to calculate actual brick stock (enhanced version)
   const calculateActualBrickStock = async () => {
     try {
-      const [productionResult, salesResult] = await Promise.all([
+      console.log("🧮 Inventory: Calculating comprehensive brick stock...");
+      
+      // Fetch all required data including manual adjustments
+      const [productionResult, salesResult, inventoryAdjustments] = await Promise.all([
         productionService.getProductionHistory(1000),
         salesService.getAllSales(),
       ]);
@@ -145,7 +154,7 @@ function Inventory() {
     loadInventoryHistory();
   }, []);
 
-  // ✅ NEW: Load calculated brick stock on mount and refresh periodically
+  // Load calculated brick stock on mount and refresh periodically
   useEffect(() => {
     loadCalculatedBrickStock();
     
@@ -161,6 +170,24 @@ function Inventory() {
       await inventoryActions.loadHistory('all', 100);
     } catch (error) {
       console.error('Error loading inventory history:', error);
+    }
+  };
+
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        loadCalculatedBrickStock(),
+        loadInventoryHistory(),
+        inventoryActions.refreshInventory()
+      ]);
+      appActions.showNotification('Inventory data refreshed', 'success');
+    } catch (error) {
+      console.error('Error refreshing inventory:', error);
+      appActions.showNotification('Failed to refresh inventory data', 'error');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -230,7 +257,7 @@ function Inventory() {
       if (result.success) {
         handleCloseDialog();
         loadInventoryHistory();
-        // ✅ NEW: Refresh calculated stock after brick operations
+        // Refresh calculated stock after brick operations
         if (dialogType === 'brick-adjust') {
           loadCalculatedBrickStock();
         }
@@ -267,19 +294,28 @@ function Inventory() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
+    <Box>
+      {/* Header - Consistent with other pages */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
             Inventory Management
           </Typography>
           <Typography variant="body1" color="textSecondary">
-            Monitor and manage your brick and cement inventory levels
+            Monitor and manage your brick and cement inventory levels.
           </Typography>
         </Box>
         
         <Box sx={{ display: 'flex', gap: 1 }}>
+          <Tooltip title="Refresh inventory data">
+            <IconButton
+              onClick={handleRefresh}
+              disabled={refreshing}
+              color="primary"
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
           <Button
             variant="outlined"
             startIcon={<HistoryIcon />}
@@ -291,88 +327,185 @@ function Inventory() {
       </Box>
 
       {/* Loading indicator */}
-      {isLoading && <LinearProgress sx={{ mb: 2 }} />}
+      {(isLoading || refreshing) && <LinearProgress sx={{ mb: 2 }} />}
 
       {/* Stock Alerts */}
       {(lowStockAlerts.bricks || lowStockAlerts.cement) && (
-        <StockAlert 
-          brickAlert={lowStockAlerts.bricks}
-          cementAlert={lowStockAlerts.cement}
-          brickStock={calculatedBrickStock}
-          cementStock={cement.total_bags}
-          onAction={handleOpenDialog}
-        />
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Stock Alert
+          </Typography>
+          <Typography variant="body2">
+            {lowStockAlerts.bricks && `Low brick stock: ${calculatedBrickStock} bricks remaining. `}
+            {lowStockAlerts.cement && `Low cement stock: ${cement.total_bags} bags remaining. `}
+            Consider restocking soon.
+          </Typography>
+        </Alert>
       )}
 
-      {/* Inventory Overview Cards */}
+      {/* Stats Cards - Consistent Design with Fixed Heights */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
-          <InventoryCard
-            title="Brick Inventory"
-            stock={calculatedBrickStock}
-            unit="bricks"
-            value={inventoryValue.brickValue}
-            lastUpdated={bricks.last_updated}
-            alert={lowStockAlerts.bricks}
-            color="#2196f3"
-            icon={<InventoryIcon />}
-            onAdjust={() => handleOpenDialog('brick-adjust')}
-          />
+        {/* Brick Stock */}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ height: "100%" }}>
+            <CardContent>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  height: "100px", // Fixed height for consistency
+                }}
+              >
+                <Box>
+                  <Typography
+                    color="textSecondary"
+                    gutterBottom
+                    variant="overline"
+                  >
+                    Brick Stock
+                  </Typography>
+                  <Typography variant="h5" component="div">
+                    {calculatedBrickStock.toLocaleString()}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Bricks available
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 2,
+                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    color: theme.palette.primary.main,
+                  }}
+                >
+                  <InventoryIcon />
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
         </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <InventoryCard
-            title="Cement Inventory"
-            stock={cement.total_bags}
-            unit="bags"
-            value={inventoryValue.cementValue}
-            lastUpdated={cement.last_updated}
-            alert={lowStockAlerts.cement}
-            color="#ff9800"
-            icon={<TruckIcon />}
-            onAdjust={() => handleOpenDialog('cement-adjust')}
-            onPurchase={() => handleOpenDialog('cement-purchase')}
-          />
+
+        {/* Cement Stock */}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ height: "100%" }}>
+            <CardContent>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  height: "100px", // Fixed height for consistency
+                }}
+              >
+                <Box>
+                  <Typography
+                    color="textSecondary"
+                    gutterBottom
+                    variant="overline"
+                  >
+                    Cement Stock
+                  </Typography>
+                  <Typography variant="h5" component="div">
+                    {cement.total_bags}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Bags available
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 2,
+                    backgroundColor: alpha(theme.palette.warning.main, 0.1),
+                    color: theme.palette.warning.main,
+                  }}
+                >
+                  <TruckIcon />
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Total Inventory Value */}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ height: "100%" }}>
+            <CardContent>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  height: "100px", // Fixed height for consistency
+                }}
+              >
+                <Box>
+                  <Typography
+                    color="textSecondary"
+                    gutterBottom
+                    variant="overline"
+                  >
+                    Total Value
+                  </Typography>
+                  <Typography variant="h5" component="div">
+                    ₹{inventoryValue.totalValue}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Inventory worth
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 2,
+                    backgroundColor: alpha(theme.palette.success.main, 0.1),
+                    color: theme.palette.success.main,
+                  }}
+                >
+                  <MoneyIcon />
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
 
-      {/* Inventory Value Summary */}
+      {/* Inventory Value Breakdown */}
       <Card sx={{ mb: 4 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-            Inventory Value Summary
+            Inventory Value Breakdown
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} sm={4}>
-              <Box sx={{ textAlign: 'center' }}>
-                <MoneyIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
-                <Typography variant="h4" color="primary" sx={{ fontWeight: 600 }}>
-                  ₹{inventoryValue.brickValue}
-                </Typography>
+              <Box>
                 <Typography variant="body2" color="textSecondary">
                   Brick Value
                 </Typography>
+                <Typography variant="h6" color="primary">
+                  ₹{inventoryValue.brickValue}
+                </Typography>
               </Box>
             </Grid>
             <Grid item xs={12} sm={4}>
-              <Box sx={{ textAlign: 'center' }}>
-                <TruckIcon color="warning" sx={{ fontSize: 40, mb: 1 }} />
-                <Typography variant="h4" color="warning.main" sx={{ fontWeight: 600 }}>
-                  ₹{inventoryValue.cementValue}
-                </Typography>
+              <Box>
                 <Typography variant="body2" color="textSecondary">
                   Cement Value
                 </Typography>
+                <Typography variant="h6" color="warning.main">
+                  ₹{inventoryValue.cementValue}
+                </Typography>
               </Box>
             </Grid>
             <Grid item xs={12} sm={4}>
-              <Box sx={{ textAlign: 'center' }}>
-                <TrendingUpIcon color="success" sx={{ fontSize: 40, mb: 1 }} />
-                <Typography variant="h4" color="success.main" sx={{ fontWeight: 600 }}>
-                  ₹{inventoryValue.totalValue}
-                </Typography>
+              <Box>
                 <Typography variant="body2" color="textSecondary">
                   Total Value
+                </Typography>
+                <Typography variant="h6" color="success.main" sx={{ fontWeight: 600 }}>
+                  ₹{inventoryValue.totalValue}
                 </Typography>
               </Box>
             </Grid>
@@ -403,20 +536,20 @@ function Inventory() {
                     {calculatedBrickStock.toLocaleString()}
                   </Typography>
                   <Typography variant="body2" color="textSecondary" gutterBottom>
-                    Total bricks available (Production - Sales)
+                    Total bricks available (Production - Sales + Adjustments)
                   </Typography>
                   
-                  <Divider sx={{ my: 2 }} />
+                  {/* <Divider sx={{ my: 2 }} /> */}
                   
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button
+                    {/* <Button
                       variant="contained"
                       startIcon={<AddIcon />}
                       onClick={() => handleOpenDialog('brick-adjust')}
                       size="small"
                     >
                       Adjust Stock
-                    </Button>
+                    </Button> */}
                   </Box>
                 </CardContent>
               </Card>
@@ -564,12 +697,12 @@ function Inventory() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Category</TableCell>
-                  <TableCell align="right">Quantity</TableCell>
-                  <TableCell align="right">Amount</TableCell>
-                  <TableCell>Notes</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Type</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Category</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Quantity</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Amount</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Notes</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -606,7 +739,7 @@ function Inventory() {
                         {transaction.quantity || transaction.bags || '-'}
                       </TableCell>
                       <TableCell align="right">
-                        {transaction.total_cost ? `$${transaction.total_cost}` : '-'}
+                        {transaction.total_cost ? `₹${transaction.total_cost}` : '-'}
                       </TableCell>
                       <TableCell>
                         {transaction.notes || '-'}

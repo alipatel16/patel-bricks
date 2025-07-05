@@ -20,6 +20,7 @@ import {
   Factory as FactoryIcon,
   Inventory as InventoryIcon,
   ShoppingCart as ShoppingCartIcon,
+  People as PeopleIcon,
   Assessment as AssessmentIcon,
   Settings as SettingsIcon,
   TrendingUp as TrendingUpIcon,
@@ -46,6 +47,7 @@ const iconMap = {
   Factory: FactoryIcon,
   Inventory: InventoryIcon,
   ShoppingCart: ShoppingCartIcon,
+  People: PeopleIcon,
   Assessment: AssessmentIcon,
   Settings: SettingsIcon,
 };

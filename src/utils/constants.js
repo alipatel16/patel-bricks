@@ -215,6 +215,7 @@ export const MENU_ITEMS = [
   { id: 'production', label: 'Production', path: '/production', icon: 'Factory' },
   { id: 'inventory', label: 'Inventory', path: '/inventory', icon: 'Inventory' },
   { id: 'sales', label: 'Sales', path: '/sales', icon: 'ShoppingCart' },
+  { id: 'customers', label: 'Customers', path: '/customers', icon: 'People' },
   { id: 'reports', label: 'Reports', path: '/reports', icon: 'Assessment' },
   { id: 'settings', label: 'Settings', path: '/settings', icon: 'Settings' },
 ];
