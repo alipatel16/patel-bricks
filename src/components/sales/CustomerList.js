@@ -1,4 +1,4 @@
-// components/Sales/CustomerList.js - Fixed version
+// components/Sales/CustomerList.js - Updated with Invoice Generation
 import React, { useState, useMemo } from 'react';
 import {
   Box,
@@ -29,11 +29,13 @@ import {
   Search as SearchIcon,
   MoreVert as MoreVertIcon,
   Receipt as ReceiptIcon,
+  RequestPage as InvoiceIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatQuantity } from '../../utils/calculations';
 
-// Import StatementGenerator component
+// Import components
 import StatementGenerator from './StatementGenerator';
+import InvoiceGenerator from './InvoiceGenerator'; // NEW: Import the invoice generator
 
 const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
   // Pagination state
@@ -46,8 +48,11 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
 
   // Statement generator state
   const [statementGeneratorOpen, setStatementGeneratorOpen] = useState(false);
-  // NEW: Separate state to store customer for statement generation
   const [customerForStatement, setCustomerForStatement] = useState(null);
+
+  // NEW: Invoice generator state
+  const [invoiceGeneratorOpen, setInvoiceGeneratorOpen] = useState(false);
+  const [customerForInvoice, setCustomerForInvoice] = useState(null);
 
   // Process customers data (existing functionality)
   const processedCustomers = useMemo(() => {
@@ -121,18 +126,28 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
     setSelectedCustomer(null);
   };
 
-  // FIXED: Modified to preserve customer data for statement generation
+  // Statement generation handlers (existing)
   const handleGenerateStatement = () => {
-    // Store the customer data separately before closing menu
     setCustomerForStatement(selectedCustomer);
     setStatementGeneratorOpen(true);
-    handleMenuClose(); // Now it's safe to close the menu
+    handleMenuClose();
   };
 
-  // ADDED: Handle statement generator close
   const handleStatementGeneratorClose = () => {
     setStatementGeneratorOpen(false);
-    setCustomerForStatement(null); // Clear the stored customer data
+    setCustomerForStatement(null);
+  };
+
+  // NEW: Invoice generation handlers
+  const handleGenerateInvoice = () => {
+    setCustomerForInvoice(selectedCustomer);
+    setInvoiceGeneratorOpen(true);
+    handleMenuClose();
+  };
+
+  const handleInvoiceGeneratorClose = () => {
+    setInvoiceGeneratorOpen(false);
+    setCustomerForInvoice(null);
   };
 
   return (
@@ -147,13 +162,8 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
             <TextField
               size="small"
               placeholder="Search customers..."
-              value={searchFilters.searchTerm}
-              onChange={(e) =>
-                setSearchFilters({
-                  ...searchFilters,
-                  searchTerm: e.target.value,
-                })
-              }
+              value={searchFilters.searchTerm || ''}
+              onChange={(e) => setSearchFilters({ ...searchFilters, searchTerm: e.target.value })}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -161,143 +171,107 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
                   </InputAdornment>
                 ),
               }}
+              sx={{ minWidth: 250 }}
             />
           </Box>
         </Box>
 
-        <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
-          <Table stickyHeader>
+        {/* Customer Table (existing) */}
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: "bold" }}>Customer Name</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Phone</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Email</TableCell>
-                <TableCell align="right" sx={{ fontWeight: "bold" }}>Total Orders</TableCell>
-                <TableCell align="right" sx={{ fontWeight: "bold" }}>Total Amount</TableCell>
-                <TableCell align="right" sx={{ fontWeight: "bold" }}>Total Quantity</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Locations</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Last Purchase</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Customer Since</TableCell>
-                <TableCell align="center" sx={{ fontWeight: "bold" }}>Actions</TableCell>
+                <TableCell>Customer Info</TableCell>
+                <TableCell align="center">Total Purchases</TableCell>
+                <TableCell align="center">Total Quantity</TableCell>
+                <TableCell align="center">Total Amount</TableCell>
+                <TableCell align="center">Last Purchase</TableCell>
+                <TableCell align="center">Locations</TableCell>
+                <TableCell align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {paginatedCustomers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
-                    <Typography color="textSecondary">
-                      {sales.history.length === 0 
-                        ? "No customers yet. Start by recording your first sale."
-                        : "No customers match your search criteria."
-                      }
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedCustomers.map((customer, index) => (
-                  <TableRow key={`${customer.name}_${customer.phone}`} hover>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight="medium">
+              {paginatedCustomers.map((customer, index) => (
+                <TableRow key={`${customer.name}_${customer.phone}`} hover>
+                  <TableCell>
+                    <Box>
+                      <Typography variant="body2" fontWeight="bold">
                         {customer.name}
                       </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
+                      <Typography variant="caption" color="text.secondary">
                         {customer.phone}
                       </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {customer.email || '-'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Chip
-                        label={customer.totalPurchases}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" fontWeight="bold" color="success.main">
-                        {formatCurrency(customer.totalAmount)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2">
-                        {formatQuantity(customer.totalQuantity)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {Array.from(customer.locations).slice(0, 2).map((location) => (
-                          <Chip
-                            key={location}
-                            label={location}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.7rem' }}
-                          />
-                        ))}
-                        {customer.locations.size > 2 && (
-                          <Chip
-                            label={`+${customer.locations.size - 2} more`}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.7rem' }}
-                          />
-                        )}
-                        {customer.locations.size === 0 && (
-                          <Typography variant="caption" color="text.secondary">
-                            No locations
-                          </Typography>
-                        )}
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {customer.lastPurchase}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {customer.firstPurchase}
-                      </Typography>
-                    </TableCell>
-                    {/* Action button column */}
-                    <TableCell align="center">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleMenuClick(e, customer)}
-                        sx={{ color: 'primary.main' }}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+                      {customer.email && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          {customer.email}
+                        </Typography>
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Chip
+                      label={customer.totalPurchases}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell align="center">
+                    <Typography variant="body2" fontWeight="bold">
+                      {formatQuantity(customer.totalQuantity)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Typography variant="body2" fontWeight="bold" color="success.main">
+                      {formatCurrency(customer.totalAmount)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Typography variant="caption">
+                      {new Date(customer.lastPurchase).toLocaleDateString()}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Box display="flex" gap={0.5} flexWrap="wrap" justifyContent="center">
+                      {Array.from(customer.locations).slice(0, 2).map((location) => (
+                        <Chip
+                          key={location}
+                          label={location}
+                          size="small"
+                          variant="outlined"
+                          color="secondary"
+                        />
+                      ))}
+                      {customer.locations.size > 2 && (
+                        <Chip
+                          label={`+${customer.locations.size - 2}`}
+                          size="small"
+                          variant="outlined"
+                          color="secondary"
+                        />
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleMenuClick(e, customer)}
+                    >
+                      <MoreVertIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </TableContainer>
 
-        {/* Pagination Controls (existing) */}
+        {/* Pagination (existing) */}
         {processedCustomers.length > 0 && (
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              mt: 2,
-              pt: 2,
-              borderTop: '1px solid',
-              borderTopColor: 'divider'
-            }}
-          >
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                Showing {startIndex + 1}-{Math.min(endIndex, processedCustomers.length)} of {processedCustomers.length} customers
+                Showing {startIndex + 1}-{Math.min(endIndex, processedCustomers.length)} of {processedCustomers.length}
               </Typography>
               <FormControl size="small" sx={{ minWidth: 100 }}>
                 <InputLabel>Per page</InputLabel>
@@ -326,7 +300,7 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
         )}
       </CardContent>
 
-      {/* Action Menu */}
+      {/* Action Menu - UPDATED with new invoice option */}
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
@@ -341,13 +315,28 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
           </ListItemIcon>
           <ListItemText primary="Generate Statement" />
         </MenuItem>
+        {/* NEW: Invoice generation menu item */}
+        <MenuItem onClick={handleGenerateInvoice}>
+          <ListItemIcon>
+            <InvoiceIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Generate GST/Non-GST Invoice" />
+        </MenuItem>
       </Menu>
 
-      {/* FIXED: Statement Generator Component - now uses customerForStatement */}
+      {/* Statement Generator Component (existing) */}
       <StatementGenerator
         open={statementGeneratorOpen}
         onClose={handleStatementGeneratorClose}
         customer={customerForStatement}
+        salesHistory={sales.history}
+      />
+
+      {/* NEW: Invoice Generator Component */}
+      <InvoiceGenerator
+        open={invoiceGeneratorOpen}
+        onClose={handleInvoiceGeneratorClose}
+        customer={customerForInvoice}
         salesHistory={sales.history}
       />
     </Card>

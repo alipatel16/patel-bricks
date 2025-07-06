@@ -1,4 +1,4 @@
-// components/Sales/RecordSaleDialog.js - Extracted from original Sales.js
+// components/Sales/RecordSaleDialog.js - Fixed version with proper reset
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
@@ -83,6 +83,27 @@ const RecordSaleDialog = ({
   const [customerSearchTimeout, setCustomerSearchTimeout] = useState(null);
   const [calculatedBrickStock, setCalculatedBrickStock] = useState(0);
 
+  // Default form values
+  const defaultValues = {
+    saleDate: new Date().toISOString().split("T")[0],
+    customerName: "",
+    customerPhone: "",
+    customerEmail: "",
+    customerState: "GJ",
+    customerStateCode: "24",
+    customerGSTIN: "",
+    locationName: "",
+    quantity: "",
+    pricePerBrick: 6.15,
+    vehicleNumber: "",
+    challanNumber: "",
+    discount: 0,
+    discountType: "amount",
+    paymentMethod: "cash",
+    notes: "",
+    includeGST: false,
+  };
+
   // Form management with reordered fields
   const {
     control,
@@ -92,38 +113,7 @@ const RecordSaleDialog = ({
     setValue,
     formState: { errors, isSubmitting },
   } = useForm({
-    defaultValues: {
-      // Date comes first - using string format for HTML date input
-      saleDate: new Date().toISOString().split("T")[0],
-
-      // Customer information (moved up)
-      customerName: "",
-      customerPhone: "",
-      customerEmail: "",
-      customerState: "GJ",
-      customerStateCode: "24",
-      customerGSTIN: "",
-
-      // Location information
-      locationName: "",
-
-      // Product information (moved down)
-      quantity: "",
-      pricePerBrick: 6.15,
-
-      // Transport fields
-      vehicleNumber: "",
-      challanNumber: "",
-
-      // Payment information
-      discount: 0,
-      discountType: "amount",
-      paymentMethod: "cash",
-      notes: "",
-
-      // GST toggle - default off
-      includeGST: false,
-    },
+    defaultValues,
   });
 
   const watchCustomerName = watch("customerName");
@@ -370,30 +360,40 @@ const RecordSaleDialog = ({
 
   // Handle dialog close
   const handleClose = () => {
-    reset({
-      saleDate: new Date().toISOString().split("T")[0],
-      customerName: "",
-      customerPhone: "",
-      customerEmail: "",
-      customerState: "GJ",
-      customerStateCode: "24",
-      customerGSTIN: "",
-      locationName: "",
-      quantity: "",
-      pricePerBrick: 6.15,
-      vehicleNumber: "",
-      challanNumber: "",
-      discount: 0,
-      discountType: "amount",
-      paymentMethod: "cash",
-      notes: "",
-      includeGST: false,
-    });
+    reset(defaultValues);
     setSelectedCustomer(null);
     setSelectedLocation(null);
     setCustomerOptions([]);
     setLocationOptions([]);
     onClose();
+  };
+
+  // Enhanced submit handler with auto-reset after successful submission
+  const handleFormSubmit = async (data) => {
+    try {
+      await onSubmit(data);
+      
+      // Reset the form automatically for next sale after successful submission
+      // Small delay to ensure any success messages are shown first
+      setTimeout(() => {
+        reset(defaultValues);
+        setSelectedCustomer(null);
+        setSelectedLocation(null);
+        setCustomerOptions([]);
+        setLocationOptions([]);
+        setCalculatedAmounts({
+          subtotal: 0,
+          discountAmount: 0,
+          taxableAmount: 0,
+          totalTax: 0,
+          totalAmount: 0,
+          isInterState: false,
+        });
+      }, 1000); // Increased delay to ensure success toast is visible
+    } catch (error) {
+      console.error("Error submitting sale:", error);
+      // Don't reset on error, let user see the error and fix it
+    }
   };
 
   return (
@@ -420,7 +420,7 @@ const RecordSaleDialog = ({
 
       <DialogContent sx={{ p: 4 }}>
         {isLoading && <LinearProgress sx={{ mb: 2 }} />}
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={handleSubmit(handleFormSubmit)}>
           <Grid container spacing={4} sx={{ mt: 1 }}>
             {/* Date Selection - First and Prominent */}
             <Grid item xs={12}>
@@ -497,6 +497,8 @@ const RecordSaleDialog = ({
                 onChange={handleCustomerSelect}
                 loading={customerSearchLoading}
                 freeSolo
+                value={selectedCustomer} // Ensure controlled value
+                inputValue={watchCustomerName} // Ensure controlled input
                 renderInput={(params) => (
                   <Controller
                     name="customerName"
@@ -595,6 +597,8 @@ const RecordSaleDialog = ({
                 }
                 onChange={handleLocationSelect}
                 freeSolo
+                value={selectedLocation} // Ensure controlled value
+                inputValue={watchLocationName} // Ensure controlled input
                 disabled={!watchCustomerName || watchCustomerName.length < 2}
                 renderOption={(props, option) => (
                   <Box component="li" {...props}>
@@ -1052,7 +1056,7 @@ const RecordSaleDialog = ({
           Cancel
         </Button>
         <Button
-          onClick={handleSubmit(onSubmit)}
+          onClick={handleSubmit(handleFormSubmit)}
           variant="contained"
           size="large"
           disabled={isSubmitting || calculatedAmounts.totalAmount === 0}
