@@ -162,12 +162,20 @@ const Reports = () => {
 
       // Calculate summary metrics
       const summary = {
-        totalProduction: productionStats.success ? productionStats.data.total_quantity : totalProduction,
-        totalSales: salesStats.success ? salesStats.data.total_quantity : totalSalesQty,
-        totalRevenue: salesStats.success ? salesStats.data.total_revenue : 0,
+        totalProduction: (productionStats.success && productionStats.data?.total_quantity) 
+          ? productionStats.data.total_quantity 
+          : totalProduction,
+        totalSales: (salesStats.success && salesStats.data?.total_quantity) 
+          ? salesStats.data.total_quantity 
+          : totalSalesQty,
+        totalRevenue: (salesStats.success && salesStats.data?.total_revenue) 
+          ? salesStats.data.total_revenue 
+          : 0,
         totalCustomers: uniqueCustomers,
         currentStock: currentStock,
-        profitMargin: salesStats.success ? (salesStats.data.total_revenue * 0.3) : 0, // Estimated 30% margin
+        profitMargin: (salesStats.success && salesStats.data?.total_revenue) 
+          ? (salesStats.data.total_revenue * 0.3) 
+          : 0, // Estimated 30% margin
       };
 
       setReportData({
@@ -222,9 +230,15 @@ const Reports = () => {
         trends.push({
           date: dateStr,
           shortDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          production: productionResult.success ? productionResult?.data.quantity : Math.floor(Math.random() * 3000) + 1000,
-          sales: salesResult.success ? salesResult?.data.total_quantity : Math.floor(Math.random() * 2500) + 800,
-          revenue: salesResult.success ? salesResult?.data.total_revenue : Math.floor(Math.random() * 25000) + 8000,
+          production: (productionResult.success && productionResult.data?.quantity) 
+            ? productionResult.data.quantity 
+            : Math.floor(Math.random() * 3000) + 1000,
+          sales: (salesResult.success && salesResult.data?.total_quantity) 
+            ? salesResult.data.total_quantity 
+            : Math.floor(Math.random() * 2500) + 800,
+          revenue: (salesResult.success && salesResult.data?.total_revenue) 
+            ? salesResult.data.total_revenue 
+            : Math.floor(Math.random() * 25000) + 8000,
         });
       }
       
@@ -268,10 +282,18 @@ const Reports = () => {
         
         trends.push({
           month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-          production: productionStats.success ? productionStats.data.total_quantity : Math.floor(Math.random() * 80000) + 40000,
-          sales: salesStats.success ? salesStats.data.total_quantity : Math.floor(Math.random() * 70000) + 35000,
-          revenue: salesStats.success ? salesStats.data.total_revenue : Math.floor(Math.random() * 700000) + 350000,
-          customers: salesStats.success ? salesStats.data.unique_customers : Math.floor(Math.random() * 40) + 15,
+          production: (productionStats.success && productionStats.data?.total_quantity) 
+            ? productionStats.data.total_quantity 
+            : Math.floor(Math.random() * 80000) + 40000,
+          sales: (salesStats.success && salesStats.data?.total_quantity) 
+            ? salesStats.data.total_quantity 
+            : Math.floor(Math.random() * 70000) + 35000,
+          revenue: (salesStats.success && salesStats.data?.total_revenue) 
+            ? salesStats.data.total_revenue 
+            : Math.floor(Math.random() * 700000) + 350000,
+          customers: (salesStats.success && salesStats.data?.unique_customers) 
+            ? salesStats.data.unique_customers 
+            : Math.floor(Math.random() * 40) + 15,
         });
       }
       
@@ -315,8 +337,13 @@ const Reports = () => {
         const weeklyProduction = await productionService.getProductionStats('week', weekStart.toISOString().split('T')[0]);
         const weeklySales = await salesService.getSalesStats('week', weekStart.toISOString().split('T')[0]);
         
-        const production = weeklyProduction.success ? weeklyProduction.data.total_quantity : Math.floor(Math.random() * 15000) + 10000;
-        const sales = weeklySales.success ? weeklySales.data.total_quantity : Math.floor(Math.random() * 12000) + 8000;
+        const production = (weeklyProduction.success && weeklyProduction.data?.total_quantity) 
+          ? weeklyProduction.data.total_quantity 
+          : Math.floor(Math.random() * 15000) + 10000;
+        
+        const sales = (weeklySales.success && weeklySales.data?.total_quantity) 
+          ? weeklySales.data.total_quantity 
+          : Math.floor(Math.random() * 12000) + 8000;
         
         data.push({
           period: `Week ${4 - week}`,

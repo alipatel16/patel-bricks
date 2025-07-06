@@ -1,4 +1,4 @@
-// services/salesService.js - Updated to support new requirements
+// services/salesService.js - Updated to support GST toggle and maintain backward compatibility
 import { dbUtils } from "./firebase";
 import { customerService } from "./customerService";
 import {
@@ -97,7 +97,7 @@ export const salesService = {
    * SALES OPERATIONS
    */
 
-  // Record new sale with enhanced features
+  // Record new sale with enhanced features including GST toggle
   recordSale: async ({
     date,
     quantity,
@@ -118,6 +118,8 @@ export const salesService = {
     paymentMethod = "cash",
     notes = "",
     hsnCode = HSN_CODES.FLY_ASH_BRICKS,
+    includeGST = false, // New GST toggle parameter
+    calculatedAmounts = null, // Pre-calculated amounts from form
   }) => {
     try {
       // Validate required parameters
@@ -163,8 +165,21 @@ export const salesService = {
       // Determine if inter-state (assuming company is in Gujarat)
       const isInterState = customerState !== "GJ";
 
-      // Calculate GST
-      const gstCalculation = calculateGSTAmounts(taxableAmount, isInterState);
+      // Calculate GST only if includeGST is true
+      let gstCalculation = {
+        cgstAmount: 0,
+        sgstAmount: 0,
+        igstAmount: 0,
+        totalTax: 0,
+        cgstRate: 0,
+        sgstRate: 0,
+        igstRate: 0,
+      };
+
+      if (includeGST) {
+        gstCalculation = calculateGSTAmounts(taxableAmount, isInterState);
+      }
+
       const totalAmount = taxableAmount + gstCalculation.totalTax;
 
       // Update stock
@@ -217,7 +232,9 @@ export const salesService = {
         discount_type: discountType,
         taxable_amount: taxableAmount,
 
-        // GST details
+        // GST details - IMPORTANT: Store the GST toggle flag
+        include_gst: includeGST,
+        gst_included: includeGST, // Alternative field name for compatibility
         is_inter_state: isInterState,
         cgst_rate: gstCalculation.cgstRate,
         sgst_rate: gstCalculation.sgstRate,
@@ -540,7 +557,7 @@ export const salesService = {
   },
 
   /**
-   * BACKWARD COMPATIBILITY METHODS
+   * BACKWARD COMPATIBILITY METHODS - CRITICAL FOR DASHBOARD
    */
 
   // Get all sales (for backward compatibility with existing Dashboard/Inventory)

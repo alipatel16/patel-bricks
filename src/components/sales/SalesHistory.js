@@ -1,3 +1,4 @@
+// components/Sales/SalesHistory.js - Fixed version with correct GST handling
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -6,6 +7,8 @@ import {
   Typography,
   TextField,
   InputAdornment,
+  Grid,
+  Button,
   Table,
   TableBody,
   TableCell,
@@ -16,642 +19,368 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Grid,
-  Divider,
-  FormControl,
-  InputLabel,
+  Alert,
+  CircularProgress,
+  Pagination,
   Select,
   MenuItem,
-  TablePagination,
-  Alert,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Receipt as ReceiptIcon,
-  Download as DownloadIcon,
-  Print as PrintIcon,
-  Clear as ClearIcon,
   FilterList as FilterIcon,
   Visibility as ViewIcon,
+  Print as PrintIcon,
 } from '@mui/icons-material';
+import { formatCurrency, formatQuantity } from '../../utils/calculations';
 
-// Import services
-import { salesService } from '../../services/salesService';
+const SalesHistory = ({ 
+  sales, 
+  isLoading, 
+  searchFilters, 
+  setSearchFilters, 
+  filteredSales, 
+  onViewInvoice 
+}) => {
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
-// Import contexts
-import { useApp } from '../../context/AppContext';
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSales = filteredSales.slice(startIndex, endIndex);
 
-function SalesHistory() {
-  const { actions: appActions } = useApp();
+  // Handle pagination change
+  const handlePageChange = (event, page) => {
+    setCurrentPage(page);
+  };
 
-  // State management
-  const [salesData, setSalesData] = useState([]);
-  const [filteredData, setFilteredData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterBy, setFilterBy] = useState('all');
-  const [dateRange, setDateRange] = useState({
-    start: '',
-    end: '',
-  });
-  
-  // Pagination
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  // Handle items per page change
+  const handleItemsPerPageChange = (event) => {
+    setItemsPerPage(event.target.value);
+    setCurrentPage(1); // Reset to first page
+  };
 
-  // Bill generation
-  const [billDialog, setBillDialog] = useState(false);
-  const [selectedSale, setSelectedSale] = useState(null);
-
-  // Load sales history
+  // Reset pagination when filters change
   useEffect(() => {
-    loadSalesHistory();
-  }, []);
+    setCurrentPage(1);
+  }, [searchFilters]);
 
-  // Filter data when search or filters change
-  useEffect(() => {
-    filterSalesData();
-  }, [salesData, searchTerm, filterBy, dateRange]);
-
-  const loadSalesHistory = async () => {
-    try {
-      setLoading(true);
-      const result = await salesService.getSalesHistory(1000);
-      
-      if (result.success) {
-        setSalesData(result.data);
-      } else {
-        appActions.showNotification('Failed to load sales history', 'error');
-      }
-    } catch (error) {
-      console.error('Error loading sales history:', error);
-      appActions.showNotification('Error loading sales history', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filterSalesData = () => {
-    let filtered = [...salesData];
-
-    // Search filter
-    if (searchTerm) {
-      filtered = filtered.filter(sale => {
-        const searchLower = searchTerm.toLowerCase();
-        return (
-          sale.customer_name?.toLowerCase().includes(searchLower) ||
-          sale.customer_phone?.includes(searchTerm) ||
-          sale.customer_email?.toLowerCase().includes(searchLower) ||
-          sale.id?.toLowerCase().includes(searchLower) ||
-          sale.payment_method?.toLowerCase().includes(searchLower)
-        );
-      });
-    }
-
-    // Payment method filter
-    if (filterBy !== 'all') {
-      filtered = filtered.filter(sale => sale.payment_method === filterBy);
-    }
-
-    // Date range filter
-    if (dateRange.start && dateRange.end) {
-      filtered = filtered.filter(sale => {
-        const saleDate = new Date(sale.date);
-        const startDate = new Date(dateRange.start);
-        const endDate = new Date(dateRange.end);
-        return saleDate >= startDate && saleDate <= endDate;
-      });
-    }
-
-    setFilteredData(filtered);
-    setPage(0); // Reset to first page when filtering
-  };
-
-  const handleSearchClear = () => {
-    setSearchTerm('');
-    setFilterBy('all');
-    setDateRange({ start: '', end: '' });
-  };
-
-  const handleGenerateBill = (sale) => {
-    setSelectedSale(sale);
-    setBillDialog(true);
-  };
-
-  const handlePrintBill = () => {
-    window.print();
-  };
-
-  const formatCurrency = (amount) => {
-    return `₹₹{parseFloat(amount).toLocaleString('en-IN', { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
-    })}`;
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  };
-
-  const formatDateTime = (timestamp) => {
-    return new Date(timestamp).toLocaleString('en-IN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  // Calculate tax amounts
-  const calculateTaxes = (sale) => {
-    const subtotal = sale.subtotal || (sale.quantity * sale.price_per_brick);
-    const discountAmount = sale.discount_amount || 0;
-    const taxableAmount = subtotal - discountAmount;
+  // Check if GST was included in the sale and calculate correct amount
+  const getCorrectAmount = (sale) => {
+    const quantity = parseInt(sale.quantity || 0);
+    const pricePerBrick = parseFloat(sale.price_per_brick || 0);
+    const discountAmount = parseFloat(sale.discount_amount || 0);
     
-    const cgstRate = 6; // 6%
-    const sgstRate = 6; // 6%
+    // Check if GST was included (multiple field names for compatibility)
+    const gstIncluded = sale.include_gst || sale.gst_included || sale.includeGST || false;
     
-    const cgstAmount = (taxableAmount * cgstRate) / 100;
-    const sgstAmount = (taxableAmount * sgstRate) / 100;
-    const totalTax = cgstAmount + sgstAmount;
-    const grandTotal = taxableAmount + totalTax;
-
-    return {
-      subtotal,
-      discountAmount,
-      taxableAmount,
-      cgstAmount,
-      sgstAmount,
-      totalTax,
-      grandTotal,
-    };
+    if (gstIncluded) {
+      // If GST was included, use the stored total_amount
+      return formatCurrency(sale.total_amount);
+    } else {
+      // If GST was not included, calculate amount without GST
+      const subtotal = quantity * pricePerBrick;
+      const amountAfterDiscount = subtotal - discountAmount;
+      return formatCurrency(amountAfterDiscount);
+    }
   };
 
-  // Paginated data
-  const paginatedData = filteredData.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
+  // Check if sale includes GST for display purposes
+  const isGSTIncluded = (sale) => {
+    return sale.include_gst || sale.gst_included || sale.includeGST || false;
+  };
 
   return (
-    <Box>
-      <Card>
-        <CardContent>
-          {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Sales History
-            </Typography>
+    <Card>
+      <CardContent sx={{ p: 3 }}>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={3}
+        >
+          <Typography variant="h6" fontWeight="bold">
+            Sales History ({filteredSales?.length})
+          </Typography>
+          <Box display="flex" gap={1}>
+            <TextField
+              size="small"
+              placeholder="Search sales..."
+              value={searchFilters?.searchTerm}
+              onChange={(e) =>
+                setSearchFilters({
+                  ...searchFilters,
+                  searchTerm: e.target.value,
+                })
+              }
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Box>
+        </Box>
+
+        {/* Advanced Filters */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12} sm={6} md={2}>
+            <TextField
+              label="Date From"
+              type="date"
+              size="small"
+              fullWidth
+              value={searchFilters?.dateFrom}
+              onChange={(e) =>
+                setSearchFilters({
+                  ...searchFilters,
+                  dateFrom: e.target.value,
+                })
+              }
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={2}>
+            <TextField
+              label="Date To"
+              type="date"
+              size="small"
+              fullWidth
+              value={searchFilters?.dateTo}
+              onChange={(e) =>
+                setSearchFilters({
+                  ...searchFilters,
+                  dateTo: e.target.value,
+                })
+              }
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={2}>
+            <TextField
+              label="Customer"
+              size="small"
+              fullWidth
+              value={searchFilters?.customerName}
+              onChange={(e) =>
+                setSearchFilters({
+                  ...searchFilters,
+                  customerName: e.target.value,
+                })
+              }
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={2}>
+            <TextField
+              label="Location"
+              size="small"
+              fullWidth
+              value={searchFilters.locationName}
+              onChange={(e) =>
+                setSearchFilters({
+                  ...searchFilters,
+                  locationName: e.target.value,
+                })
+              }
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={2}>
+            <TextField
+              label="Vehicle"
+              size="small"
+              fullWidth
+              value={searchFilters.vehicleNumber}
+              onChange={(e) =>
+                setSearchFilters({
+                  ...searchFilters,
+                  vehicleNumber: e.target.value,
+                })
+              }
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={2}>
             <Button
               variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => appActions.showNotification('Export feature coming soon', 'info')}
+              fullWidth
+              onClick={() =>
+                setSearchFilters({
+                  searchTerm: "",
+                  dateFrom: "",
+                  dateTo: "",
+                  customerName: "",
+                  locationName: "",
+                  vehicleNumber: "",
+                })
+              }
             >
-              Export
+              Clear Filters
             </Button>
-          </Box>
-
-          {/* Search and Filters */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                placeholder="Search by customer name, phone, email, or transaction ID"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                  endAdornment: searchTerm && (
-                    <InputAdornment position="end">
-                      <IconButton onClick={() => setSearchTerm('')} size="small">
-                        <ClearIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Grid>
-            
-            <Grid item xs={12} md={2}>
-              <FormControl fullWidth>
-                <InputLabel>Payment Method</InputLabel>
-                <Select
-                  value={filterBy}
-                  label="Payment Method"
-                  onChange={(e) => setFilterBy(e.target.value)}
-                >
-                  <MenuItem value="all">All Methods</MenuItem>
-                  <MenuItem value="cash">Cash</MenuItem>
-                  <MenuItem value="card">Card</MenuItem>
-                  <MenuItem value="check">Check</MenuItem>
-                  <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
-                  <MenuItem value="credit">Credit</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} md={2}>
-              <TextField
-                fullWidth
-                label="Start Date"
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            
-            <Grid item xs={12} md={2}>
-              <TextField
-                fullWidth
-                label="End Date"
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            
-            <Grid item xs={12} md={2}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleSearchClear}
-                startIcon={<ClearIcon />}
-              >
-                Clear Filters
-              </Button>
-            </Grid>
           </Grid>
+        </Grid>
 
-          {/* Results Summary */}
-          {searchTerm || filterBy !== 'all' || dateRange.start || dateRange.end ? (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Showing {filteredData.length} of {salesData.length} sales records
-            </Alert>
-          ) : null}
-
-          {/* Sales Table */}
-          <TableContainer component={Paper} variant="outlined">
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Transaction ID</TableCell>
-                  <TableCell>Customer</TableCell>
-                  <TableCell align="right">Quantity</TableCell>
-                  <TableCell align="right">Price/Brick</TableCell>
-                  <TableCell align="right">Total Amount</TableCell>
-                  <TableCell>Payment</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="center">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
+        {isLoading ? (
+          <Box display="flex" justifyContent="center" p={3}>
+            <CircularProgress />
+          </Box>
+        ) : filteredSales.length === 0 ? (
+          <Alert severity="info">
+            No sales found.{" "}
+            {sales.history.length === 0
+              ? "Start by recording your first sale."
+              : "Try adjusting your search filters."}
+          </Alert>
+        ) : (
+          <>
+            <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+              <Table stickyHeader>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
-                      Loading sales history...
-                    </TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Invoice</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Customer</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Location</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Quantity</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Rate</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Amount</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>GST</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Vehicle</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
                   </TableRow>
-                ) : paginatedData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
-                      <Typography color="textSecondary">
-                        {searchTerm || filterBy !== 'all' || dateRange.start || dateRange.end
-                          ? 'No sales found matching your search criteria'
-                          : 'No sales history available'
-                        }
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedData.map((sale) => (
-                    <TableRow key={sale.id} hover>
-                      <TableCell>{formatDate(sale.date)}</TableCell>
+                </TableHead>
+                <TableBody>
+                  {paginatedSales.map((sale) => (
+                    <TableRow key={sale.id || sale.invoice_number} hover>
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                          {sale.id}
+                        <Typography variant="body2" fontWeight="bold" color="primary">
+                          {sale.invoice_number}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{sale.date}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="medium">
+                          {sale.customer_name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {sale.customer_phone}
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {sale.customer_name || 'Walk-in Customer'}
-                          </Typography>
-                          {sale.customer_phone && (
-                            <Typography variant="caption" color="textSecondary">
-                              {sale.customer_phone}
-                            </Typography>
-                          )}
-                        </Box>
-                      </TableCell>
-                      <TableCell align="right">
-                        {sale.quantity.toLocaleString()}
-                      </TableCell>
-                      <TableCell align="right">
-                        {formatCurrency(sale.price_per_brick)}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {formatCurrency(sale.total_amount)}
-                        </Typography>
-                        {sale.discount_percentage > 0 && (
-                          <Typography variant="caption" color="textSecondary" display="block">
-                            ({sale.discount_percentage}% discount)
-                          </Typography>
+                        {sale.location_name ? (
+                          <Chip
+                            label={sale.location_name}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+                        ) : (
+                          <Chip
+                            label="No Location"
+                            size="small"
+                            variant="outlined"
+                          />
                         )}
                       </TableCell>
+                      <TableCell>{formatQuantity(sale.quantity)}</TableCell>
+                      <TableCell>{formatCurrency(sale.price_per_brick)}</TableCell>
                       <TableCell>
-                        <Chip 
-                          label={sale.payment_method} 
-                          size="small" 
-                          variant="outlined" 
-                        />
+                        <Typography variant="body2" fontWeight="bold" color="success.main">
+                          {getCorrectAmount(sale)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {isGSTIncluded(sale) ? "(incl. GST)" : "(excl. GST)"}
+                        </Typography>
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={sale.status || 'completed'}
+                          label={isGSTIncluded(sale) ? "Included" : "Excluded"}
                           size="small"
-                          color={sale.status === 'completed' ? 'success' : 'default'}
+                          color={isGSTIncluded(sale) ? "success" : "default"}
                           variant="outlined"
                         />
                       </TableCell>
-                      <TableCell align="center">
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          <Tooltip title="Generate Bill">
-                            <IconButton 
-                              size="small" 
-                              onClick={() => handleGenerateBill(sale)}
-                              color="primary"
-                            >
-                              <ReceiptIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="View Details">
-                            <IconButton size="small" color="info">
-                              <ViewIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
+                      <TableCell>
+                        {sale.vehicle_number ? (
+                          <Chip
+                            label={sale.vehicle_number}
+                            size="small"
+                            color="info"
+                            variant="outlined"
+                          />
+                        ) : (
+                          <Chip
+                            label="No Vehicle"
+                            size="small"
+                            variant="outlined"
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip title="View Invoice">
+                          <IconButton
+                            size="small"
+                            onClick={() => onViewInvoice(sale)}
+                          >
+                            <PrintIcon />
+                          </IconButton>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
 
-          {/* Pagination */}
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25, 50]}
-            component="div"
-            count={filteredData.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={(event, newPage) => setPage(newPage)}
-            onRowsPerPageChange={(event) => {
-              setRowsPerPage(parseInt(event.target.value, 10));
-              setPage(0);
-            }}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Bill Generation Dialog */}
-      <Dialog
-        open={billDialog}
-        onClose={() => setBillDialog(false)}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: { '@media print': { boxShadow: 'none', margin: 0 } }
-        }}
-      >
-        <DialogTitle sx={{ '@media print': { display: 'none' } }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">Tax Invoice</Typography>
-            <Box>
-              <IconButton onClick={handlePrintBill} color="primary">
-                <PrintIcon />
-              </IconButton>
-            </Box>
-          </Box>
-        </DialogTitle>
-        
-        <DialogContent sx={{ '@media print': { padding: 2 } }}>
-          {selectedSale && (
-            <BillComponent sale={selectedSale} />
-          )}
-        </DialogContent>
-        
-        <DialogActions sx={{ '@media print': { display: 'none' } }}>
-          <Button onClick={() => setBillDialog(false)}>Close</Button>
-          <Button variant="contained" onClick={handlePrintBill} startIcon={<PrintIcon />}>
-            Print Bill
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
-  );
-}
-
-// Bill Component
-function BillComponent({ sale }) {
-  const taxes = calculateTaxes(sale);
-
-  const calculateTaxes = (sale) => {
-    const subtotal = sale.subtotal || (sale.quantity * sale.price_per_brick);
-    const discountAmount = sale.discount_amount || 0;
-    const taxableAmount = subtotal - discountAmount;
-    
-    const cgstRate = 6;
-    const sgstRate = 6;
-    
-    const cgstAmount = (taxableAmount * cgstRate) / 100;
-    const sgstAmount = (taxableAmount * sgstRate) / 100;
-    const totalTax = cgstAmount + sgstAmount;
-    const grandTotal = taxableAmount + totalTax;
-
-    return {
-      subtotal,
-      discountAmount,
-      taxableAmount,
-      cgstAmount,
-      sgstAmount,
-      totalTax,
-      grandTotal,
-    };
-  };
-
-  const formatCurrency = (amount) => {
-    return `₹₹{parseFloat(amount).toLocaleString('en-IN', { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
-    })}`;
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  };
-
-  return (
-    <Box sx={{ p: 2, fontSize: '14px', '@media print': { fontSize: '12px' } }}>
-      {/* Header */}
-      <Box sx={{ textAlign: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-          BRICK PRODUCTION MANAGER
-        </Typography>
-        <Typography variant="body1">
-          Quality Bricks Manufacturing
-        </Typography>
-        <Typography variant="body2" color="textSecondary">
-          Address: Industrial Area, City, State - PIN
-        </Typography>
-        <Typography variant="body2" color="textSecondary">
-          Phone: +91-XXXXXXXXXX | Email: info@brickmanager.com
-        </Typography>
-        <Typography variant="body2" color="textSecondary">
-          GSTIN: 27AAAAA0000A1Z5
-        </Typography>
-      </Box>
-
-      <Divider sx={{ mb: 2 }} />
-
-      {/* Bill Details */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={6}>
-          <Typography variant="h6" gutterBottom>TAX INVOICE</Typography>
-          <Typography variant="body2">
-            <strong>Invoice No:</strong> {sale.id}
-          </Typography>
-          <Typography variant="body2">
-            <strong>Date:</strong> {formatDate(sale.date)}
-          </Typography>
-          <Typography variant="body2">
-            <strong>Payment Method:</strong> {sale.payment_method?.toUpperCase()}
-          </Typography>
-        </Grid>
-        <Grid item xs={6}>
-          <Typography variant="subtitle1" gutterBottom><strong>Bill To:</strong></Typography>
-          <Typography variant="body2">
-            <strong>{sale.customer_name || 'Walk-in Customer'}</strong>
-          </Typography>
-          {sale.customer_phone && (
-            <Typography variant="body2">Phone: {sale.customer_phone}</Typography>
-          )}
-          {sale.customer_email && (
-            <Typography variant="body2">Email: {sale.customer_email}</Typography>
-          )}
-        </Grid>
-      </Grid>
-
-      {/* Items Table */}
-      <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell><strong>Description</strong></TableCell>
-              <TableCell align="center"><strong>Quantity</strong></TableCell>
-              <TableCell align="right"><strong>Rate</strong></TableCell>
-              <TableCell align="right"><strong>Amount</strong></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <TableCell>Bricks (Quality Grade B)</TableCell>
-              <TableCell align="center">{sale.quantity.toLocaleString()}</TableCell>
-              <TableCell align="right">{formatCurrency(sale.price_per_brick)}</TableCell>
-              <TableCell align="right">{formatCurrency(taxes.subtotal)}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Tax Calculation */}
-      <Grid container spacing={3}>
-        <Grid item xs={6}>
-          {sale.notes && (
-            <Box>
-              <Typography variant="subtitle2" gutterBottom><strong>Notes:</strong></Typography>
-              <Typography variant="body2">{sale.notes}</Typography>
-            </Box>
-          )}
-        </Grid>
-        <Grid item xs={6}>
-          <Box sx={{ border: '1px solid #ddd', p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2">Subtotal:</Typography>
-              <Typography variant="body2">{formatCurrency(taxes.subtotal)}</Typography>
-            </Box>
-            
-            {taxes.discountAmount > 0 && (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2" color="error">
-                  Discount ({sale.discount_percentage}%):
+            {/* Pagination Controls */}
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                mt: 2,
+                pt: 2,
+                borderTop: '1px solid',
+                borderTopColor: 'divider'
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Showing {startIndex + 1}-{Math.min(endIndex, filteredSales.length)} of {filteredSales.length} sales
                 </Typography>
-                <Typography variant="body2" color="error">
-                  -{formatCurrency(taxes.discountAmount)}
-                </Typography>
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <InputLabel>Per page</InputLabel>
+                  <Select
+                    value={itemsPerPage}
+                    onChange={handleItemsPerPageChange}
+                    label="Per page"
+                  >
+                    <MenuItem value={5}>5</MenuItem>
+                    <MenuItem value={10}>10</MenuItem>
+                    <MenuItem value={25}>25</MenuItem>
+                    <MenuItem value={50}>50</MenuItem>
+                  </Select>
+                </FormControl>
               </Box>
-            )}
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2">Taxable Amount:</Typography>
-              <Typography variant="body2">{formatCurrency(taxes.taxableAmount)}</Typography>
+              <Pagination
+                count={totalPages}
+                page={currentPage}
+                onChange={handlePageChange}
+                color="primary"
+                shape="rounded"
+                showFirstButton
+                showLastButton
+              />
             </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2">CGST (6%):</Typography>
-              <Typography variant="body2">{formatCurrency(taxes.cgstAmount)}</Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2">SGST (6%):</Typography>
-              <Typography variant="body2">{formatCurrency(taxes.sgstAmount)}</Typography>
-            </Box>
-            
-            <Divider sx={{ my: 1 }} />
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Grand Total:</Typography>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                {formatCurrency(taxes.grandTotal)}
-              </Typography>
-            </Box>
-          </Box>
-        </Grid>
-      </Grid>
-
-      {/* Footer */}
-      <Box sx={{ mt: 4, pt: 2, borderTop: '1px solid #ddd' }}>
-        <Typography variant="body2" sx={{ textAlign: 'center' }}>
-          <strong>Thank you for your business!</strong>
-        </Typography>
-        <Typography variant="caption" sx={{ textAlign: 'center', display: 'block', mt: 1 }}>
-          This is a computer-generated invoice and does not require a signature.
-        </Typography>
-      </Box>
-    </Box>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
-}
+};
 
 export default SalesHistory;

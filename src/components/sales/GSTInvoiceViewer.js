@@ -20,19 +20,34 @@ import { DEFAULT_COMPANY_INFO, DEFAULT_BANK_DETAILS } from '../../utils/constant
 const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
   if (!saleData) return null;
 
-  // Calculate GST amounts
+  // Check if GST was included during sale recording
+  const isGSTIncluded = saleData.includeGST || saleData.include_gst || saleData.gst_included || false;
+
+  // Calculate amounts based on whether GST was included
   const subtotal = saleData.quantity * saleData.price_per_brick;
   const discountAmount = saleData.discount_amount || 0;
   const taxableAmount = subtotal - discountAmount;
   const isInterState = saleData.customer_state !== "GJ"; // Compare with Gujarat state code
   
   let cgstAmount = 0, sgstAmount = 0, igstAmount = 0;
-  if (isInterState) {
-    igstAmount = (taxableAmount * 12) / 100; // 12% IGST for inter-state
-  } else {
-    cgstAmount = (taxableAmount * 6) / 100; // 6% CGST for intra-state
-    sgstAmount = (taxableAmount * 6) / 100; // 6% SGST for intra-state
+  
+  if (isGSTIncluded) {
+    // Use stored GST amounts if available, otherwise calculate
+    if (saleData.cgst_amount !== undefined || saleData.sgst_amount !== undefined || saleData.igst_amount !== undefined) {
+      cgstAmount = saleData.cgst_amount || 0;
+      sgstAmount = saleData.sgst_amount || 0;
+      igstAmount = saleData.igst_amount || 0;
+    } else {
+      // Calculate GST amounts
+      if (isInterState) {
+        igstAmount = (taxableAmount * 12) / 100; // 12% IGST for inter-state
+      } else {
+        cgstAmount = (taxableAmount * 6) / 100; // 6% CGST for intra-state
+        sgstAmount = (taxableAmount * 6) / 100; // 6% SGST for intra-state
+      }
+    }
   }
+  // If GST not included, all GST amounts remain 0
   
   const totalTax = cgstAmount + sgstAmount + igstAmount;
   const totalAmount = taxableAmount + totalTax;
@@ -213,7 +228,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
           {/* Header */}
           <Box sx={{ textAlign: 'center', mb: 1 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '14px' }}>
-              TAX INVOICE
+              {isGSTIncluded ? 'TAX INVOICE' : 'INVOICE'}
             </Typography>
           </Box>
 
@@ -278,7 +293,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                 <strong>State Code:</strong> {saleData.customer_state_code || '24'}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>GSTIN Number:</strong> {saleData.customer_gstin || '24AAOFC4870G1ZC'}
+                <strong>GSTIN Number:</strong> {saleData.customer_gstin || '-'}
               </Typography>
             </Box>
             <Box sx={{ flex: 1, p: 1 }}>
@@ -298,7 +313,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                 <strong>State Code:</strong> {saleData.customer_state_code || '24'}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>GSTIN Number:</strong> {saleData.customer_gstin || '24AAOFC4870G1ZC'}
+                <strong>GSTIN Number:</strong> {saleData.customer_gstin || '-'}
               </Typography>
             </Box>
           </Box>
@@ -449,6 +464,9 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
             <Box sx={{ flex: 1, p: 1, borderRight: '1px solid black' }}>
               <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
                 Amount of Tax Subject To Reverse Charge
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: '11px', mb: 1 }}>
+                NO
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1, mt: 2 }}>
                 Bank Details

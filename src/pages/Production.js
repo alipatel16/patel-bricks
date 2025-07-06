@@ -29,6 +29,7 @@ import {
   LinearProgress,
   useTheme,
   alpha,
+  Pagination,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -76,6 +77,10 @@ function Production() {
   const [editingProduction, setEditingProduction] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Pagination state for production history
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   // Form management
   const {
     control,
@@ -117,6 +122,23 @@ function Production() {
     settings.cement_per_brick_ratio,
     setValue,
   ]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(productionData.history.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedHistory = productionData.history.slice(startIndex, endIndex);
+
+  // Handle pagination change
+  const handlePageChange = (event, page) => {
+    setCurrentPage(page);
+  };
+
+  // Handle items per page change
+  const handleItemsPerPageChange = (event) => {
+    setItemsPerPage(event.target.value);
+    setCurrentPage(1); // Reset to first page
+  };
 
   // Load all production data
   const loadProductionData = async () => {
@@ -483,7 +505,7 @@ function Production() {
             }}
           >
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Production History
+              Production History ({productionData.history.length})
             </Typography>
             <Tooltip title="Refresh data">
               <IconButton onClick={loadProductionData}>
@@ -515,7 +537,7 @@ function Production() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  productionData.history.map((production) => (
+                  paginatedHistory.map((production) => (
                     <TableRow key={production.date} hover>
                       <TableCell>{formatDate(production.date)}</TableCell>
                       <TableCell align="right">
@@ -554,6 +576,49 @@ function Production() {
               </TableBody>
             </Table>
           </TableContainer>
+
+          {/* Pagination Controls */}
+          {productionData.history.length > 0 && (
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                mt: 2,
+                pt: 2,
+                borderTop: '1px solid',
+                borderTopColor: 'divider'
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Showing {startIndex + 1}-{Math.min(endIndex, productionData.history.length)} of {productionData.history.length} records
+                </Typography>
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <InputLabel>Per page</InputLabel>
+                  <Select
+                    value={itemsPerPage}
+                    onChange={handleItemsPerPageChange}
+                    label="Per page"
+                  >
+                    <MenuItem value={5}>5</MenuItem>
+                    <MenuItem value={10}>10</MenuItem>
+                    <MenuItem value={25}>25</MenuItem>
+                    <MenuItem value={50}>50</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              <Pagination
+                count={totalPages}
+                page={currentPage}
+                onChange={handlePageChange}
+                color="primary"
+                shape="rounded"
+                showFirstButton
+                showLastButton
+              />
+            </Box>
+          )}
         </CardContent>
       </Card>
 

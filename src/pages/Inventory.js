@@ -123,7 +123,7 @@ function Inventory() {
       console.log("🧮 Inventory: Calculating comprehensive brick stock...");
       
       // Fetch all required data including manual adjustments
-      const [productionResult, salesResult, inventoryAdjustments] = await Promise.all([
+      const [productionResult, salesResult] = await Promise.all([
         productionService.getProductionHistory(1000),
         salesService.getAllSales(),
       ]);
