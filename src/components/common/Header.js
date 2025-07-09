@@ -11,6 +11,7 @@ import {
   MenuItem,
   Avatar,
   Badge,
+  Divider,
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
@@ -18,6 +19,7 @@ import {
   Refresh as RefreshIcon,
   CloudOff as CloudOffIcon,
   Cloud as CloudIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 // Import contexts
 import { useApp, useNotifications } from '../../context/AppContext';
 import { useInventory } from '../../context/InventoryContext';
+import { useAuth } from '../../context/AuthContext'; // ADD THIS LINE
 
 // Import constants
 import { APP_NAME } from '../../utils/constants';
@@ -34,6 +37,7 @@ function Header({ isConnected = true }) {
   const { currentPage, lastSyncTime } = useApp();
   const { notifications, removeNotification } = useNotifications();
   const { actions: inventoryActions } = useInventory();
+  const { signOut, getUserDisplayName } = useAuth(); // ADD THIS LINE
 
   // State for menus
   const [notificationAnchor, setNotificationAnchor] = useState(null);
@@ -59,6 +63,16 @@ function Header({ isConnected = true }) {
 
   const handleProfileClose = () => {
     setProfileAnchor(null);
+  };
+
+  // ADD THIS FUNCTION - Handle logout
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      handleProfileClose();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   // Handle refresh
@@ -171,8 +185,8 @@ function Header({ isConnected = true }) {
             </IconButton>
           </Tooltip>
 
-          {/* Profile menu */}
-          <Tooltip title="Profile & Settings">
+          {/* Profile menu - UPDATED TOOLTIP */}
+          <Tooltip title={`Profile: ${getUserDisplayName ? getUserDisplayName() : 'User'}`}>
             <IconButton
               color="inherit"
               onClick={handleProfileClick}
@@ -244,7 +258,7 @@ function Header({ isConnected = true }) {
         )}
       </Menu>
 
-      {/* Profile Menu */}
+      {/* Profile Menu - UPDATED WITH LOGOUT */}
       <Menu
         anchorEl={profileAnchor}
         open={Boolean(profileAnchor)}
@@ -258,6 +272,12 @@ function Header({ isConnected = true }) {
           horizontal: 'right',
         }}
       >
+        {/* ADD THIS - User info at top */}
+        <MenuItem disabled sx={{ opacity: 0.8, fontSize: '0.875rem' }}>
+          {getUserDisplayName ? getUserDisplayName() : 'User'}
+        </MenuItem>
+        <Divider />
+        
         <MenuItem onClick={() => { navigate('/settings'); handleProfileClose(); }}>
           <SettingsIcon sx={{ mr: 1 }} />
           Settings
@@ -269,6 +289,22 @@ function Header({ isConnected = true }) {
         <MenuItem onClick={handleProfileClose}>
           <SettingsIcon sx={{ mr: 1 }} />
           Help
+        </MenuItem>
+        
+        {/* ADD THIS - Divider and Logout */}
+        <Divider />
+        <MenuItem 
+          onClick={handleLogout}
+          sx={{ 
+            color: 'error.main',
+            '&:hover': {
+              backgroundColor: 'error.light',
+              color: 'error.contrastText',
+            }
+          }}
+        >
+          <LogoutIcon sx={{ mr: 1 }} />
+          Logout
         </MenuItem>
       </Menu>
     </AppBar>

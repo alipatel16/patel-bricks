@@ -247,7 +247,7 @@ function Sidebar({ open, onToggle }) {
         </Box>
 
         {/* Hamburger menu button */}
-        <IconButton
+        {/* <IconButton
           color="inherit"
           aria-label="toggle sidebar"
           onClick={onToggle}
@@ -260,7 +260,7 @@ function Sidebar({ open, onToggle }) {
           }}
         >
           {open ? <ChevronLeftIcon /> : <MenuIcon />}
-        </IconButton>
+        </IconButton> */}
       </Toolbar>
 
       <Divider />
