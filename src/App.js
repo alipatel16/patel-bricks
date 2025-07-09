@@ -65,9 +65,9 @@ const AppContent = () => {
           throw new Error(initResult.error || 'Failed to initialize database');
         }
 
-        console.log('App initialized successfully:', initResult.message);
+        
       } catch (error) {
-        console.error('App initialization error:', error);
+        
         setInitError(error.message);
       } finally {
         setIsLoading(false);

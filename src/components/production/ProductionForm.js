@@ -99,7 +99,7 @@ function ProductionForm({ onSuccess = null, onCancel = null, initialData = null 
         appActions.showSnackbar(result.error || 'Failed to record production', 'error');
       }
     } catch (error) {
-      console.error('Error submitting production:', error);
+      
       appActions.showSnackbar('Failed to record production', 'error');
     }
   };

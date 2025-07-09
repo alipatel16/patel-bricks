@@ -1,5 +1,5 @@
 // components/Sales/RecordSaleDialog.js - Fixed version with proper reset
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -44,12 +44,10 @@ import { useForm, Controller } from "react-hook-form";
 import {
   calculateTotalSaleAmount,
   formatCurrency,
-  formatQuantity,
   generateCustomerSuggestions,
   generateLocationSuggestions,
 } from "../../utils/calculations";
 import {
-  HSN_CODES,
   PAYMENT_METHODS,
   INDIAN_STATES,
 } from "../../utils/constants";
@@ -136,7 +134,7 @@ const RecordSaleDialog = ({
   // Function to calculate actual brick stock (enhanced version)
   const calculateActualBrickStock = async () => {
     try {
-      console.log("🧮 Inventory: Calculating comprehensive brick stock...");
+      
 
       // Fetch all required data including manual adjustments
       const [productionResult, salesResult] = await Promise.all([
@@ -162,7 +160,7 @@ const RecordSaleDialog = ({
 
       return totalProduction - totalSales;
     } catch (error) {
-      console.error("Error calculating brick stock:", error);
+      
       return 0;
     }
   };
@@ -196,7 +194,7 @@ const RecordSaleDialog = ({
               setCustomerOptions(suggestions.map((s) => s.customer));
             }
           } catch (error) {
-            console.error("Error searching customers:", error);
+            
           } finally {
             setCustomerSearchLoading(false);
           }
@@ -391,7 +389,7 @@ const RecordSaleDialog = ({
         });
       }, 1000); // Increased delay to ensure success toast is visible
     } catch (error) {
-      console.error("Error submitting sale:", error);
+      
       // Don't reset on error, let user see the error and fix it
     }
   };

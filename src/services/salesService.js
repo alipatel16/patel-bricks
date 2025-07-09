@@ -65,7 +65,7 @@ const generateInvoiceNumber = async (date) => {
 
     return invoiceNumber;
   } catch (error) {
-    console.error("Error generating invoice number:", error);
+    
     // Fallback to timestamp-based number
     return `B18-${Date.now()}`;
   }
@@ -193,7 +193,7 @@ export const salesService = {
           bankDetails = bankResult.data;
         }
       } catch (error) {
-        console.warn("Could not load custom bank details, using defaults");
+        
       }
 
       // Prepare enhanced sale entry
@@ -379,7 +379,7 @@ export const salesService = {
           updates[`${DB_PATHS.CUSTOMERS}/${customerPhone}`] = newCustomer;
         }
       } catch (customerError) {
-        console.warn("Could not update customer data:", customerError);
+        
         // Continue with sale even if customer update fails
       }
 
@@ -402,7 +402,7 @@ export const salesService = {
         error: "Failed to save sale data",
       };
     } catch (error) {
-      console.error("Error recording sale:", error);
+      
       return {
         success: false,
         error: error.message,
@@ -460,7 +460,7 @@ export const salesService = {
 
       return { success: true, data: [] };
     } catch (error) {
-      console.error("Error getting sales history:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -473,7 +473,7 @@ export const salesService = {
       );
       return result;
     } catch (error) {
-      console.error("Error getting sale by invoice:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -484,7 +484,7 @@ export const salesService = {
       const result = await dbUtils.readData(`${DB_PATHS.SALES}/daily/${date}`);
       return result;
     } catch (error) {
-      console.error("Error getting daily sales:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -497,7 +497,7 @@ export const salesService = {
       );
       return result;
     } catch (error) {
-      console.error("Error getting monthly sales summary:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -551,7 +551,7 @@ export const salesService = {
 
       return { success: true, data: { total_sales: 0, total_quantity: 0, total_revenue: 0 } };
     } catch (error) {
-      console.error("Error getting sales stats:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -579,7 +579,7 @@ export const salesService = {
 
       return { success: true, data: [] };
     } catch (error) {
-      console.error("Error getting all sales:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -596,7 +596,7 @@ export const salesService = {
       
       return { success: false, error: 'Failed to get sales data' };
     } catch (error) {
-      console.error("Error getting total sales quantity:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -643,7 +643,7 @@ export const salesService = {
           bankDetails = bankResult.data;
         }
       } catch (error) {
-        console.warn("Could not load custom bank details, using defaults");
+        
       }
 
       // Structure data for PDF generation
@@ -700,7 +700,7 @@ export const salesService = {
         data: invoiceData,
       };
     } catch (error) {
-      console.error("Error generating invoice PDF data:", error);
+      
       return { success: false, error: error.message };
     }
   },

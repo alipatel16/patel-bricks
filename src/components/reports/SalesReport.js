@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -18,14 +18,10 @@ import {
   TableHead,
   TableRow,
   Alert,
-  Chip,
-  Divider,
 } from '@mui/material';
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -41,9 +37,6 @@ import {
 import {
   Download as DownloadIcon,
   Print as PrintIcon,
-  TrendingUp as TrendingUpIcon,
-  MonetizationOn as MoneyIcon,
-  Assessment as AssessmentIcon,
   ShoppingCart as SalesIcon,
 } from '@mui/icons-material';
 import { reportsService } from '../../services/reportsService';
@@ -77,7 +70,7 @@ const SalesReport = () => {
         toast.error('Failed to load sales report');
       }
     } catch (error) {
-      console.error('Error loading sales report:', error);
+      
       setError(error.message);
       toast.error('An error occurred while loading the report');
     } finally {

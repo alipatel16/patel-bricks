@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -15,23 +15,16 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableHead,
   TableRow,
   Alert,
-  Chip,
-  Divider,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
 } from '@mui/material';
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -85,7 +78,7 @@ const ProfitAnalysis = () => {
         toast.error('Failed to load profit analysis');
       }
     } catch (error) {
-      console.error('Error loading profit analysis:', error);
+      
       setError(error.message);
       toast.error('An error occurred while loading the analysis');
     } finally {

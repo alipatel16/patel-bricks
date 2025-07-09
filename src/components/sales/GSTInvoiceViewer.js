@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,12 +9,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Grid,
-  Divider,
 } from '@mui/material';
 
 // Import constants and utilities
-import { DEFAULT_COMPANY_INFO, DEFAULT_BANK_DETAILS } from '../../utils/constants';
+import { DEFAULT_BANK_DETAILS } from '../../utils/constants';
 
 const GSTInvoiceViewer = ({ 
   open, 

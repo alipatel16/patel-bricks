@@ -5,7 +5,6 @@ import {
   calculateCementNeeded,
   validateProductionCapacity,
   calculateProductionEfficiency,
-  calculateMonthlyTotals,
 } from "../utils/calculations";
 
 /**
@@ -154,10 +153,6 @@ export const productionService = {
       ]);
 
       if (!brickStockResult.success || !cementStockResult.success) {
-        console.error("Inventory update failed:", {
-          brickStockResult,
-          cementStockResult,
-        });
         // Note: Production was saved but inventory update failed
         // In a real app, you might want to implement rollback logic
       }
@@ -173,7 +168,7 @@ export const productionService = {
         },
       };
     } catch (error) {
-      console.error("Error adding production:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -189,7 +184,7 @@ export const productionService = {
         data: result.data,
       };
     } catch (error) {
-      console.error("Error getting production by date:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -230,7 +225,7 @@ export const productionService = {
         data: productions,
       };
     } catch (error) {
-      console.error("Error getting production history:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -260,7 +255,7 @@ export const productionService = {
         data: monthlyData,
       };
     } catch (error) {
-      console.error("Error getting monthly production:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -352,7 +347,7 @@ export const productionService = {
         data: stats,
       };
     } catch (error) {
-      console.error("Error getting production stats:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -433,7 +428,7 @@ export const productionService = {
         },
       };
     } catch (error) {
-      console.error("Error getting production trends:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -489,7 +484,7 @@ export const productionService = {
         data: usage,
       };
     } catch (error) {
-      console.error("Error getting cement usage:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -543,7 +538,7 @@ export const productionService = {
 
       return result;
     } catch (error) {
-      console.error("Error updating production:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -557,7 +552,7 @@ export const productionService = {
       );
       return result;
     } catch (error) {
-      console.error("Error deleting production:", error);
+      
       return { success: false, error: error.message };
     }
   },

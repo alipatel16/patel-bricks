@@ -1,10 +1,8 @@
-import React from 'react';
 import {
   Card,
   CardContent,
   Typography,
   Box,
-  IconButton,
   Chip,
   alpha,
 } from '@mui/material';

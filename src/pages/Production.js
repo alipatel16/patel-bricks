@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -37,9 +37,7 @@ import {
   History as HistoryIcon,
   TrendingUp as TrendingUpIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon,
   Refresh as RefreshIcon,
   LocalShipping as TruckIcon,
 } from "@mui/icons-material";
@@ -57,7 +55,7 @@ import {
   calculateCementNeeded,
   validateProductionCapacity,
 } from "../utils/calculations";
-import { PRODUCTION_SHIFTS, QUALITY_GRADES } from "../utils/constants";
+import { PRODUCTION_SHIFTS } from "../utils/constants";
 
 function Production() {
   const theme = useTheme();
@@ -161,7 +159,7 @@ function Production() {
         error: null,
       });
     } catch (error) {
-      console.error("Error loading production data:", error);
+      
       setProductionData((prev) => ({
         ...prev,
         loading: false,
@@ -178,7 +176,7 @@ function Production() {
       await loadProductionData();
       appActions.showNotification("Production data refreshed", "success");
     } catch (error) {
-      console.error("Error refreshing production data:", error);
+      
       appActions.showNotification("Failed to refresh production data", "error");
     } finally {
       setRefreshing(false);
@@ -229,7 +227,7 @@ function Production() {
         );
       }
     } catch (error) {
-      console.error("Error submitting production:", error);
+      
       appActions.showNotification("Failed to record production", "error");
     }
   };

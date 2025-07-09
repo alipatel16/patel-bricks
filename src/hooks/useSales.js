@@ -48,7 +48,7 @@ export const useSales = () => {
       }));
 
     } catch (error) {
-      console.error('Error loading sales data:', error);
+      
       setSales(prev => ({
         ...prev,
         loading: false,
@@ -71,7 +71,7 @@ export const useSales = () => {
         }));
       }
     } catch (error) {
-      console.error('Error loading sales trends:', error);
+      
     }
   }, []);
 
@@ -90,7 +90,7 @@ export const useSales = () => {
         return result;
       }
     } catch (error) {
-      console.error('Error recording sale:', error);
+      
       toast.error('Failed to record sale');
       return { success: false, error: error.message };
     }
@@ -110,7 +110,7 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      console.error('Error loading customers:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);
@@ -120,7 +120,7 @@ export const useSales = () => {
       const result = await customerService.searchCustomers(searchTerm);
       return result;
     } catch (error) {
-      console.error('Error searching customers:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);
@@ -145,7 +145,7 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      console.error('Error saving customer:', error);
+      
       toast.error(`Failed to ${isEditing ? 'update' : 'create'} customer`);
       return { success: false, error: error.message };
     }
@@ -164,7 +164,7 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      console.error('Error deleting customer:', error);
+      
       toast.error('Failed to delete customer');
       return { success: false, error: error.message };
     }
@@ -184,7 +184,7 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      console.error('Error adding customer location:', error);
+      
       toast.error('Failed to add location');
       return { success: false, error: error.message };
     }
@@ -203,7 +203,7 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      console.error('Error updating customer location:', error);
+      
       toast.error('Failed to update location');
       return { success: false, error: error.message };
     }
@@ -222,7 +222,7 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      console.error('Error deleting customer location:', error);
+      
       toast.error('Failed to delete location');
       return { success: false, error: error.message };
     }
@@ -234,7 +234,7 @@ export const useSales = () => {
       const result = await salesService.getSaleByInvoice(invoiceNumber);
       return result;
     } catch (error) {
-      console.error('Error getting sale by invoice:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);
@@ -244,7 +244,7 @@ export const useSales = () => {
       const result = await salesService.generateInvoicePDF(invoiceNumber);
       return result;
     } catch (error) {
-      console.error('Error generating invoice PDF:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);
@@ -263,7 +263,7 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      console.error('Error filtering sales:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);
@@ -299,7 +299,7 @@ export const useSales = () => {
       
       return { success: true, data: analytics };
     } catch (error) {
-      console.error('Error getting customer analytics:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);

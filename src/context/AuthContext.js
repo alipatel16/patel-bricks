@@ -135,7 +135,7 @@ export function AuthProvider({ children }) {
       toast.success('Successfully signed in!');
       return { success: true, user: userCredential.user };
     } catch (error) {
-      console.error('Sign in error:', error);
+      
       
       let errorMessage = 'Failed to sign in';
       switch (error.code) {
@@ -185,7 +185,7 @@ export function AuthProvider({ children }) {
       toast.success('Account created! Please check your email to verify your account.');
       return { success: true, user: userCredential.user };
     } catch (error) {
-      console.error('Sign up error:', error);
+      
       
       let errorMessage = 'Failed to create account';
       switch (error.code) {
@@ -216,7 +216,7 @@ export function AuthProvider({ children }) {
       toast.success('Successfully signed out');
       return { success: true };
     } catch (error) {
-      console.error('Sign out error:', error);
+      
       const errorMessage = 'Failed to sign out';
       dispatch({ type: ActionTypes.SET_ERROR, payload: errorMessage });
       toast.error(errorMessage);
@@ -235,7 +235,7 @@ export function AuthProvider({ children }) {
       toast.success('Password reset email sent! Check your inbox.');
       return { success: true };
     } catch (error) {
-      console.error('Password reset error:', error);
+      
       
       let errorMessage = 'Failed to send password reset email';
       switch (error.code) {
@@ -279,7 +279,7 @@ export function AuthProvider({ children }) {
       toast.success('Profile updated successfully');
       return { success: true };
     } catch (error) {
-      console.error('Profile update error:', error);
+      
       const errorMessage = 'Failed to update profile';
       dispatch({ type: ActionTypes.SET_ERROR, payload: errorMessage });
       toast.error(errorMessage);
@@ -302,7 +302,7 @@ export function AuthProvider({ children }) {
       toast.success('Verification email sent!');
       return { success: true };
     } catch (error) {
-      console.error('Email verification error:', error);
+      
       const errorMessage = 'Failed to send verification email';
       toast.error(errorMessage);
       return { success: false, error: errorMessage };

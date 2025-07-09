@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -19,7 +19,6 @@ import {
   TableRow,
   Alert,
   Chip,
-  Divider,
 } from '@mui/material';
 import {
   BarChart,
@@ -39,7 +38,6 @@ import {
 import {
   Download as DownloadIcon,
   Print as PrintIcon,
-  TrendingUp as TrendingUpIcon,
   Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import { reportsService } from '../../services/reportsService';
@@ -73,7 +71,7 @@ const ProductionReport = () => {
         toast.error('Failed to load production report');
       }
     } catch (error) {
-      console.error('Error loading production report:', error);
+      
       setError(error.message);
       toast.error('An error occurred while loading the report');
     } finally {

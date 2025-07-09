@@ -85,7 +85,7 @@ const LoginPage = () => {
     try {
       await signIn(formData.email, formData.password);
     } catch (error) {
-      console.error('Login error:', error);
+      
     } finally {
       setIsSubmitting(false);
     }

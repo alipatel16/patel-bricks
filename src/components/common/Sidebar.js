@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Drawer,
   List,
@@ -12,7 +12,6 @@ import {
   Chip,
   useTheme,
   useMediaQuery,
-  IconButton,
   Toolbar,
 } from "@mui/material";
 import {
@@ -25,8 +24,6 @@ import {
   Settings as SettingsIcon,
   TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
-  Menu as MenuIcon,
-  ChevronLeft as ChevronLeftIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 

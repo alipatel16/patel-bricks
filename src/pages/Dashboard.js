@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -7,10 +7,8 @@ import {
   Typography,
   Button,
   Alert,
-  Chip,
   IconButton,
   Tooltip,
-  Paper,
   LinearProgress,
 } from "@mui/material";
 import {
@@ -18,11 +16,8 @@ import {
   Inventory as InventoryIcon,
   ShoppingCart as ShoppingCartIcon,
   TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
-  Add as AddIcon,
   Refresh as RefreshIcon,
   Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
@@ -35,7 +30,6 @@ import { productionService } from "../services/productionService";
 import { salesService } from "../services/salesService";
 
 // Import components
-import StatsCard from "../components/dashboard/StatsCard";
 import QuickActions from "../components/dashboard/QuickActions";
 import RecentActivity from "../components/dashboard/RecentActivity";
 
@@ -43,7 +37,6 @@ function Dashboard() {
   const navigate = useNavigate();
   const { actions: appActions } = useApp();
   const {
-    bricks,
     cement,
     lowStockAlerts,
     inventoryValue,
@@ -65,20 +58,13 @@ function Dashboard() {
 
   const calculateActualBrickStock = async () => {
   try {
-    console.log("🧮 Calculating actual brick stock...");
+    
     
     // ✅ Use correct service method names from your codebase
     const [productionResult, salesResult] = await Promise.all([
       productionService.getProductionHistory(1000), // ✅ This method exists
       salesService.getAllSales(), // ✅ This method exists
     ]);
-
-    console.log("📊 Service Results:", {
-      productionSuccess: productionResult.success,
-      productionDataLength: productionResult.data?.length,
-      salesSuccess: salesResult.success,
-      salesDataLength: salesResult.data?.length,
-    });
 
     // Calculate total production
     let totalProduction = 0;
@@ -99,12 +85,6 @@ function Dashboard() {
     // Calculate actual brick stock
     const actualBrickStock = totalProduction - totalSales;
 
-    console.log("📈 Calculation Results:", {
-      totalProduction: totalProduction.toLocaleString(),
-      totalSales: totalSales.toLocaleString(),
-      actualBrickStock: actualBrickStock.toLocaleString(),
-    });
-
     return {
       success: true,
       data: {
@@ -116,7 +96,7 @@ function Dashboard() {
     };
 
   } catch (error) {
-    console.error("❌ Error calculating brick stock:", error);
+    
     return {
       success: false,
       error: error.message,
@@ -137,7 +117,7 @@ function Dashboard() {
 
     const today = new Date().toISOString().split("T")[0];
 
-    console.log("🔍 Dashboard Debug - Loading data for:", { today });
+    
 
     // ✅ Use the EXACT same service calls as the individual component pages
     const [
@@ -162,13 +142,6 @@ function Dashboard() {
 
       calculateActualBrickStock(),
     ]);
-
-    console.log("📊 Dashboard Debug - Raw Results:", {
-      todayProduction: todayProductionResult,
-      productionStats: productionStatsResult,
-      todaySales: todaySalesResult,
-      salesStats: salesStatsResult,
-    });
 
     // ✅ Process data exactly like the individual components do
     
@@ -197,13 +170,6 @@ function Dashboard() {
     const calculatedStock = calculatedStockResult.success && calculatedStockResult.data
       ? calculatedStockResult.data.calculated_stock
       : 0;
-
-    console.log("📈 Dashboard Debug - Processed Data:", {
-      todayProduction,
-      todaySales,
-      productionStats,
-      salesStats,
-    });
 
     // Create recent activity from stats
     const recentActivity = [
@@ -299,11 +265,11 @@ function Dashboard() {
       error: null,
     };
 
-    console.log("✅ Dashboard Debug - Final Data:", finalDashboardData);
+    
 
     setDashboardData(finalDashboardData);
   } catch (error) {
-    console.error("❌ Dashboard Debug - Error loading data:", error);
+    
     setDashboardData((prev) => ({
       ...prev,
       loading: false,

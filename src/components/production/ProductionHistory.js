@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -27,10 +27,8 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  FilterList as FilterIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
-  CalendarToday as CalendarIcon,
   TrendingUp as TrendingUpIcon,
   TrendingDown as TrendingDownIcon,
   Remove as RemoveIcon,

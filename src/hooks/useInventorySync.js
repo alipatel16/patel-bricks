@@ -55,7 +55,7 @@ export const useInventorySync = () => {
         throw new Error(result.error);
       }
     } catch (error) {
-      console.error('Error loading inventory data:', error);
+      
       setInventory(prev => ({
         ...prev,
         bricks: { ...prev.bricks, loading: false, error: error.message },

@@ -77,7 +77,7 @@ export function useInventory() {
         throw new Error(result.error);
       }
     } catch (error) {
-      console.error('Error loading inventory data:', error);
+      
       setInventory(prev => ({
         ...prev,
         status: { ...prev.status, loading: false, error: error.message },
@@ -108,7 +108,7 @@ export function useInventory() {
         throw new Error(result.error);
       }
     } catch (error) {
-      console.error('Error loading inventory history:', error);
+      
       setInventory(prev => ({
         ...prev,
         history: { ...prev.history, loading: false, error: error.message },
@@ -134,7 +134,7 @@ export function useInventory() {
       
       return result;
     } catch (error) {
-      console.error('Error updating brick stock:', error);
+      
       setInventory(prev => ({
         ...prev,
         bricks: { ...prev.bricks, loading: false, error: error.message },
@@ -160,7 +160,7 @@ export function useInventory() {
       
       return result;
     } catch (error) {
-      console.error('Error setting brick stock:', error);
+      
       setInventory(prev => ({
         ...prev,
         bricks: { ...prev.bricks, loading: false, error: error.message },
@@ -187,7 +187,7 @@ export function useInventory() {
       
       return result;
     } catch (error) {
-      console.error('Error updating cement stock:', error);
+      
       setInventory(prev => ({
         ...prev,
         cement: { ...prev.cement, loading: false, error: error.message },
@@ -213,7 +213,7 @@ export function useInventory() {
       
       return result;
     } catch (error) {
-      console.error('Error purchasing cement:', error);
+      
       setInventory(prev => ({
         ...prev,
         cement: { ...prev.cement, loading: false, error: error.message },

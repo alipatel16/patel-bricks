@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -11,16 +11,9 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Alert,
   Chip,
-  IconButton,
-  Tooltip,
   LinearProgress,
-  Divider,
 } from '@mui/material';
 import {
   Engineering as CementIcon,
@@ -28,14 +21,11 @@ import {
   Remove as RemoveIcon,
   ShoppingCart as PurchaseIcon,
   Edit as EditIcon,
-  History as HistoryIcon,
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
-  LocalShipping as DeliveryIcon,
 } from '@mui/icons-material';
 import { useInventory } from '../../hooks/useInventory';
 import LoadingSpinner from '../common/LoadingSpinner';
-import ConfirmDialog from '../common/ConfirmDialog';
 import toast from 'react-hot-toast';
 
 const CementInventory = () => {
@@ -127,7 +117,7 @@ const CementInventory = () => {
         toast.error(result.error || 'Failed to update inventory');
       }
     } catch (error) {
-      console.error('Error updating cement inventory:', error);
+      
       toast.error('An error occurred while updating inventory');
     } finally {
       setLoading(false);

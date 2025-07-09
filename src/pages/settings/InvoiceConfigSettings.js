@@ -1,6 +1,6 @@
 // Create this as InvoiceConfigSettings.js in your components/settings/ folder
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -10,13 +10,11 @@ import {
   Grid,
   Alert,
   Box,
-  Divider,
   InputAdornment,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Chip,
   Switch,
   FormControlLabel,
   List,
@@ -30,7 +28,6 @@ import {
   DialogActions,
 } from '@mui/material';
 import {
-  Receipt as InvoiceIcon,
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
@@ -38,7 +35,6 @@ import {
   Delete as DeleteIcon,
   LocalShipping as TransportIcon,
   Description as DescriptionIcon,
-  Code as HSNIcon,
   Percent as TaxIcon,
 } from '@mui/icons-material';
 import { HSN_CODES, GST_RATES, INVOICE_SETTINGS } from '../../utils/constants';
@@ -95,7 +91,7 @@ const InvoiceConfigSettings = () => {
         setInvoiceConfig(DEFAULT_INVOICE_CONFIG);
       }
     } catch (error) {
-      console.error('Error loading invoice config:', error);
+      
       setInvoiceConfig(DEFAULT_INVOICE_CONFIG);
       toast.error('Failed to load invoice configuration');
     } finally {
@@ -196,7 +192,7 @@ const InvoiceConfigSettings = () => {
         throw new Error(result.error || 'Failed to save');
       }
     } catch (error) {
-      console.error('Error saving invoice config:', error);
+      
       toast.error('Failed to save invoice configuration');
     } finally {
       setSaving(false);

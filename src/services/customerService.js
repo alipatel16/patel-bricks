@@ -65,7 +65,7 @@ export const customerService = {
 
       return result;
     } catch (error) {
-      console.error('Error creating customer:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -110,7 +110,7 @@ export const customerService = {
 
       return result;
     } catch (error) {
-      console.error('Error updating customer:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -170,7 +170,7 @@ export const customerService = {
 
       return result;
     } catch (error) {
-      console.error('Error adding customer location:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -224,7 +224,7 @@ export const customerService = {
 
       return result;
     } catch (error) {
-      console.error('Error updating customer location:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -268,7 +268,7 @@ export const customerService = {
 
       return result;
     } catch (error) {
-      console.error('Error deleting customer location:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -289,7 +289,7 @@ export const customerService = {
 
       return { success: true, data: [] };
     } catch (error) {
-      console.error('Error getting customers:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -308,7 +308,7 @@ export const customerService = {
 
       return result;
     } catch (error) {
-      console.error('Error getting customer:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -334,7 +334,7 @@ export const customerService = {
         data: filteredCustomers
       };
     } catch (error) {
-      console.error('Error searching customers:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -345,7 +345,7 @@ export const customerService = {
       const result = await dbUtils.deleteData(`${DB_PATHS.CUSTOMERS}/${customerId}`);
       return result;
     } catch (error) {
-      console.error('Error deleting customer:', error);
+      
       return { success: false, error: error.message };
     }
   },

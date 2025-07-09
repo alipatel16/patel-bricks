@@ -42,18 +42,18 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
   useEffect(() => {
     if (open && customer) {
       setSelectedCustomer(customer);
-      console.log('Storing customer data:', customer);
+      
     }
   }, [open, customer]);
 
   // Get available sites for the customer
   const availableSites = useMemo(() => {
     if (!selectedCustomer || !salesHistory) {
-      console.log('No customer or sales history available');
+      
       return [];
     }
     
-    console.log('Filtering sales for customer:', selectedCustomer.name, selectedCustomer.phone);
+    
     
     const sites = new Set();
     const customerSales = salesHistory.filter(sale => {
@@ -93,7 +93,7 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
       return isCustomerMatch && isDateInRange && isSiteMatch;
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    console.log('Filtered sales:', filtered.length);
+    
     return filtered;
   }, [selectedCustomer, salesHistory, formData]);
 
@@ -138,7 +138,7 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
   };
 
   const handleSiteSelectionChange = (event, newValue) => {
-    console.log('Site selection changed:', newValue);
+    
     setFormData({
       ...formData,
       selectedSite: newValue,
@@ -147,8 +147,8 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
   };
 
   const handleGenerateStatement = () => {
-    console.log('Generating statement with data:', formData);
-    console.log('Filtered sales for statement:', filteredSales.length);
+    
+    
     setShowStatement(true);
   };
 

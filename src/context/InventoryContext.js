@@ -321,7 +321,7 @@ export function InventoryProvider({ children }) {
         throw new Error(result.error);
       }
     } catch (error) {
-      console.error('Error loading inventory data:', error);
+      
       dispatch({ type: ActionTypes.SET_STATUS_ERROR, payload: error.message });
       appActions.showNotification('Failed to load inventory data', 'error');
     }
@@ -373,7 +373,7 @@ export function InventoryProvider({ children }) {
         throw new Error(result.error);
       }
     } catch (error) {
-      console.error('Error loading inventory history:', error);
+      
       dispatch({ type: ActionTypes.SET_HISTORY_ERROR, payload: error.message });
       appActions.showNotification('Failed to load inventory history', 'error');
     }
@@ -403,7 +403,7 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
-        console.error('Error updating brick stock:', error);
+        
         dispatch({ type: ActionTypes.SET_BRICK_ERROR, payload: error.message });
         appActions.showNotification('Failed to update brick stock', 'error');
         return { success: false, error: error.message };
@@ -428,7 +428,7 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
-        console.error('Error setting brick stock:', error);
+        
         dispatch({ type: ActionTypes.SET_BRICK_ERROR, payload: error.message });
         appActions.showNotification('Failed to set brick stock', 'error');
         return { success: false, error: error.message };
@@ -463,7 +463,7 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
-        console.error('Error updating cement stock:', error);
+        
         dispatch({ type: ActionTypes.SET_CEMENT_ERROR, payload: error.message });
         appActions.showNotification('Failed to update cement stock', 'error');
         return { success: false, error: error.message };
@@ -501,7 +501,7 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
-        console.error('Error purchasing cement:', error);
+        
         dispatch({ type: ActionTypes.SET_CEMENT_ERROR, payload: error.message });
         appActions.showNotification('Failed to record cement purchase', 'error');
         return { success: false, error: error.message };

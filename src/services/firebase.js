@@ -50,13 +50,13 @@ if (isFirebaseConfigured()) {
     app = initializeApp(firebaseConfig);
     database = getDatabase(app);
     auth = getAuth(app);
-    console.log('Firebase initialized successfully');
+    
   } catch (error) {
-    console.warn('Firebase initialization failed, falling back to localStorage:', error);
+    
     useLocalStorage = true;
   }
 } else {
-  console.warn('Firebase not configured, using localStorage mode');
+  
   useLocalStorage = true;
 }
 
@@ -81,7 +81,7 @@ export const dbUtils = {
       await set(dbRef, data);
       return { success: true };
     } catch (error) {
-      console.error('Error writing data:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -111,7 +111,7 @@ export const dbUtils = {
         return { success: true, data: null };
       }
     } catch (error) {
-      console.error('Error reading data:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -127,7 +127,7 @@ export const dbUtils = {
       await update(dbRef, updates);
       return { success: true };
     } catch (error) {
-      console.error('Error updating data:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -143,7 +143,7 @@ export const dbUtils = {
       const newRef = await push(dbRef, data);
       return { success: true, key: newRef.key };
     } catch (error) {
-      console.error('Error pushing data:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -159,7 +159,7 @@ export const dbUtils = {
       await remove(dbRef);
       return { success: true };
     } catch (error) {
-      console.error('Error deleting data:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -175,7 +175,7 @@ export const dbUtils = {
       const data = snapshot.exists() ? snapshot.val() : null;
       callback(data);
     }, (error) => {
-      console.error('Error listening to data:', error);
+      
       callback(null, error);
     });
     
@@ -200,7 +200,7 @@ export const dbUtils = {
       await update(ref(database), updates);
       return { success: true };
     } catch (error) {
-      console.error('Error in batch update:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -216,7 +216,7 @@ export const dbUtils = {
 export const initializeDatabase = async () => {
   try {
     if (useLocalStorage) {
-      console.log('Initializing localStorage database...');
+      
       return await initializeLocalStorage();
     }
     
@@ -224,7 +224,7 @@ export const initializeDatabase = async () => {
     const { data: existingData } = await dbUtils.readData('/');
     
     if (!existingData) {
-      console.log('Initializing Firebase database with default structure...');
+      
       
       const defaultData = {
         bricks: {
@@ -265,14 +265,14 @@ export const initializeDatabase = async () => {
       };
 
       await dbUtils.writeData('/', defaultData);
-      console.log('Database initialized successfully');
+      
       return { success: true, message: 'Database initialized' };
     } else {
-      console.log('Database already exists');
+      
       return { success: true, message: 'Database already exists' };
     }
   } catch (error) {
-    console.error('Error initializing database:', error);
+    
     return { success: false, error: error.message };
   }
 };
@@ -287,7 +287,7 @@ export const checkConnection = async () => {
     const { success } = await dbUtils.readData('/settings');
     return success;
   } catch (error) {
-    console.error('Connection check failed:', error);
+    
     return false;
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -24,15 +24,9 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Divider,
 } from '@mui/material';
 import {
-  Assessment as AssessmentIcon,
   TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
-  BarChart as BarChartIcon,
-  PieChart as PieChartIcon,
-  Timeline as TimelineIcon,
   AttachMoney as MoneyIcon,
   Inventory as InventoryIcon,
   Factory as FactoryIcon,
@@ -40,10 +34,8 @@ import {
   People as PeopleIcon,
   Refresh as RefreshIcon,
   Download as DownloadIcon,
-  DateRange as DateRangeIcon,
 } from '@mui/icons-material';
 import {
-  LineChart,
   Line,
   AreaChart,
   Area,
@@ -190,7 +182,7 @@ const Reports = () => {
       });
 
     } catch (error) {
-      console.error('Error loading report data:', error);
+      
       setReportData(prev => ({
         ...prev,
         loading: false,
@@ -205,7 +197,7 @@ const Reports = () => {
     try {
       await loadReportData();
     } catch (error) {
-      console.error('Error refreshing reports:', error);
+      
     } finally {
       setRefreshing(false);
     }
@@ -244,7 +236,7 @@ const Reports = () => {
       
       return trends;
     } catch (error) {
-      console.error('Error generating daily trends:', error);
+      
       // Fallback to sample data
       const trends = [];
       const today = new Date();
@@ -299,7 +291,7 @@ const Reports = () => {
       
       return trends;
     } catch (error) {
-      console.error('Error generating monthly trends:', error);
+      
       // Fallback to sample data
       const trends = [];
       const today = new Date();
@@ -355,7 +347,7 @@ const Reports = () => {
       
       return data;
     } catch (error) {
-      console.error('Error generating production vs sales data:', error);
+      
       // Fallback to sample data
       const data = [];
       const categories = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
@@ -398,7 +390,7 @@ const Reports = () => {
   // Handle export
   const handleExport = () => {
     // Implement export functionality
-    console.log('Exporting report data...');
+    
   };
 
   // Custom tooltip for charts

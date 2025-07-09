@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -35,15 +35,11 @@ import {
 } from '@mui/material';
 import {
   Inventory as InventoryIcon,
-  Add as AddIcon,
-  Remove as RemoveIcon,
   LocalShipping as TruckIcon,
   Edit as EditIcon,
   History as HistoryIcon,
-  Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   AttachMoney as MoneyIcon,
-  TrendingUp as TrendingUpIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
@@ -53,13 +49,10 @@ import { useApp } from '../context/AppContext';
 import { useInventory, useBrickInventory, useCementInventory } from '../context/InventoryContext';
 
 // Import components
-import InventoryCard from '../components/inventory/InventoryCard';
-import StockAlert from '../components/inventory/StockAlert';
 
 // Import services for calculated stock
 import { productionService } from '../services/productionService';
 import { salesService } from '../services/salesService';
-import { inventoryService } from '../services/inventoryService';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -79,7 +72,6 @@ function Inventory() {
   const theme = useTheme();
   const { actions: appActions, settings } = useApp();
   const { 
-    status, 
     history, 
     actions: inventoryActions,
     isLoading,
@@ -105,7 +97,6 @@ function Inventory() {
     control,
     handleSubmit,
     reset,
-    watch,
     formState: { errors, isSubmitting }
   } = useForm({
     defaultValues: {
@@ -120,7 +111,7 @@ function Inventory() {
   // Function to calculate actual brick stock (enhanced version)
   const calculateActualBrickStock = async () => {
     try {
-      console.log("🧮 Inventory: Calculating comprehensive brick stock...");
+      
       
       // Fetch all required data including manual adjustments
       const [productionResult, salesResult] = await Promise.all([
@@ -138,7 +129,7 @@ function Inventory() {
 
       return totalProduction - totalSales;
     } catch (error) {
-      console.error('Error calculating brick stock:', error);
+      
       return 0;
     }
   };
@@ -169,7 +160,7 @@ function Inventory() {
     try {
       await inventoryActions.loadHistory('all', 100);
     } catch (error) {
-      console.error('Error loading inventory history:', error);
+      
     }
   };
 
@@ -184,7 +175,7 @@ function Inventory() {
       ]);
       appActions.showNotification('Inventory data refreshed', 'success');
     } catch (error) {
-      console.error('Error refreshing inventory:', error);
+      
       appActions.showNotification('Failed to refresh inventory data', 'error');
     } finally {
       setRefreshing(false);
@@ -263,7 +254,7 @@ function Inventory() {
         }
       }
     } catch (error) {
-      console.error('Error submitting form:', error);
+      
       appActions.showNotification('Operation failed', 'error');
     }
   };

@@ -1,13 +1,6 @@
-import { dbUtils } from './firebase';
 import { productionService } from './productionService';
 import { salesService } from './salesService';
 import { inventoryService } from './inventoryService';
-import { DB_PATHS } from '../utils/constants';
-import { 
-  calculateGrowthRate, 
-  calculateMonthlyTotals,
-  getDateRangeData 
-} from '../utils/calculations';
 
 /**
  * Reports Service - Handles all reporting and analytics operations
@@ -95,7 +88,7 @@ export const reportsService = {
         },
       };
     } catch (error) {
-      console.error('Error generating business report:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -153,7 +146,7 @@ export const reportsService = {
         },
       };
     } catch (error) {
-      console.error('Error generating financial report:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -202,7 +195,7 @@ export const reportsService = {
         },
       };
     } catch (error) {
-      console.error('Error generating inventory report:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -253,7 +246,7 @@ export const reportsService = {
         },
       };
     } catch (error) {
-      console.error('Error generating production report:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -304,7 +297,7 @@ export const reportsService = {
         },
       };
     } catch (error) {
-      console.error('Error generating sales report:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -435,7 +428,7 @@ export const reportsService = {
         filename: `${reportType}_report_₹{new Date().toISOString().split('T')[0]}.csv`,
       };
     } catch (error) {
-      console.error('Error exporting to CSV:', error);
+      
       return { success: false, error: error.message };
     }
   },

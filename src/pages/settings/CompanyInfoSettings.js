@@ -1,6 +1,6 @@
 // Create this as CompanyInfoSettings.js in your components/settings/ folder
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -16,7 +16,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Chip,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
@@ -55,7 +54,7 @@ const CompanyInfoSettings = () => {
         setCompanyInfo(DEFAULT_COMPANY_INFO);
       }
     } catch (error) {
-      console.error('Error loading company info:', error);
+      
       setCompanyInfo(DEFAULT_COMPANY_INFO);
       toast.error('Failed to load company information');
     } finally {
@@ -176,7 +175,7 @@ const CompanyInfoSettings = () => {
         throw new Error(result.error || 'Failed to save');
       }
     } catch (error) {
-      console.error('Error saving company info:', error);
+      
       toast.error('Failed to save company information');
     } finally {
       setSaving(false);

@@ -1,14 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
   CardContent,
   Typography,
   Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Button,
   Paper,
   Table,
@@ -19,7 +15,6 @@ import {
   TableRow,
   Alert,
   Chip,
-  Divider,
   List,
   ListItem,
   ListItemText,
@@ -46,7 +41,6 @@ import {
   Inventory as InventoryIcon,
   Warning as WarningIcon,
   TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
   Assessment as AssessmentIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
@@ -81,7 +75,7 @@ const InventoryReport = () => {
         toast.error('Failed to load inventory report');
       }
     } catch (error) {
-      console.error('Error loading inventory report:', error);
+      
       setError(error.message);
       toast.error('An error occurred while loading the report');
     } finally {

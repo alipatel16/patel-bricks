@@ -223,7 +223,7 @@ export function AppProvider({ children }) {
       
       dispatch({ type: ActionTypes.SET_LAST_SYNC_TIME, payload: Date.now() });
     } catch (error) {
-      console.error('Error loading app data:', error);
+      
       showNotification('Failed to load app settings', 'error');
     } finally {
       dispatch({ type: ActionTypes.SET_LOADING, payload: false });
@@ -239,7 +239,7 @@ export function AppProvider({ children }) {
         dispatch({ type: ActionTypes.SET_PREFERENCES, payload: preferences });
       }
     } catch (error) {
-      console.error('Error loading user preferences:', error);
+      
     }
   };
 
@@ -248,7 +248,7 @@ export function AppProvider({ children }) {
     try {
       localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(preferences));
     } catch (error) {
-      console.error('Error saving user preferences:', error);
+      
     }
   };
 
@@ -265,7 +265,7 @@ export function AppProvider({ children }) {
         
         showNotification('Setting updated successfully', 'success');
       } catch (error) {
-        console.error('Error updating setting:', error);
+        
         showNotification('Failed to update setting', 'error');
       }
     },
@@ -279,7 +279,7 @@ export function AppProvider({ children }) {
         
         showNotification('Settings saved successfully', 'success');
       } catch (error) {
-        console.error('Error updating settings:', error);
+        
         showNotification('Failed to save settings', 'error');
       }
     },

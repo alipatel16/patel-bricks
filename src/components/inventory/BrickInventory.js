@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -11,14 +11,8 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Alert,
   Chip,
-  IconButton,
-  Tooltip,
   LinearProgress,
 } from '@mui/material';
 import {
@@ -26,13 +20,11 @@ import {
   Add as AddIcon,
   Remove as RemoveIcon,
   Edit as EditIcon,
-  History as HistoryIcon,
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import { useInventory } from '../../hooks/useInventory';
 import LoadingSpinner from '../common/LoadingSpinner';
-import ConfirmDialog from '../common/ConfirmDialog';
 import toast from 'react-hot-toast';
 
 const BrickInventory = () => {
@@ -91,7 +83,7 @@ const BrickInventory = () => {
         toast.error(result.error || 'Failed to update inventory');
       }
     } catch (error) {
-      console.error('Error updating brick inventory:', error);
+      
       toast.error('An error occurred while updating inventory');
     } finally {
       setLoading(false);

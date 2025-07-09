@@ -44,7 +44,7 @@ export function useProduction() {
       }));
 
     } catch (error) {
-      console.error('Error loading production data:', error);
+      
       setProduction(prev => ({
         ...prev,
         loading: false,
@@ -65,7 +65,7 @@ export function useProduction() {
         }));
       }
     } catch (error) {
-      console.error('Error loading production trends:', error);
+      
     }
   }, []);
 
@@ -81,7 +81,7 @@ export function useProduction() {
       
       return result;
     } catch (error) {
-      console.error('Error adding production:', error);
+      
       return { success: false, error: error.message };
     }
   }, [loadProductionData]);
@@ -98,7 +98,7 @@ export function useProduction() {
       
       return result;
     } catch (error) {
-      console.error('Error updating production:', error);
+      
       return { success: false, error: error.message };
     }
   }, [loadProductionData]);
@@ -115,7 +115,7 @@ export function useProduction() {
       
       return result;
     } catch (error) {
-      console.error('Error deleting production:', error);
+      
       return { success: false, error: error.message };
     }
   }, [loadProductionData]);
@@ -125,7 +125,7 @@ export function useProduction() {
     try {
       return await productionService.getProductionByDate(date);
     } catch (error) {
-      console.error('Error getting production by date:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);
@@ -135,7 +135,7 @@ export function useProduction() {
     try {
       return await productionService.getCementUsage(period);
     } catch (error) {
-      console.error('Error getting cement usage:', error);
+      
       return { success: false, error: error.message };
     }
   }, []);

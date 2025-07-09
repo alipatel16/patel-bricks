@@ -1,5 +1,5 @@
 // Sales.js - Updated to use separated components with original design
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -29,7 +29,6 @@ import {
 import toast from "react-hot-toast";
 
 // Import contexts and services
-import { useApp } from "../context/AppContext";
 import { useInventory } from "../context/InventoryContext";
 import { useSales } from "../hooks/useSales";
 
@@ -128,7 +127,7 @@ function Sales() {
     try {
       await loadSalesData();
     } catch (error) {
-      console.error("Error refreshing sales data:", error);
+      
       toast.error("Failed to refresh sales data");
     } finally {
       setRefreshing(false);
@@ -249,14 +248,14 @@ function Sales() {
             await inventoryActions.loadInventoryData();
           }
         } catch (inventoryError) {
-          console.warn("Could not reload inventory data:", inventoryError);
+          
           // Continue anyway - sale was successful
         }
 
         handleCloseDialog();
       }
     } catch (error) {
-      console.error("Error recording sale:", error);
+      
       toast.error("Failed to record sale");
     }
   };

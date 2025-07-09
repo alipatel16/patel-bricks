@@ -109,7 +109,7 @@ function ConfirmDialog({
       setProcessing(true);
       await onConfirm();
     } catch (error) {
-      console.error('Confirm action failed:', error);
+      
     } finally {
       setProcessing(false);
     }

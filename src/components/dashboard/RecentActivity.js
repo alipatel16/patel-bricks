@@ -240,7 +240,7 @@ function RecentActivity({ activities = [], onRefresh = null, maxItems = 5 }) {
               variant="text"
               onClick={() => {
                 // Navigate to activity log or expand view
-                console.log('Show more activities');
+                
               }}
             >
               View all activities ({activities.length})

@@ -1,5 +1,5 @@
 // components/Sales/SalesHistory.js - Fixed version with correct GST handling
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -29,8 +29,6 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  FilterList as FilterIcon,
-  Visibility as ViewIcon,
   Print as PrintIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatQuantity } from '../../utils/calculations';

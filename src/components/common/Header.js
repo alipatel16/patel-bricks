@@ -34,7 +34,7 @@ import { APP_NAME } from '../../utils/constants';
 
 function Header({ isConnected = true }) {
   const navigate = useNavigate();
-  const { currentPage, lastSyncTime } = useApp();
+  const { currentPage } = useApp();
   const { notifications, removeNotification } = useNotifications();
   const { actions: inventoryActions } = useInventory();
   const { signOut, getUserDisplayName } = useAuth(); // ADD THIS LINE
@@ -71,7 +71,7 @@ function Header({ isConnected = true }) {
       await signOut();
       handleProfileClose();
     } catch (error) {
-      console.error('Logout failed:', error);
+      
     }
   };
 
@@ -80,7 +80,7 @@ function Header({ isConnected = true }) {
     try {
       await inventoryActions.refreshInventory();
     } catch (error) {
-      console.error('Refresh failed:', error);
+      
     }
   };
 

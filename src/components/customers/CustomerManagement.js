@@ -107,7 +107,7 @@ const CustomerManagement = () => {
         toast.error('Failed to load customers');
       }
     } catch (error) {
-      console.error('Error loading customers:', error);
+      
       toast.error('Failed to load customers');
     } finally {
       setLoading(false);
@@ -121,7 +121,7 @@ const CustomerManagement = () => {
       await loadCustomers();
       toast.success('Customer data refreshed');
     } catch (error) {
-      console.error('Error refreshing customers:', error);
+      
       toast.error('Failed to refresh customer data');
     } finally {
       setRefreshing(false);
@@ -230,7 +230,7 @@ const CustomerManagement = () => {
         toast.error(result.error);
       }
     } catch (error) {
-      console.error('Error saving customer:', error);
+      
       toast.error('Failed to save customer');
     } finally {
       setLoading(false);
@@ -314,7 +314,7 @@ const CustomerManagement = () => {
         toast.error(result.error);
       }
     } catch (error) {
-      console.error('Error saving location:', error);
+      
       toast.error('Failed to save location');
     } finally {
       setLoading(false);
@@ -333,7 +333,7 @@ const CustomerManagement = () => {
           toast.error(result.error);
         }
       } catch (error) {
-        console.error('Error deleting location:', error);
+        
         toast.error('Failed to delete location');
       } finally {
         setLoading(false);
@@ -353,7 +353,7 @@ const CustomerManagement = () => {
           toast.error(result.error);
         }
       } catch (error) {
-        console.error('Error deleting customer:', error);
+        
         toast.error('Failed to delete customer');
       } finally {
         setLoading(false);

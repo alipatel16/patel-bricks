@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -17,7 +17,6 @@ import {
   Save as SaveIcon,
   Refresh as RefreshIcon,
   Edit as EditIcon,
-  Check as CheckIcon,
   Cancel as CancelIcon,
 } from '@mui/icons-material';
 import { DEFAULT_BANK_DETAILS, VALIDATION_RULES } from '../../utils/constants';
@@ -50,7 +49,7 @@ const BankDetailsSettings = () => {
         setOriginalBankDetails(DEFAULT_BANK_DETAILS);
       }
     } catch (error) {
-      console.error('Error loading bank details:', error);
+      
       toast.error('Error loading bank details');
       setBankDetails(DEFAULT_BANK_DETAILS);
       setOriginalBankDetails(DEFAULT_BANK_DETAILS);
@@ -113,7 +112,7 @@ const BankDetailsSettings = () => {
         toast.error('Failed to save bank details');
       }
     } catch (error) {
-      console.error('Error saving bank details:', error);
+      
       toast.error('Error saving bank details');
     } finally {
       setSaving(false);

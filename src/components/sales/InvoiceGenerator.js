@@ -45,7 +45,7 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
   useEffect(() => {
     if (open && customer) {
       setSelectedCustomer(customer);
-      console.log('Storing customer data for invoice:', customer);
+      
     }
   }, [open, customer]);
 
@@ -94,7 +94,7 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
       return isCustomerMatch && isDateInRange && isSiteMatch;
     });
 
-    console.log('🔍 InvoiceGenerator Debug - Filtered Sales:', filtered);
+    
 
     const totalBricks = filtered.reduce((total, sale) => total + parseInt(sale.quantity || 0), 0);
     
@@ -111,12 +111,6 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
       const mostRecentSale = filtered.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
       customerState = mostRecentSale.customer_state || 'GJ';
       customerStateCode = mostRecentSale.customer_state_code || '24';
-      
-      console.log('🔍 Most Recent Sale State Info:', {
-        customerState,
-        customerStateCode,
-        saleData: mostRecentSale
-      });
     }
     
     filtered.forEach(sale => {
@@ -135,7 +129,7 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
       customerStateCode 
     };
     
-    console.log('🔍 InvoiceGenerator customerSalesData result:', result);
+    
     
     return result;
   }, [selectedCustomer, salesHistory, formData]);
@@ -231,7 +225,7 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
     };
     
     setGeneratedInvoiceData(invoiceData);
-    console.log('Generating invoice with data:', invoiceData);
+    
     setShowInvoice(true);
   };
 

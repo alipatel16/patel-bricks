@@ -1,4 +1,4 @@
-import { DEFAULT_CEMENT_PER_BRICK_RATIO, BRICKS_PER_CEMENT_BAG, GST_RATES, VALIDATION_RULES } from './constants';
+import { DEFAULT_CEMENT_PER_BRICK_RATIO, GST_RATES, VALIDATION_RULES } from './constants';
 
 /**
  * Production Calculations

@@ -1,9 +1,8 @@
 // Replace your existing Settings.js file with this updated version:
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
-  Container,
   Typography,
   Tabs,
   Tab,
@@ -14,21 +13,16 @@ import {
   TextField,
   Switch,
   FormControlLabel,
-  Divider,
   Alert,
-  Chip,
-  Paper,
 } from '@mui/material';
 import {
-  Settings as SettingsIcon,
   Business as BusinessIcon,
   AccountBalance as BankIcon,
   Receipt as InvoiceIcon,
   Notifications as NotificationsIcon,
-  Storage as DataIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import { APP_NAME, DEFAULT_COMPANY_INFO, LOW_STOCK_ALERTS } from '../utils/constants';
+import { APP_NAME, LOW_STOCK_ALERTS } from '../utils/constants';
 import { useApp } from '../context/AppContext';
 
 // Import the new editable components
@@ -87,7 +81,7 @@ function Settings() {
         salesNotifications: true,
       });
     } catch (error) {
-      console.error('Error loading notification settings:', error);
+      
     }
   };
 
@@ -97,7 +91,7 @@ function Settings() {
       // For now, use defaults
       setStockAlertThresholds(LOW_STOCK_ALERTS);
     } catch (error) {
-      console.error('Error loading stock alert settings:', error);
+      
     }
   };
 
@@ -111,7 +105,7 @@ function Settings() {
       // await dbUtils.writeData('settings/notifications', notificationSettings);
       toast.success('Notification settings saved successfully');
     } catch (error) {
-      console.error('Error saving notification settings:', error);
+      
       toast.error('Failed to save notification settings');
     }
   };
@@ -122,27 +116,13 @@ function Settings() {
       // await dbUtils.writeData('settings/stock_alerts', stockAlertThresholds);
       toast.success('Stock alert settings saved successfully');
     } catch (error) {
-      console.error('Error saving stock alert settings:', error);
+      
       toast.error('Failed to save stock alert settings');
     }
   };
 
-  const handleResetData = () => {
-    if (window.confirm('Are you sure you want to reset all data? This action cannot be undone.')) {
-      // Implement data reset logic
-      toast.success('Data reset initiated');
-    }
-  };
 
-  const handleExportData = () => {
-    // Implement data export logic
-    toast.success('Data export started');
-  };
 
-  const handleImportData = () => {
-    // Implement data import logic
-    toast.info('Data import feature coming soon');
-  };
 
   return (
       <Box>

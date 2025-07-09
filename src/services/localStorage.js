@@ -14,7 +14,7 @@ export const localStorageUtils = {
       localStorage.setItem(key, JSON.stringify(data));
       return { success: true };
     } catch (error) {
-      console.error('LocalStorage write error:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -29,7 +29,7 @@ export const localStorageUtils = {
         data: data ? JSON.parse(data) : null 
       };
     } catch (error) {
-      console.error('LocalStorage read error:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -41,7 +41,7 @@ export const localStorageUtils = {
       const newData = { ...currentData, ...updates };
       return await localStorageUtils.writeData(path, newData);
     } catch (error) {
-      console.error('LocalStorage update error:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -54,7 +54,7 @@ export const localStorageUtils = {
       const result = await localStorageUtils.writeData(fullPath, data);
       return { ...result, key };
     } catch (error) {
-      console.error('LocalStorage push error:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -66,7 +66,7 @@ export const localStorageUtils = {
       localStorage.removeItem(key);
       return { success: true };
     } catch (error) {
-      console.error('LocalStorage delete error:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -79,7 +79,7 @@ export const localStorageUtils = {
       }
       return { success: true };
     } catch (error) {
-      console.error('LocalStorage batch update error:', error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -107,7 +107,7 @@ export const initializeLocalStorage = async () => {
     const { data: existingData } = await localStorageUtils.readData('settings');
     
     if (!existingData) {
-      console.log('Initializing localStorage with default data...');
+      
       
       // Initialize default data structure
       const defaultData = {
@@ -141,14 +141,14 @@ export const initializeLocalStorage = async () => {
         await localStorageUtils.writeData(key, value);
       }
       
-      console.log('LocalStorage initialized successfully');
+      
       return { success: true, message: 'LocalStorage initialized' };
     } else {
-      console.log('LocalStorage data already exists');
+      
       return { success: true, message: 'LocalStorage already exists' };
     }
   } catch (error) {
-    console.error('Error initializing localStorage:', error);
+    
     return { success: false, error: error.message };
   }
 };

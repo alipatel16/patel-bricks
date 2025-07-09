@@ -17,7 +17,7 @@ export function useFirebase() {
       setIsConnected(true);
       return true;
     } catch (error) {
-      console.error('Firebase connection check failed:', error);
+      
       setIsConnected(false);
       return false;
     }
@@ -57,7 +57,7 @@ export function useFirebase() {
       setLastSyncTime(Date.now());
       return result;
     } catch (error) {
-      console.error('Firebase read error:', error);
+      
       setIsConnected(false);
       return { success: false, error: error.message };
     }
@@ -70,7 +70,7 @@ export function useFirebase() {
       setLastSyncTime(Date.now());
       return result;
     } catch (error) {
-      console.error('Firebase write error:', error);
+      
       setIsConnected(false);
       return { success: false, error: error.message };
     }
@@ -83,7 +83,7 @@ export function useFirebase() {
       setLastSyncTime(Date.now());
       return result;
     } catch (error) {
-      console.error('Firebase update error:', error);
+      
       setIsConnected(false);
       return { success: false, error: error.message };
     }
@@ -96,7 +96,7 @@ export function useFirebase() {
       setLastSyncTime(Date.now());
       return result;
     } catch (error) {
-      console.error('Firebase push error:', error);
+      
       setIsConnected(false);
       return { success: false, error: error.message };
     }
@@ -109,7 +109,7 @@ export function useFirebase() {
       setLastSyncTime(Date.now());
       return result;
     } catch (error) {
-      console.error('Firebase delete error:', error);
+      
       setIsConnected(false);
       return { success: false, error: error.message };
     }
@@ -122,7 +122,7 @@ export function useFirebase() {
       setLastSyncTime(Date.now());
       return result;
     } catch (error) {
-      console.error('Firebase batch update error:', error);
+      
       setIsConnected(false);
       return { success: false, error: error.message };
     }
@@ -133,7 +133,7 @@ export function useFirebase() {
     try {
       const unsubscribe = dbUtils.listenToData(path, (data, error) => {
         if (error) {
-          console.error('Firebase listener error:', error);
+          
           setIsConnected(false);
           if (onError) onError(error);
         } else {
@@ -148,7 +148,7 @@ export function useFirebase() {
 
       return unsubscribe;
     } catch (error) {
-      console.error('Firebase listen setup error:', error);
+      
       setIsConnected(false);
       if (onError) onError(error);
       return null;

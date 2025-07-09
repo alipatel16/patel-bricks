@@ -76,7 +76,7 @@ function ProductionList({ onEdit = null, onAdd = null, showActions = true }) {
         appActions.showNotification('Failed to load production data', 'error');
       }
     } catch (error) {
-      console.error('Error loading production data:', error);
+      
       appActions.showNotification('Error loading production data', 'error');
     } finally {
       setLoading(false);
@@ -90,7 +90,7 @@ function ProductionList({ onEdit = null, onAdd = null, showActions = true }) {
         setStatsData(result.data);
       }
     } catch (error) {
-      console.error('Error loading production stats:', error);
+      
     }
   };
 
@@ -128,7 +128,7 @@ function ProductionList({ onEdit = null, onAdd = null, showActions = true }) {
           appActions.showNotification('Failed to delete production record', 'error');
         }
       } catch (error) {
-        console.error('Error deleting production:', error);
+        
         appActions.showNotification('Error deleting production record', 'error');
       }
     }
