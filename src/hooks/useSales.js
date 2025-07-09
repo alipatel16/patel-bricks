@@ -1,11 +1,13 @@
+// hooks/useSales.js - Updated with customer integration
 import { useState, useEffect, useCallback } from 'react';
 import { salesService } from '../services/salesService';
+import { customerService } from '../services/customerService';
 import { useFirebase } from './useFirebase';
 import { DB_PATHS } from '../utils/constants';
 import toast from 'react-hot-toast';
 
 export const useSales = () => {
-  // State - matching existing structure
+  // Enhanced state structure
   const [sales, setSales] = useState({
     history: [],
     todaySales: null,
@@ -19,15 +21,15 @@ export const useSales = () => {
 
   const { isConnected, listenToData } = useFirebase();
 
-  // Load sales data - enhanced with backward compatibility
-  const loadSalesData = useCallback(async (limit = 50) => {
+  // Load sales data with enhanced features
+  const loadSalesData = useCallback(async (limit = 50, filters = {}) => {
     try {
       setSales(prev => ({ ...prev, loading: true, error: null }));
 
       const today = new Date().toISOString().split('T')[0];
 
       const [historyResult, todayResult, monthlyResult, statsResult, customersResult] = await Promise.all([
-        salesService.getSalesHistory(limit),
+        salesService.getSalesHistory(limit, filters),
         salesService.getDailySales(today),
         salesService.getMonthlySalesSummary ? salesService.getMonthlySalesSummary(today.substring(0, 7)) : salesService.getSalesStats('month'),
         salesService.getSalesStats('month'),
@@ -37,7 +39,7 @@ export const useSales = () => {
       setSales(prev => ({
         ...prev,
         history: historyResult.success ? historyResult.data : [],
-        todaySales: todayResult.success ? todayResult.data : null,
+        todaySales: todayResult.success ? todayResult.data : { total_revenue: 0, total_quantity: 0, total_sales: 0 },
         monthlyStats: monthlyResult.success ? monthlyResult.data : {},
         stats: statsResult.success ? statsResult.data : null,
         customers: customersResult.success ? customersResult.data : [],
@@ -58,7 +60,9 @@ export const useSales = () => {
   // Load sales trends
   const loadSalesTrends = useCallback(async (days = 30) => {
     try {
-      const result = await salesService.getSalesTrends(days);
+      const result = await salesService.getSalesTrends ? 
+        await salesService.getSalesTrends(days) : 
+        { success: false, error: 'Trends not available' };
       
       if (result.success) {
         setSales(prev => ({
@@ -71,7 +75,7 @@ export const useSales = () => {
     }
   }, []);
 
-  // Record new sale - enhanced
+  // Record new sale with enhanced features
   const recordSale = useCallback(async (saleData) => {
     try {
       const result = await salesService.recordSale(saleData);
@@ -79,152 +83,158 @@ export const useSales = () => {
       if (result.success) {
         // Reload data to get updated statistics
         await loadSalesData();
-        toast.success('Sale recorded successfully!');
+        toast.success(result.message || 'Sale recorded successfully!');
+        return result;
       } else {
         toast.error(result.error || 'Failed to record sale');
+        return result;
       }
-      
-      return result;
     } catch (error) {
       console.error('Error recording sale:', error);
-      toast.error('Error recording sale');
+      toast.error('Failed to record sale');
       return { success: false, error: error.message };
     }
   }, [loadSalesData]);
 
-  // Load customers
+  // Customer management functions
   const loadCustomers = useCallback(async () => {
     try {
-      const result = await salesService.getAllCustomers();
+      const result = await customerService.getAllCustomers();
       
       if (result.success) {
         setSales(prev => ({
           ...prev,
           customers: result.data || [],
         }));
-        return result;
-      } else {
-        console.error('Failed to load customers:', result.error);
-        return { success: false, error: result.error };
       }
+      
+      return result;
     } catch (error) {
       console.error('Error loading customers:', error);
       return { success: false, error: error.message };
     }
   }, []);
 
-  // Update sale
-  const updateSale = useCallback(async (transactionId, updatedData) => {
+  const searchCustomers = useCallback(async (searchTerm) => {
     try {
-      const result = await salesService.updateSale(transactionId, updatedData);
-      
-      if (result.success) {
-        // Reload data to get updated statistics
-        await loadSalesData();
-        toast.success('Sale updated successfully');
-      } else {
-        toast.error(result.error || 'Failed to update sale');
-      }
-      
+      const result = await customerService.searchCustomers(searchTerm);
       return result;
     } catch (error) {
-      console.error('Error updating sale:', error);
-      toast.error('Error updating sale');
-      return { success: false, error: error.message };
-    }
-  }, [loadSalesData]);
-
-  // Cancel sale
-  const cancelSale = useCallback(async (transactionId, reason = '') => {
-    try {
-      const result = await salesService.cancelSale(transactionId, reason);
-      
-      if (result.success) {
-        // Reload data to get updated statistics
-        await loadSalesData();
-        toast.success('Sale cancelled successfully');
-      } else {
-        toast.error(result.error || 'Failed to cancel sale');
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('Error cancelling sale:', error);
-      toast.error('Error cancelling sale');
-      return { success: false, error: error.message };
-    }
-  }, [loadSalesData]);
-
-  // Get sale by ID
-  const getSaleById = useCallback(async (transactionId) => {
-    try {
-      return await salesService.getSaleById(transactionId);
-    } catch (error) {
-      console.error('Error getting sale by ID:', error);
+      console.error('Error searching customers:', error);
       return { success: false, error: error.message };
     }
   }, []);
 
-  // Get daily sales
-  const getDailySales = useCallback(async (date = null) => {
+  const saveCustomer = useCallback(async (customerData, isEditing = false, customerId = null) => {
     try {
-      return await salesService.getDailySales(date);
-    } catch (error) {
-      console.error('Error getting daily sales:', error);
-      return { success: false, error: error.message };
-    }
-  }, []);
-
-  // Customer management
-  const updateCustomer = useCallback(async (customerData) => {
-    try {
-      const result = await salesService.updateCustomerInfo(customerData);
+      let result;
+      
+      if (isEditing && customerId) {
+        result = await customerService.updateCustomer(customerId, customerData);
+      } else {
+        result = await customerService.createCustomer(customerData);
+      }
       
       if (result.success) {
-        // Reload customers
+        // Reload customers after save
         await loadCustomers();
-        toast.success('Customer updated successfully');
+        toast.success(result.message || `Customer ${isEditing ? 'updated' : 'created'} successfully!`);
       } else {
-        toast.error(result.error || 'Failed to update customer');
+        toast.error(result.error || `Failed to ${isEditing ? 'update' : 'create'} customer`);
       }
       
       return result;
     } catch (error) {
-      console.error('Error updating customer:', error);
-      toast.error('Error updating customer');
+      console.error('Error saving customer:', error);
+      toast.error(`Failed to ${isEditing ? 'update' : 'create'} customer`);
       return { success: false, error: error.message };
     }
   }, [loadCustomers]);
 
-  // Enhanced methods for new functionality
+  const deleteCustomer = useCallback(async (customerId) => {
+    try {
+      const result = await customerService.deleteCustomer(customerId);
+      
+      if (result.success) {
+        await loadCustomers();
+        toast.success('Customer deleted successfully!');
+      } else {
+        toast.error(result.error || 'Failed to delete customer');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      toast.error('Failed to delete customer');
+      return { success: false, error: error.message };
+    }
+  }, [loadCustomers]);
+
+  // Customer location management
+  const addCustomerLocation = useCallback(async (customerId, locationData) => {
+    try {
+      const result = await customerService.addCustomerLocation(customerId, locationData);
+      
+      if (result.success) {
+        await loadCustomers();
+        toast.success('Location added successfully!');
+      } else {
+        toast.error(result.error || 'Failed to add location');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error adding customer location:', error);
+      toast.error('Failed to add location');
+      return { success: false, error: error.message };
+    }
+  }, [loadCustomers]);
+
+  const updateCustomerLocation = useCallback(async (customerId, locationId, locationData) => {
+    try {
+      const result = await customerService.updateCustomerLocation(customerId, locationId, locationData);
+      
+      if (result.success) {
+        await loadCustomers();
+        toast.success('Location updated successfully!');
+      } else {
+        toast.error(result.error || 'Failed to update location');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error updating customer location:', error);
+      toast.error('Failed to update location');
+      return { success: false, error: error.message };
+    }
+  }, [loadCustomers]);
+
+  const deleteCustomerLocation = useCallback(async (customerId, locationId) => {
+    try {
+      const result = await customerService.deleteCustomerLocation(customerId, locationId);
+      
+      if (result.success) {
+        await loadCustomers();
+        toast.success('Location deleted successfully!');
+      } else {
+        toast.error(result.error || 'Failed to delete location');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error deleting customer location:', error);
+      toast.error('Failed to delete location');
+      return { success: false, error: error.message };
+    }
+  }, [loadCustomers]);
+
+  // Sale operations
   const getSaleByInvoice = useCallback(async (invoiceNumber) => {
     try {
       const result = await salesService.getSaleByInvoice(invoiceNumber);
       return result;
     } catch (error) {
       console.error('Error getting sale by invoice:', error);
-      return { success: false, error: error.message };
-    }
-  }, []);
-
-  const getSalesByDateRange = useCallback(async (startDate, endDate) => {
-    try {
-      const result = await salesService.getSalesByDateRange(startDate, endDate);
-      return result;
-    } catch (error) {
-      console.error('Error getting sales by date range:', error);
-      return { success: false, error: error.message };
-    }
-  }, []);
-
-  const getMonthlySummary = useCallback(async (month) => {
-    try {
-      const result = await salesService.getMonthlySalesSummary 
-        ? await salesService.getMonthlySalesSummary(month)
-        : await salesService.getSalesStats('month');
-      return result;
-    } catch (error) {
-      console.error('Error getting monthly summary:', error);
       return { success: false, error: error.message };
     }
   }, []);
@@ -239,284 +249,134 @@ export const useSales = () => {
     }
   }, []);
 
-  const getCustomerByPhone = useCallback(async (phone) => {
+  // Filter sales with enhanced criteria
+  const filterSales = useCallback(async (filters) => {
     try {
-      const result = await salesService.getCustomerByPhone(phone);
+      const result = await salesService.getSalesHistory(100, filters);
+      
+      if (result.success) {
+        setSales(prev => ({
+          ...prev,
+          history: result.data || [],
+        }));
+      }
+      
       return result;
     } catch (error) {
-      console.error('Error getting customer by phone:', error);
+      console.error('Error filtering sales:', error);
       return { success: false, error: error.message };
     }
   }, []);
 
-  const deleteCustomer = useCallback(async (customerId) => {
+  // Get customer analytics
+  const getCustomerAnalytics = useCallback(async (customerId) => {
     try {
-      const result = await salesService.deleteCustomer(customerId);
+      // Get all sales for this customer
+      const allSalesResult = await salesService.getSalesHistory(1000);
       
-      if (result.success) {
-        await loadCustomers();
-        toast.success('Customer deleted successfully');
-      } else {
-        toast.error(result.error || 'Failed to delete customer');
+      if (!allSalesResult.success) {
+        return { success: false, error: 'Failed to load sales data' };
       }
       
-      return result;
+      const customerSales = allSalesResult.data.filter(sale => 
+        sale.customer_phone === customerId || sale.customer_name.includes(customerId)
+      );
+      
+      const analytics = {
+        total_orders: customerSales.length,
+        total_quantity: customerSales.reduce((sum, sale) => sum + (sale.quantity || 0), 0),
+        total_amount: customerSales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0),
+        average_order_value: customerSales.length > 0 
+          ? customerSales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) / customerSales.length 
+          : 0,
+        last_order_date: customerSales.length > 0 
+          ? customerSales.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date 
+          : null,
+        locations_used: [...new Set(customerSales.map(sale => sale.location_name).filter(Boolean))],
+        payment_methods: [...new Set(customerSales.map(sale => sale.payment_method))],
+        recent_sales: customerSales.slice(0, 10)
+      };
+      
+      return { success: true, data: analytics };
     } catch (error) {
-      console.error('Error deleting customer:', error);
-      toast.error('Error deleting customer');
+      console.error('Error getting customer analytics:', error);
       return { success: false, error: error.message };
     }
-  }, [loadCustomers]);
-
-  const deleteSale = useCallback(async (invoiceNumber) => {
-    try {
-      const result = await salesService.deleteSale(invoiceNumber);
-      
-      if (result.success) {
-        await loadSalesData();
-        toast.success('Sale deleted successfully');
-      } else {
-        toast.error(result.error || 'Failed to delete sale');
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('Error deleting sale:', error);
-      toast.error('Error deleting sale');
-      return { success: false, error: error.message };
-    }
-  }, [loadSalesData]);
-
-  // Calculate sales summary from sales data
-  const calculateSalesSummary = useCallback((salesData) => {
-    const summary = salesData.reduce(
-      (acc, sale) => ({
-        totalSales: acc.totalSales + (sale.total_amount || 0),
-        totalRevenue: acc.totalRevenue + (sale.taxable_amount || 0),
-        totalQuantity: acc.totalQuantity + (sale.quantity || 0),
-        totalTax: acc.totalTax + (sale.total_tax || 0),
-        salesCount: acc.salesCount + 1,
-      }),
-      {
-        totalSales: 0,
-        totalRevenue: 0,
-        totalQuantity: 0,
-        totalTax: 0,
-        salesCount: 0,
-      }
-    );
-    
-    return summary;
   }, []);
 
-  // Get sales statistics
-  const getSalesStatistics = useCallback(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisYear = new Date(now.getFullYear(), 0, 1);
-
-    const history = sales.history || [];
-    const todaySales = history.filter(sale => new Date(sale.date) >= today);
-    const monthSales = history.filter(sale => new Date(sale.date) >= thisMonth);
-    const yearSales = history.filter(sale => new Date(sale.date) >= thisYear);
-
-    return {
-      today: {
-        count: todaySales.length,
-        revenue: todaySales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0),
-        quantity: todaySales.reduce((sum, sale) => sum + (sale.quantity || 0), 0),
-      },
-      thisMonth: {
-        count: monthSales.length,
-        revenue: monthSales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0),
-        quantity: monthSales.reduce((sum, sale) => sum + (sale.quantity || 0), 0),
-      },
-      thisYear: {
-        count: yearSales.length,
-        revenue: yearSales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0),
-        quantity: yearSales.reduce((sum, sale) => sum + (sale.quantity || 0), 0),
-      },
-      all: calculateSalesSummary(history),
-    };
-  }, [sales.history, calculateSalesSummary]);
-
-  // Export sales data to CSV
-  const exportSalesCSV = useCallback((salesData = sales.history, filename = 'sales-export') => {
-    try {
-      const headers = [
-        'Invoice Number',
-        'Date',
-        'Customer Name',
-        'Phone',
-        'Email',
-        'Address',
-        'State',
-        'GSTIN',
-        'Quantity',
-        'Price per Brick',
-        'Subtotal',
-        'Discount',
-        'Taxable Amount',
-        'CGST',
-        'SGST',
-        'IGST',
-        'Total Tax',
-        'Total Amount',
-        'Payment Method',
-        'Notes',
-      ];
-
-      const csvData = salesData.map(sale => [
-        sale.invoice_number || '',
-        sale.date || '',
-        sale.customer_name || '',
-        sale.customer_phone || '',
-        sale.customer_email || '',
-        sale.customer_address || '',
-        sale.customer_state || '',
-        sale.customer_gstin || '',
-        sale.quantity || 0,
-        sale.price_per_brick || 0,
-        sale.subtotal || 0,
-        sale.discount_amount || 0,
-        sale.taxable_amount || 0,
-        sale.cgst_amount || 0,
-        sale.sgst_amount || 0,
-        sale.igst_amount || 0,
-        sale.total_tax || 0,
-        sale.total_amount || 0,
-        sale.payment_method || '',
-        sale.notes || '',
-      ]);
-
-      const csvContent = [headers, ...csvData]
-        .map(row => row.map(field => `"${field}"`).join(','))
-        .join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${filename}-${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success('Sales data exported successfully');
-      return { success: true };
-    } catch (error) {
-      console.error('Error exporting CSV:', error);
-      toast.error('Error exporting sales data');
-      return { success: false, error: error.message };
-    }
-  }, [sales.history]);
-
-  // Set up real-time listeners (if useFirebase is available)
+  // Real-time data listening
   useEffect(() => {
-    if (!listenToData) return;
-
-    // Listen to sales transactions
-    const unsubscribeTransactions = listenToData(
-      `${DB_PATHS.SALES}/transactions`,
-      (data) => {
+    if (isConnected) {
+      // Listen to sales changes
+      const unsubscribeSales = listenToData(`${DB_PATHS.SALES}/transactions`, (data) => {
         if (data) {
-          const history = Object.entries(data)
-            .map(([id, saleData]) => ({
-              id,
-              ...saleData,
-            }))
-            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-            .slice(0, 50);
-
-          setSales(prev => ({
-            ...prev,
-            history,
-          }));
-        }
-      }
-    );
-
-    // Listen to daily sales
-    const unsubscribeDaily = listenToData(
-      `${DB_PATHS.SALES}/daily`,
-      (data) => {
-        if (data) {
-          const today = new Date().toISOString().split('T')[0];
-          const todayData = data[today] || {
-            total_quantity: 0,
-            total_revenue: 0,
-            transactions_count: 0,
-            average_price: 0,
-          };
+          const salesArray = Object.entries(data).map(([id, sale]) => ({
+            ...sale,
+            id
+          })).sort((a, b) => new Date(b.date) - new Date(a.date));
           
           setSales(prev => ({
             ...prev,
-            todaySales: todayData,
+            history: salesArray.slice(0, 50) // Keep last 50 for performance
           }));
         }
-      }
-    );
+      });
 
-    // Listen to monthly sales
-    const unsubscribeMonthly = listenToData(
-      `${DB_PATHS.SALES}/monthly`,
-      (data) => {
-        setSales(prev => ({
-          ...prev,
-          monthlyStats: data || {},
-        }));
-      }
-    );
+      // Listen to customer changes
+      const unsubscribeCustomers = listenToData(DB_PATHS.CUSTOMERS, (data) => {
+        if (data) {
+          const customersArray = Object.entries(data).map(([id, customer]) => ({
+            ...customer,
+            id
+          }));
+          
+          setSales(prev => ({
+            ...prev,
+            customers: customersArray
+          }));
+        }
+      });
 
-    return () => {
-      if (unsubscribeTransactions) unsubscribeTransactions();
-      if (unsubscribeDaily) unsubscribeDaily();
-      if (unsubscribeMonthly) unsubscribeMonthly();
-    };
-  }, [listenToData]);
+      return () => {
+        unsubscribeSales();
+        unsubscribeCustomers();
+      };
+    }
+  }, [isConnected, listenToData]);
 
   // Initialize data on mount
   useEffect(() => {
     loadSalesData();
-    loadSalesTrends();
-  }, [loadSalesData, loadSalesTrends]);
+  }, [loadSalesData]);
 
   return {
-    // State - backward compatible
+    // State
     sales,
-    isConnected,
     
-    // Data loading - backward compatible
+    // Sales operations
     loadSalesData,
     loadSalesTrends,
-    
-    // CRUD operations - backward compatible + enhanced
     recordSale,
-    updateSale,
-    cancelSale,
-    getSaleById,
-    getDailySales,
-    loadCustomers,
-    
-    // Enhanced methods
     getSaleByInvoice,
-    getSalesByDateRange,
-    getMonthlySummary,
     generateInvoicePDF,
-    getCustomerByPhone,
+    filterSales,
+    
+    // Customer operations
+    loadCustomers,
+    searchCustomers,
+    saveCustomer,
     deleteCustomer,
-    deleteSale,
     
-    // Customer management - backward compatible
-    updateCustomer,
+    // Customer location operations
+    addCustomerLocation,
+    updateCustomerLocation,
+    deleteCustomerLocation,
     
-    // Computed values - backward compatible
+    // Analytics
+    getCustomerAnalytics,
+    
+    // Utilities
     isLoading: sales.loading,
-    hasError: sales.error !== null,
-    getSalesStatistics,
-    calculateSalesSummary,
-    exportSalesCSV,
+    error: sales.error,
   };
 };

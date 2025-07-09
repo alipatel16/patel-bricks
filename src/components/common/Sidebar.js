@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Drawer,
   List,
@@ -20,6 +20,7 @@ import {
   Factory as FactoryIcon,
   Inventory as InventoryIcon,
   ShoppingCart as ShoppingCartIcon,
+  People as PeopleIcon,
   Assessment as AssessmentIcon,
   Settings as SettingsIcon,
   TrendingUp as TrendingUpIcon,
@@ -46,6 +47,7 @@ const iconMap = {
   Factory: FactoryIcon,
   Inventory: InventoryIcon,
   ShoppingCart: ShoppingCartIcon,
+  People: PeopleIcon,
   Assessment: AssessmentIcon,
   Settings: SettingsIcon,
 };
@@ -56,63 +58,12 @@ function Sidebar({ open, onToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { actions: appActions } = useApp();
-  const { lowStockAlerts, cement } = useInventory();
+  const { lowStockAlerts, cement, bricks } = useInventory(); // Added bricks from context
 
   const [calculatedBrickStock, setCalculatedBrickStock] = useState(0);
   const [stockLoading, setStockLoading] = useState(true);
 
-  const loadCalculatedStock = async () => {
-    try {
-      setStockLoading(true);
-      const result = await calculateActualBrickStock();
-
-      if (result.success) {
-        setCalculatedBrickStock(result.data.calculated_stock);
-        console.log(
-          "Sidebar: Calculated stock loaded:",
-          result.data.calculated_stock
-        );
-      } else {
-        console.error("Sidebar: Failed to calculate stock");
-        setCalculatedBrickStock(0);
-      }
-    } catch (error) {
-      console.error("Sidebar: Error loading calculated stock:", error);
-      setCalculatedBrickStock(0);
-    } finally {
-      setStockLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadCalculatedStock();
-  }, []);
-
-  // Handle navigation
-  const handleNavigation = (path, id) => {
-    navigate(path);
-    appActions.setCurrentPage(id);
-
-    // Close sidebar on mobile after navigation
-    if (isMobile && open) {
-      onToggle();
-    }
-  };
-
-  // Check if menu item is active
-  const isActive = (path) => {
-    return location.pathname === path;
-  };
-
-  // Get alert count for inventory
-  const getInventoryAlerts = () => {
-    let count = 0;
-    if (lowStockAlerts?.bricks) count++;
-    if (lowStockAlerts?.cement) count++;
-    return count;
-  };
-
-  const calculateActualBrickStock = async () => {
+  const calculateActualBrickStock = useCallback(async () => {
     try {
       // ✅ Use the same service methods as Dashboard.js
       const [productionResult, salesResult] = await Promise.all([
@@ -143,9 +94,78 @@ function Sidebar({ open, onToggle }) {
         data: { calculated_stock: actualBrickStock },
       };
     } catch (error) {
-      console.error("Sidebar: Error calculating brick stock:", error);
       return { success: false, data: { calculated_stock: 0 } };
     }
+  }, []);
+
+  const loadCalculatedStock = useCallback(async () => {
+    try {
+      setStockLoading(true);
+      const result = await calculateActualBrickStock();
+
+      if (result.success) {
+        setCalculatedBrickStock(result.data.calculated_stock);
+      } else {
+        setCalculatedBrickStock(0);
+      }
+    } catch (error) {
+      setCalculatedBrickStock(0);
+    } finally {
+      setStockLoading(false);
+    }
+  }, [calculateActualBrickStock]);
+
+  // Initial load
+  useEffect(() => {
+    loadCalculatedStock();
+  }, [loadCalculatedStock]);
+
+  // 🔥 KEY FIX: Update brick stock when inventory context changes
+  useEffect(() => {
+    // Reload brick stock when bricks inventory changes
+    if (bricks && typeof bricks === 'object') {
+      loadCalculatedStock();
+    }
+  }, [bricks, loadCalculatedStock]);
+
+  // 🔥 ADDITIONAL FIX: Listen to route changes to refresh data
+  useEffect(() => {
+    // Refresh stock when navigating between pages (like after recording production/sales)
+    loadCalculatedStock();
+  }, [location.pathname, loadCalculatedStock]);
+
+  // 🔥 OPTIONAL: Add interval refresh for real-time updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Refresh every 30 seconds to keep data current
+      loadCalculatedStock();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [loadCalculatedStock]);
+
+  // Handle navigation
+  const handleNavigation = (path, id) => {
+    navigate(path);
+    appActions.setCurrentPage(id);
+
+    // Close sidebar on mobile after navigation
+    if (isMobile && open) {
+      onToggle();
+    }
+  };
+
+  // Check if menu item is active
+  const isActive = (path) => {
+    return location.pathname === path;
+  };
+
+  // Get alert count for inventory
+  const getInventoryAlerts = () => {
+    let count = 0;
+    if (lowStockAlerts?.bricks) count++;
+    if (lowStockAlerts?.cement) count++;
+    return count;
   };
 
   // Render menu item with potential alerts
@@ -227,7 +247,7 @@ function Sidebar({ open, onToggle }) {
         </Box>
 
         {/* Hamburger menu button */}
-        <IconButton
+        {/* <IconButton
           color="inherit"
           aria-label="toggle sidebar"
           onClick={onToggle}
@@ -240,7 +260,7 @@ function Sidebar({ open, onToggle }) {
           }}
         >
           {open ? <ChevronLeftIcon /> : <MenuIcon />}
-        </IconButton>
+        </IconButton> */}
       </Toolbar>
 
       <Divider />

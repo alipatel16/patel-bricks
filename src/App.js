@@ -8,6 +8,7 @@ import { Toaster } from 'react-hot-toast';
 import { initializeDatabase, checkConnection } from './services/firebase';
 
 // Import context providers
+import { AuthProvider, useAuth } from './context/AuthContext'; // ADD THIS LINE
 import { AppProvider } from './context/AppContext';
 import { InventoryProvider } from './context/InventoryContext';
 
@@ -23,13 +24,221 @@ import Sales from './pages/Sales';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 
+import CustomerManagement from './components/customers/CustomerManagement';
+
+// ADD THIS IMPORT
+import LoginPage from './components/auth/LoginPage';
+
 // Import constants
 import { APP_NAME } from './utils/constants';
 
 // Import styles
 import './App.css';
 
-// Create Material-UI theme
+// CREATE THIS COMPONENT - ADD BEFORE THE MAIN APP FUNCTION
+const AppContent = () => {
+  const { user, loading, signIn, error } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const [initError, setInitError] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Initialize app on mount
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        setIsLoading(true);
+        setInitError(null);
+
+        // Check Firebase connection
+        const connectionStatus = await checkConnection();
+        setIsConnected(connectionStatus);
+
+        if (!connectionStatus) {
+          throw new Error('Unable to connect to Firebase. Please check your internet connection.');
+        }
+
+        // Initialize database structure
+        const initResult = await initializeDatabase();
+        
+        if (!initResult.success) {
+          throw new Error(initResult.error || 'Failed to initialize database');
+        }
+
+        console.log('App initialized successfully:', initResult.message);
+      } catch (error) {
+        console.error('App initialization error:', error);
+        setInitError(error.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeApp();
+
+    // Set up periodic connection check
+    const connectionInterval = setInterval(async () => {
+      const status = await checkConnection();
+      setIsConnected(status);
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(connectionInterval);
+  }, []);
+
+  // Handle sidebar toggle
+  const handleSidebarToggle = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  // ADD THIS - Check if user is authenticated
+  if (!loading && !user) {
+    return <LoginPage onLogin={signIn} loading={loading} error={error} />;
+  }
+
+  // Show loading screen while initializing
+  if (isLoading || loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="100vh"
+        flexDirection="column"
+        gap={2}
+      >
+        <CircularProgress size={60} />
+        <Box textAlign="center">
+          <h2>Initializing {APP_NAME}</h2>
+          <p>Setting up your brick production management system...</p>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Show error screen if initialization failed
+  if (initError) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="100vh"
+        flexDirection="column"
+        gap={2}
+        p={4}
+      >
+        <Alert severity="error" sx={{ maxWidth: 600, width: '100%' }}>
+          <h3>Initialization Failed</h3>
+          <p>{initError}</p>
+          <p>Please check your Firebase configuration and try refreshing the page.</p>
+        </Alert>
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{
+            padding: '12px 24px',
+            backgroundColor: '#1976d2',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '16px',
+          }}
+        >
+          Retry
+        </button>
+      </Box>
+    );
+  }
+
+  // YOUR EXISTING APP CONTENT STARTS HERE - UNCHANGED
+  return (
+    <Router>
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        {/* Sidebar */}
+        <Sidebar 
+          open={sidebarOpen} 
+          onToggle={handleSidebarToggle}
+        />
+
+        {/* Main content area */}
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            transition: (theme) => theme.transitions.create(['margin'], {
+              easing: theme.transitions.easing.easeOut,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
+            marginLeft: sidebarOpen ? 0 : '-240px',
+            minHeight: '100vh',
+            backgroundColor: (theme) => theme.palette.background.default,
+          }}
+        >
+          {/* Header */}
+          <Header 
+            onMenuClick={handleSidebarToggle}
+            isConnected={isConnected}
+          />
+
+          {/* Page content */}
+          <Box sx={{ p: 3 }}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/production" element={<Production />} />
+              <Route path="/inventory" element={<Inventory />} />
+              <Route path="/sales" element={<Sales />} />
+              <Route path="/customers" element={<CustomerManagement />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/settings" element={<Settings />} />
+              
+              {/* Redirect unknown routes to dashboard */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Global snackbar for notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            borderRadius: '8px',
+            fontSize: '14px',
+          },
+          success: {
+            style: {
+              background: '#4caf50',
+              color: 'white',
+            },
+          },
+          error: {
+            style: {
+              background: '#f44336',
+              color: 'white',
+            },
+          },
+        }}
+      />
+
+      {/* Connection status indicator */}
+      {!isConnected && (
+        <Snackbar
+          open={true}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          sx={{ zIndex: 9999 }}
+        >
+          <Alert severity="warning" variant="filled">
+            Connection lost. Trying to reconnect...
+          </Alert>
+        </Snackbar>
+      )}
+    </Router>
+  );
+};
+
+// Create Material-UI theme - YOUR EXISTING THEME UNCHANGED
 const theme = createTheme({
   palette: {
     primary: {
@@ -254,209 +463,18 @@ const theme = createTheme({
   },
 });
 
+// MODIFY THE MAIN APP FUNCTION - JUST WRAP WITH AuthProvider
 function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
-  const [initError, setInitError] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Initialize app on mount
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        setIsLoading(true);
-        setInitError(null);
-
-        // Check Firebase connection
-        const connectionStatus = await checkConnection();
-        setIsConnected(connectionStatus);
-
-        if (!connectionStatus) {
-          throw new Error('Unable to connect to Firebase. Please check your internet connection.');
-        }
-
-        // Initialize database structure
-        const initResult = await initializeDatabase();
-        
-        if (!initResult.success) {
-          throw new Error(initResult.error || 'Failed to initialize database');
-        }
-
-        console.log('App initialized successfully:', initResult.message);
-      } catch (error) {
-        console.error('App initialization error:', error);
-        setInitError(error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initializeApp();
-
-    // Set up periodic connection check
-    const connectionInterval = setInterval(async () => {
-      const status = await checkConnection();
-      setIsConnected(status);
-    }, 30000); // Check every 30 seconds
-
-    return () => clearInterval(connectionInterval);
-  }, []);
-
-  // Handle sidebar toggle
-  const handleSidebarToggle = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
-
-  // Show loading screen while initializing
-  if (isLoading) {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          minHeight="100vh"
-          flexDirection="column"
-          gap={2}
-        >
-          <CircularProgress size={60} />
-          <Box textAlign="center">
-            <h2>Initializing {APP_NAME}</h2>
-            <p>Setting up your brick production management system...</p>
-          </Box>
-        </Box>
-      </ThemeProvider>
-    );
-  }
-
-  // Show error screen if initialization failed
-  if (initError) {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          minHeight="100vh"
-          flexDirection="column"
-          gap={2}
-          p={4}
-        >
-          <Alert severity="error" sx={{ maxWidth: 600, width: '100%' }}>
-            <h3>Initialization Failed</h3>
-            <p>{initError}</p>
-            <p>Please check your Firebase configuration and try refreshing the page.</p>
-          </Alert>
-          <button 
-            onClick={() => window.location.reload()} 
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#1976d2',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-            }}
-          >
-            Retry
-          </button>
-        </Box>
-      </ThemeProvider>
-    );
-  }
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppProvider>
-        <InventoryProvider>
-          <Router>
-            <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-              {/* Sidebar */}
-              <Sidebar 
-                open={sidebarOpen} 
-                onToggle={handleSidebarToggle}
-              />
-
-              {/* Main content area */}
-              <Box
-                component="main"
-                sx={{
-                  flexGrow: 1,
-                  transition: theme.transitions.create(['margin'], {
-                    easing: theme.transitions.easing.easeOut,
-                    duration: theme.transitions.duration.enteringScreen,
-                  }),
-                  marginLeft: sidebarOpen ? 0 : '-240px',
-                  minHeight: '100vh',
-                  backgroundColor: theme.palette.background.default,
-                }}
-              >
-                {/* Header */}
-                <Header 
-                  onMenuClick={handleSidebarToggle}
-                  isConnected={isConnected}
-                />
-
-                {/* Page content */}
-                <Box sx={{ p: 3 }}>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/production" element={<Production />} />
-                    <Route path="/inventory" element={<Inventory />} />
-                    <Route path="/sales" element={<Sales />} />
-                    <Route path="/reports" element={<Reports />} />
-                    <Route path="/settings" element={<Settings />} />
-                    
-                    {/* Redirect unknown routes to dashboard */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </Box>
-              </Box>
-            </Box>
-
-            {/* Global snackbar for notifications */}
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                duration: 4000,
-                style: {
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                },
-                success: {
-                  style: {
-                    background: '#4caf50',
-                    color: 'white',
-                  },
-                },
-                error: {
-                  style: {
-                    background: '#f44336',
-                    color: 'white',
-                  },
-                },
-              }}
-            />
-
-            {/* Connection status indicator */}
-            {!isConnected && (
-              <Snackbar
-                open={true}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                sx={{ zIndex: 9999 }}
-              >
-                <Alert severity="warning" variant="filled">
-                  Connection lost. Trying to reconnect...
-                </Alert>
-              </Snackbar>
-            )}
-          </Router>
-        </InventoryProvider>
-      </AppProvider>
+      <AuthProvider>
+        <AppProvider>
+          <InventoryProvider>
+            <AppContent />
+          </InventoryProvider>
+        </AppProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

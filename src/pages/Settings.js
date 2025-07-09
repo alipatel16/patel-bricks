@@ -145,8 +145,7 @@ function Settings() {
   };
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 3 }}>
+      <Box>
         {/* Header */}
         <Box sx={{ mb: 4 }}>
           <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
@@ -544,7 +543,6 @@ function Settings() {
           
         </Card>
       </Box>
-    </Container>
   );
 }
 

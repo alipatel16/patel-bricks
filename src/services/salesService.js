@@ -1,4 +1,6 @@
-import { dbUtils } from "../services/firebase";
+// services/salesService.js - Updated to support GST toggle and maintain backward compatibility
+import { dbUtils } from "./firebase";
+import { customerService } from "./customerService";
 import {
   DB_PATHS,
   DEFAULT_COMPANY_INFO,
@@ -78,7 +80,9 @@ const calculateSaleAmount = (
 ) => {
   const subtotal = quantity * pricePerBrick;
   const discountAmount =
-    discountType === "percentage" ? (subtotal * discount) / 100 : discount;
+    discountType === "percentage" 
+      ? (subtotal * discount) / 100 
+      : discount;
   const taxableAmount = subtotal - discountAmount;
 
   return {
@@ -90,53 +94,61 @@ const calculateSaleAmount = (
 
 export const salesService = {
   /**
-   * SALE OPERATIONS
+   * SALES OPERATIONS
    */
 
-  // Record a new sale with enhanced GST support
-  recordSale: async (saleData) => {
+  // Record new sale with enhanced features including GST toggle
+  recordSale: async ({
+    date,
+    quantity,
+    pricePerBrick,
+    customerName,
+    customerPhone,
+    customerEmail = "",
+    customerAddress,
+    customerState = "GJ",
+    customerStateCode = "24",
+    customerGSTIN = "",
+    locationName = "",
+    locationId = null,
+    vehicleNumber = "",
+    challanNumber = "",
+    discount = 0,
+    discountType = "amount",
+    paymentMethod = "cash",
+    notes = "",
+    hsnCode = HSN_CODES.FLY_ASH_BRICKS,
+    includeGST = false, // New GST toggle parameter
+    calculatedAmounts = null, // Pre-calculated amounts from form
+  }) => {
     try {
-      const {
-        quantity,
-        pricePerBrick,
-        customerName,
-        customerPhone,
-        customerEmail = "",
-        customerAddress,
-        customerState,
-        customerStateCode,
-        customerGSTIN = "",
-        discount = 0,
-        discountType = "amount",
-        paymentMethod,
-        notes = "",
-        hsnCode = HSN_CODES.FLY_ASH_BRICKS,
-      } = saleData;
-
-      // Validate required fields
-      if (
-        !quantity ||
-        !pricePerBrick ||
-        !customerName ||
-        !customerPhone ||
-        !customerAddress
-      ) {
-        return { success: false, error: "Missing required fields" };
-      }
-
-      // Check inventory availability
-      const capacity = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
-      if (!capacity.success || (capacity.data?.total_stock || 0) < quantity) {
+      // Validate required parameters
+      if (!quantity || !pricePerBrick || !customerName || !customerPhone || !customerAddress) {
         return {
           success: false,
-          error: `Insufficient stock. Required: ${quantity.toLocaleString()} bricks, Available: ${
-            capacity.data?.total_stock?.toLocaleString() || 0
-          } bricks`,
-          data: capacity.data,
+          error: "Missing required fields: quantity, price, customer name, phone, and address are required",
         };
       }
 
-      const currentDate = dbUtils.dateString();
+      // Check brick availability
+      const capacityResult = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
+      if (!capacityResult.success) {
+        return {
+          success: false,
+          error: "Could not verify brick availability",
+        };
+      }
+
+      const currentStock = capacityResult.data?.total_stock || 0;
+      if (currentStock < quantity) {
+        return {
+          success: false,
+          error: `Insufficient stock. Required: ${quantity.toLocaleString()} bricks, Available: ${currentStock.toLocaleString()} bricks`,
+          data: capacityResult.data,
+        };
+      }
+
+      const currentDate = date || dbUtils.dateString();
       const timestamp = dbUtils.timestamp();
 
       // Generate invoice number
@@ -153,10 +165,26 @@ export const salesService = {
       // Determine if inter-state (assuming company is in Gujarat)
       const isInterState = customerState !== "GJ";
 
-      // Calculate GST
-      const gstCalculation = calculateGSTAmounts(taxableAmount, isInterState);
+      // Calculate GST only if includeGST is true
+      let gstCalculation = {
+        cgstAmount: 0,
+        sgstAmount: 0,
+        igstAmount: 0,
+        totalTax: 0,
+        cgstRate: 0,
+        sgstRate: 0,
+        igstRate: 0,
+      };
+
+      if (includeGST) {
+        gstCalculation = calculateGSTAmounts(taxableAmount, isInterState);
+      }
+
       const totalAmount = taxableAmount + gstCalculation.totalTax;
 
+      // Update stock
+      const newStock = currentStock - quantity;
+      
       // Load current bank details
       let bankDetails = DEFAULT_BANK_DETAILS;
       try {
@@ -190,13 +218,23 @@ export const salesService = {
         customer_state_code: customerStateCode,
         customer_gstin: customerGSTIN,
 
+        // Location details (new)
+        location_name: locationName,
+        location_id: locationId,
+
+        // Transport details (new)
+        vehicle_number: vehicleNumber,
+        challan_number: challanNumber,
+
         // Amount calculations
         subtotal,
         discount_amount: discountAmount,
         discount_type: discountType,
         taxable_amount: taxableAmount,
 
-        // GST details
+        // GST details - IMPORTANT: Store the GST toggle flag
+        include_gst: includeGST,
+        gst_included: includeGST, // Alternative field name for compatibility
         is_inter_state: isInterState,
         cgst_rate: gstCalculation.cgstRate,
         sgst_rate: gstCalculation.sgstRate,
@@ -226,80 +264,124 @@ export const salesService = {
       // 1. Add to sales transactions
       updates[`${DB_PATHS.SALES}/transactions/${invoiceNumber}`] = saleEntry;
 
-      // 2. Update monthly sales summary
-      const currentMonth = currentDate.substring(0, 7);
-      const monthlySalesPath = `${DB_PATHS.SALES}/monthly/${currentMonth}`;
-      const monthlyResult = await dbUtils.readData(monthlySalesPath);
-      const monthlySummary = monthlyResult.success
-        ? monthlyResult.data
-        : {
-            total_sales: 0,
-            total_revenue: 0,
-            total_quantity: 0,
-            total_tax: 0,
-            sales_count: 0,
-          };
-
-      updates[monthlySalesPath] = {
-        ...monthlySummary,
-        total_sales: (monthlySummary.total_sales || 0) + totalAmount,
-        total_revenue: (monthlySummary.total_revenue || 0) + taxableAmount,
-        total_quantity: (monthlySummary.total_quantity || 0) + quantity,
-        total_tax: (monthlySummary.total_tax || 0) + gstCalculation.totalTax,
-        sales_count: (monthlySummary.sales_count || 0) + 1,
+      // 2. Update daily sales summary
+      const dailyPath = `${DB_PATHS.SALES}/daily/${currentDate}`;
+      const existingDailyResult = await dbUtils.readData(dailyPath);
+      const existingDaily = (existingDailyResult.success && existingDailyResult.data) ? existingDailyResult.data : {};
+      
+      updates[dailyPath] = {
+        date: currentDate,
+        total_sales: (existingDaily.total_sales || 0) + 1,
+        total_quantity: (existingDaily.total_quantity || 0) + quantity,
+        total_revenue: (existingDaily.total_revenue || 0) + totalAmount,
         last_updated: timestamp,
       };
 
-      // 3. Update inventory
-      const newStock = (capacity.data?.total_stock || 0) - quantity;
+      // 3. Update monthly sales summary
+      const monthlyPath = `${DB_PATHS.SALES}/monthly/${currentDate.substring(0, 7)}`;
+      const existingMonthlyResult = await dbUtils.readData(monthlyPath);
+      const existingMonthly = (existingMonthlyResult.success && existingMonthlyResult.data) ? existingMonthlyResult.data : {};
+      
+      updates[monthlyPath] = {
+        month: currentDate.substring(0, 7),
+        total_sales: (existingMonthly.total_sales || 0) + 1,
+        total_quantity: (existingMonthly.total_quantity || 0) + quantity,
+        total_revenue: (existingMonthly.total_revenue || 0) + totalAmount,
+        last_updated: timestamp,
+      };
+
+      // 4. Update brick inventory
       updates[`${DB_PATHS.INVENTORY.BRICKS}/total_stock`] = newStock;
       updates[`${DB_PATHS.INVENTORY.BRICKS}/last_updated`] = timestamp;
 
-      // 4. Add to inventory history
+      // 5. Add to inventory history
       const inventoryHistoryEntry = {
         type: "sale",
         quantity: -quantity,
         reference: invoiceNumber,
         customer: customerName,
+        location: locationName,
+        vehicle: vehicleNumber,
+        challan: challanNumber,
         date: currentDate,
         timestamp,
-        stock_before: capacity.data?.total_stock || 0,
+        stock_before: currentStock,
         stock_after: newStock,
       };
-      updates[`${DB_PATHS.INVENTORY.BRICKS}/history/${invoiceNumber}`] =
-        inventoryHistoryEntry;
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/history/${invoiceNumber}`] = inventoryHistoryEntry;
 
-      // 5. Update or create customer record
-      const customerEntry = {
-        name: customerName,
-        phone: customerPhone,
-        email: customerEmail,
-        address: customerAddress,
-        state: customerState,
-        state_code: customerStateCode,
-        gstin: customerGSTIN,
-        last_purchase: currentDate,
-        total_purchases: 1,
-        total_amount: totalAmount,
-        created_date: currentDate,
-        updated_date: currentDate,
-      };
+      // 6. Update or create customer record
+      try {
+        // Check if customer exists
+        const existingCustomerResult = await customerService.getCustomerById(customerPhone);
+        
+        if (existingCustomerResult.success && existingCustomerResult.data) {
+          // Update existing customer
+          const existingCustomer = existingCustomerResult.data;
+          const updatedCustomer = {
+            ...existingCustomer,
+            name: customerName, // Update name in case it changed
+            email: customerEmail,
+            last_purchase: currentDate,
+            total_purchases: (existingCustomer.total_purchases || 0) + 1,
+            total_amount: (existingCustomer.total_amount || 0) + totalAmount,
+            updated_date: currentDate,
+            updated_timestamp: timestamp,
+          };
 
-      // Check if customer exists
-      const existingCustomerResult = await dbUtils.readData(
-        `${DB_PATHS.CUSTOMERS}/${customerPhone}`
-      );
-      if (existingCustomerResult.success && existingCustomerResult.data) {
-        // Update existing customer
-        const existingCustomer = existingCustomerResult.data;
-        customerEntry.total_purchases =
-          (existingCustomer.total_purchases || 0) + 1;
-        customerEntry.total_amount =
-          (existingCustomer.total_amount || 0) + totalAmount;
-        customerEntry.created_date = existingCustomer.created_date;
+          // Add location if it doesn't exist and locationName is provided
+          if (locationName && locationId) {
+            const locations = existingCustomer.locations || [];
+            const locationExists = locations.some(loc => loc.id === locationId);
+            
+            if (!locationExists) {
+              locations.push({
+                id: locationId,
+                name: locationName,
+                address: customerAddress,
+                state: customerState,
+                state_code: customerStateCode,
+                created_date: currentDate,
+                is_primary: locations.length === 0
+              });
+              updatedCustomer.locations = locations;
+            }
+          }
+
+          updates[`${DB_PATHS.CUSTOMERS}/${customerPhone}`] = updatedCustomer;
+        } else {
+          // Create new customer
+          const newCustomer = {
+            name: customerName,
+            phone: customerPhone,
+            email: customerEmail,
+            gstin: customerGSTIN,
+            locations: locationName ? [{
+              id: locationId || `loc_${timestamp}`,
+              name: locationName,
+              address: customerAddress,
+              state: customerState,
+              state_code: customerStateCode,
+              created_date: currentDate,
+              is_primary: true
+            }] : [],
+            brick_rates: {},
+            total_purchases: 1,
+            total_amount: totalAmount,
+            last_purchase: currentDate,
+            created_date: currentDate,
+            updated_date: currentDate,
+            created_timestamp: timestamp,
+            updated_timestamp: timestamp,
+            status: 'active'
+          };
+
+          updates[`${DB_PATHS.CUSTOMERS}/${customerPhone}`] = newCustomer;
+        }
+      } catch (customerError) {
+        console.warn("Could not update customer data:", customerError);
+        // Continue with sale even if customer update fails
       }
-
-      updates[`${DB_PATHS.CUSTOMERS}/${customerPhone}`] = customerEntry;
 
       // Execute all updates atomically
       const result = await dbUtils.batchUpdate(updates);
@@ -313,33 +395,72 @@ export const salesService = {
           },
           message: `Sale recorded successfully. Invoice: ${invoiceNumber}`,
         };
-      } else {
-        return { success: false, error: result.error };
       }
+
+      return {
+        success: false,
+        error: "Failed to save sale data",
+      };
     } catch (error) {
       console.error("Error recording sale:", error);
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error.message,
+      };
     }
   },
 
-  // Get all sales
-  getAllSales: async () => {
+  // Get sales history with enhanced filtering
+  getSalesHistory: async (limit = 50, filters = {}) => {
     try {
       const result = await dbUtils.readData(`${DB_PATHS.SALES}/transactions`);
 
       if (result.success && result.data) {
-        // Convert object to array and add IDs
-        const salesArray = Object.entries(result.data).map(([id, sale]) => ({
+        let salesArray = Object.entries(result.data).map(([id, sale]) => ({
           ...sale,
           id,
         }));
+
+        // Apply filters
+        if (filters.customerName) {
+          salesArray = salesArray.filter(sale => 
+            sale.customer_name.toLowerCase().includes(filters.customerName.toLowerCase())
+          );
+        }
+
+        if (filters.locationName) {
+          salesArray = salesArray.filter(sale => 
+            sale.location_name && sale.location_name.toLowerCase().includes(filters.locationName.toLowerCase())
+          );
+        }
+
+        if (filters.vehicleNumber) {
+          salesArray = salesArray.filter(sale => 
+            sale.vehicle_number && sale.vehicle_number.toLowerCase().includes(filters.vehicleNumber.toLowerCase())
+          );
+        }
+
+        if (filters.dateFrom) {
+          salesArray = salesArray.filter(sale => sale.date >= filters.dateFrom);
+        }
+
+        if (filters.dateTo) {
+          salesArray = salesArray.filter(sale => sale.date <= filters.dateTo);
+        }
+
+        // Sort by date (newest first) and limit
+        salesArray.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        if (limit) {
+          salesArray = salesArray.slice(0, limit);
+        }
 
         return { success: true, data: salesArray };
       }
 
       return { success: true, data: [] };
     } catch (error) {
-      console.error("Error getting sales:", error);
+      console.error("Error getting sales history:", error);
       return { success: false, error: error.message };
     }
   },
@@ -357,25 +478,13 @@ export const salesService = {
     }
   },
 
-  // Get sales by date range
-  getSalesByDateRange: async (startDate, endDate) => {
+  // Get daily sales
+  getDailySales: async (date) => {
     try {
-      const allSalesResult = await salesService.getAllSales();
-
-      if (!allSalesResult.success) {
-        return allSalesResult;
-      }
-
-      const filteredSales = allSalesResult.data.filter((sale) => {
-        const saleDate = new Date(sale.date);
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        return saleDate >= start && saleDate <= end;
-      });
-
-      return { success: true, data: filteredSales };
+      const result = await dbUtils.readData(`${DB_PATHS.SALES}/daily/${date}`);
+      return result;
     } catch (error) {
-      console.error("Error getting sales by date range:", error);
+      console.error("Error getting daily sales:", error);
       return { success: false, error: error.message };
     }
   },
@@ -393,55 +502,122 @@ export const salesService = {
     }
   },
 
-  /**
-   * CUSTOMER OPERATIONS
-   */
-
-  // Get all customers
-  getAllCustomers: async () => {
+  // Get sales statistics
+  getSalesStats: async (period = "month") => {
     try {
-      const result = await dbUtils.readData(DB_PATHS.CUSTOMERS);
+      const today = new Date();
+      let startDate, endDate;
+
+      switch (period) {
+        case "week":
+          startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case "month":
+          startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+          break;
+        case "year":
+          startDate = new Date(today.getFullYear(), 0, 1);
+          break;
+        default:
+          startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      }
+
+      endDate = today;
+
+      const result = await dbUtils.readData(`${DB_PATHS.SALES}/transactions`);
 
       if (result.success && result.data) {
-        const customersArray = Object.entries(result.data).map(
-          ([id, customer]) => ({
-            ...customer,
-            id,
-          })
-        );
+        const sales = Object.values(result.data).filter((sale) => {
+          const saleDate = new Date(sale.date);
+          return saleDate >= startDate && saleDate <= endDate;
+        });
 
-        return { success: true, data: customersArray };
+        const stats = {
+          total_sales: sales.length,
+          total_quantity: sales.reduce((sum, sale) => sum + (sale.quantity || 0), 0),
+          total_revenue: sales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0),
+          average_order_value: sales.length > 0 
+            ? sales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) / sales.length 
+            : 0,
+          period,
+          date_range: {
+            start: startDate.toISOString().split('T')[0],
+            end: endDate.toISOString().split('T')[0],
+          },
+        };
+
+        return { success: true, data: stats };
+      }
+
+      return { success: true, data: { total_sales: 0, total_quantity: 0, total_revenue: 0 } };
+    } catch (error) {
+      console.error("Error getting sales stats:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * BACKWARD COMPATIBILITY METHODS - CRITICAL FOR DASHBOARD
+   */
+
+  // Get all sales (for backward compatibility with existing Dashboard/Inventory)
+  getAllSales: async () => {
+    try {
+      const result = await dbUtils.readData(`${DB_PATHS.SALES}/transactions`);
+
+      if (result.success && result.data) {
+        const salesArray = Object.entries(result.data).map(([id, sale]) => ({
+          ...sale,
+          id,
+        }));
+
+        // Sort by date (newest first)
+        salesArray.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        return { success: true, data: salesArray };
       }
 
       return { success: true, data: [] };
     } catch (error) {
-      console.error("Error getting customers:", error);
+      console.error("Error getting all sales:", error);
       return { success: false, error: error.message };
     }
+  },
+
+  // Get total sales quantity (for calculating brick stock)
+  getTotalSalesQuantity: async () => {
+    try {
+      const result = await salesService.getAllSales();
+      
+      if (result.success) {
+        const totalQuantity = result.data.reduce((sum, sale) => sum + (sale.quantity || 0), 0);
+        return { success: true, data: totalQuantity };
+      }
+      
+      return { success: false, error: 'Failed to get sales data' };
+    } catch (error) {
+      console.error("Error getting total sales quantity:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * CUSTOMER OPERATIONS (delegated to customerService)
+   */
+
+  // Get all customers
+  getAllCustomers: async () => {
+    return await customerService.getAllCustomers();
   },
 
   // Get customer by phone
   getCustomerByPhone: async (phone) => {
-    try {
-      const result = await dbUtils.readData(`${DB_PATHS.CUSTOMERS}/${phone}`);
-      return result;
-    } catch (error) {
-      console.error("Error getting customer:", error);
-      return { success: false, error: error.message };
-    }
+    return await customerService.getCustomerById(phone);
   },
 
   // Delete customer
   deleteCustomer: async (customerId) => {
-    try {
-      const result = await dbUtils.deleteData(
-        `${DB_PATHS.CUSTOMERS}/${customerId}`
-      );
-      return result;
-    } catch (error) {
-      console.error("Error deleting customer:", error);
-      return { success: false, error: error.message };
-    }
+    return await customerService.deleteCustomer(customerId);
   },
 
   /**
@@ -491,6 +667,11 @@ export const salesService = {
           gstin: saleData.customer_gstin,
         },
 
+        // Location and transport details
+        location_name: saleData.location_name,
+        vehicle_number: saleData.vehicle_number,
+        challan_number: saleData.challan_number,
+
         // Product details
         products: [
           {
@@ -512,11 +693,6 @@ export const salesService = {
         total_before_tax: saleData.taxable_amount,
         total_tax: saleData.total_tax,
         total_amount: saleData.total_amount,
-
-        // Additional details
-        payment_method: saleData.payment_method,
-        notes: saleData.notes,
-        is_inter_state: saleData.is_inter_state,
       };
 
       return {
@@ -528,519 +704,4 @@ export const salesService = {
       return { success: false, error: error.message };
     }
   },
-
-  // Update sale (for corrections)
-  updateSale: async (invoiceNumber, updatedData) => {
-    try {
-      const currentSale = await salesService.getSaleByInvoice(invoiceNumber);
-
-      if (!currentSale.success || !currentSale.data) {
-        return { success: false, error: "Sale not found" };
-      }
-
-      const currentData = currentSale.data;
-      const updates = {
-        ...currentData,
-        ...updatedData,
-        last_modified: dbUtils.timestamp(),
-      };
-
-      const result = await dbUtils.writeData(
-        `${DB_PATHS.SALES}/transactions/${invoiceNumber}`,
-        updates
-      );
-
-      return result;
-    } catch (error) {
-      console.error("Error updating sale:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Delete sale
-  deleteSale: async (invoiceNumber) => {
-    try {
-      // Note: In a real app, you might want to reverse inventory changes
-      const result = await dbUtils.deleteData(
-        `${DB_PATHS.SALES}/transactions/${invoiceNumber}`
-      );
-      return result;
-    } catch (error) {
-      console.error("Error deleting sale:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  /**
-   * BACKWARD COMPATIBILITY FUNCTIONS
-   */
-
-  // Backward compatibility: getSalesHistory -> getAllSales
-  getSalesHistory: async (limit = 100) => {
-    try {
-      const result = await salesService.getAllSales();
-
-      if (result.success && result.data) {
-        // Apply limit if specified
-        const limitedData = limit ? result.data.slice(0, limit) : result.data;
-        return { success: true, data: limitedData };
-      }
-
-      return result;
-    } catch (error) {
-      console.error("Error getting sales history:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Get sales trends over a specified number of days
-  getSalesTrends: async (days = 30) => {
-    try {
-      const allSalesResult = await salesService.getAllSales();
-
-      if (!allSalesResult.success) {
-        return allSalesResult;
-      }
-
-      const now = new Date();
-      const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-
-      // Filter sales within the specified period
-      const periodSales = allSalesResult?.data?.filter((sale) => {
-        const saleDate = new Date(sale.date);
-        return saleDate >= startDate && saleDate <= now;
-      });
-
-      // Group sales by date and calculate daily totals
-      const dailySales = {};
-
-      periodSales?.forEach((sale) => {
-        const date = sale.date;
-        if (!dailySales[date]) {
-          dailySales[date] = {
-            date: date,
-            total_quantity: 0, // ← Changed from 'quantity' to 'total_quantity'
-            total_revenue: 0, // ← Changed from 'revenue' to 'total_revenue'
-            transactions_count: 0, // ← Changed from 'transactions' to 'transactions_count'
-            average_price: 0,
-          };
-        }
-
-        dailySales[date].total_quantity += parseInt(sale.quantity) || 0;
-        dailySales[date].total_revenue += parseFloat(sale.total_amount) || 0;
-        dailySales[date].transactions_count += 1;
-      });
-
-      // Calculate average prices and convert to array
-      const trendsArray = Object.values(dailySales)
-        .map((day) => {
-          day.average_price =
-            day.total_quantity > 0
-              ? parseFloat((day.total_revenue / day.total_quantity).toFixed(2))
-              : 0;
-          return day;
-        })
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-      // Fill in missing dates with zero values
-      const filledTrends = [];
-      const currentDate = new Date(startDate);
-
-      while (currentDate <= now) {
-        const dateString = currentDate.toISOString().split("T")[0];
-        const existingData = trendsArray.find((day) => day.date === dateString);
-
-        if (existingData) {
-          filledTrends.push(existingData);
-        } else {
-          filledTrends.push({
-            date: dateString,
-            total_quantity: 0,
-            total_revenue: 0,
-            transactions_count: 0,
-            average_price: 0,
-          });
-        }
-
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Calculate summary statistics
-      const summary = {
-        total_quantity: trendsArray.reduce(
-          (sum, day) => sum + day.total_quantity,
-          0
-        ),
-        total_revenue: trendsArray.reduce(
-          (sum, day) => sum + day.total_revenue,
-          0
-        ),
-        total_transactions: trendsArray.reduce(
-          (sum, day) => sum + day.transactions_count,
-          0
-        ),
-        average_daily_sales:
-          trendsArray.length > 0
-            ? trendsArray.reduce((sum, day) => sum + day.total_revenue, 0) /
-              trendsArray.length
-            : 0,
-        growth_rate:
-          trendsArray.length > 1
-            ? (
-                ((trendsArray[trendsArray.length - 1].total_revenue -
-                  trendsArray[0].total_revenue) /
-                  (trendsArray[0].total_revenue || 1)) *
-                100
-              ).toFixed(2)
-            : 0,
-      };
-
-      return {
-        success: true,
-        data: {
-          daily_sales: filledTrends, // ← This matches what Reports.js expects
-          period_summary: summary,
-        },
-      };
-    } catch (error) {
-      console.error("Error getting sales trends:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: getMonthlySales
-  getMonthlySales: async (month = null) => {
-    try {
-      const targetMonth = month || new Date().toISOString().slice(0, 7);
-
-      // Try to get from monthly path first
-      const monthlyResult = await dbUtils.readData(
-        `${DB_PATHS.SALES}/monthly/${targetMonth}`
-      );
-
-      if (monthlyResult.success && monthlyResult.data) {
-        return { success: true, data: monthlyResult.data };
-      }
-
-      // Fallback: Calculate from all sales
-      const allSalesResult = await salesService.getAllSales();
-
-      if (!allSalesResult.success) {
-        return allSalesResult;
-      }
-
-      const monthSales = allSalesResult.data.filter((sale) =>
-        sale.date?.startsWith(targetMonth)
-      );
-
-      const monthlyData = monthSales.reduce(
-        (acc, sale) => ({
-          total_quantity: acc.total_quantity + (sale.quantity || 0),
-          total_revenue: acc.total_revenue + (sale.total_amount || 0),
-          total_tax: acc.total_tax + (sale.total_tax || 0),
-          transactions_count: acc.transactions_count + 1,
-          average_price: 0, // Will calculate below
-        }),
-        {
-          total_quantity: 0,
-          total_revenue: 0,
-          total_tax: 0,
-          transactions_count: 0,
-          average_price: 0,
-        }
-      );
-
-      monthlyData.average_price =
-        monthlyData.total_quantity > 0
-          ? monthlyData.total_revenue / monthlyData.total_quantity
-          : 0;
-
-      return { success: true, data: monthlyData };
-    } catch (error) {
-      console.error("Error getting monthly sales:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: getDailySales
-  getDailySales: async (date = null) => {
-    try {
-      const targetDate = date || dbUtils.dateString();
-      const allSalesResult = await salesService.getAllSales();
-
-      if (!allSalesResult.success) {
-        return allSalesResult;
-      }
-
-      const dailySales = allSalesResult.data.filter(
-        (sale) => sale.date === targetDate
-      );
-
-      // Calculate daily summary
-      const summary = dailySales.reduce(
-        (acc, sale) => ({
-          total_quantity: acc.total_quantity + (sale.quantity || 0),
-          total_revenue: acc.total_revenue + (sale.total_amount || 0),
-          transactions_count: acc.transactions_count + 1,
-          average_price: 0, // Will calculate below
-        }),
-        {
-          total_quantity: 0,
-          total_revenue: 0,
-          transactions_count: 0,
-          average_price: 0,
-        }
-      );
-
-      summary.average_price =
-        summary.total_quantity > 0
-          ? summary.total_revenue / summary.total_quantity
-          : 0;
-
-      return { success: true, data: summary };
-    } catch (error) {
-      console.error("Error getting daily sales:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: getSalesStats
-  getSalesStats: async (period = "month") => {
-    try {
-      const allSalesResult = await salesService.getAllSales();
-
-      if (!allSalesResult.success) {
-        return allSalesResult;
-      }
-
-      const now = new Date();
-      let startDate;
-
-      switch (period) {
-        case "week":
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case "month":
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        case "quarter":
-          startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-          break;
-        case "year":
-          startDate = new Date(now.getFullYear(), 0, 1);
-          break;
-        default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      }
-
-      const periodSales = allSalesResult.data.filter((sale) => {
-        const saleDate = new Date(sale.date);
-        return saleDate >= startDate;
-      });
-
-      // Calculate comprehensive statistics
-      const stats = periodSales.reduce(
-        (acc, sale) => {
-          const totalAmount = parseFloat(sale.total_amount) || 0;
-          const quantity = parseInt(sale.quantity) || 0;
-
-          return {
-            total_sales: acc.total_sales + totalAmount,
-            total_revenue: acc.total_revenue + totalAmount, // Same as total_sales for compatibility
-            total_quantity: acc.total_quantity + quantity,
-            total_transactions: acc.total_transactions + 1,
-            total_tax: acc.total_tax + (parseFloat(sale.total_tax) || 0),
-            best_sale_amount: Math.max(acc.best_sale_amount, totalAmount),
-          };
-        },
-        {
-          total_sales: 0,
-          total_revenue: 0,
-          total_quantity: 0,
-          total_transactions: 0,
-          total_tax: 0,
-          best_sale_amount: 0,
-        }
-      );
-
-      // Calculate derived statistics
-      stats.average_transaction_value =
-        stats.total_transactions > 0
-          ? parseFloat(
-              (stats.total_revenue / stats.total_transactions).toFixed(2)
-            )
-          : 0;
-
-      stats.average_price_per_brick =
-        stats.total_quantity > 0
-          ? parseFloat((stats.total_revenue / stats.total_quantity).toFixed(2))
-          : 0;
-
-      // Find best sale details
-      const bestSale = periodSales.reduce((max, sale) => {
-        const saleAmount = parseFloat(sale.total_amount) || 0;
-        const maxAmount = parseFloat(max?.total_amount) || 0;
-        return saleAmount > maxAmount ? sale : max;
-      }, null);
-
-      stats.best_sale = bestSale
-        ? {
-            total_amount: parseFloat(bestSale.total_amount) || 0,
-            quantity: parseInt(bestSale.quantity) || 0,
-            customer_name: bestSale.customer_name || "Walk-in",
-            date: bestSale.date,
-          }
-        : { total_amount: 0 };
-
-      return { success: true, data: stats };
-    } catch (error) {
-      console.error("Error getting sales stats:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: getMonthlySales
-  getMonthlySales: async (month = null) => {
-    try {
-      const targetMonth = month || new Date().toISOString().slice(0, 7);
-
-      // Try to get from monthly path first
-      const monthlyResult = await dbUtils.readData(
-        `${DB_PATHS.SALES}/monthly/${targetMonth}`
-      );
-
-      if (monthlyResult.success && monthlyResult.data) {
-        return { success: true, data: monthlyResult.data };
-      }
-
-      // Fallback: Calculate from all sales
-      const allSalesResult = await salesService.getAllSales();
-
-      if (!allSalesResult.success) {
-        return allSalesResult;
-      }
-
-      const monthSales = allSalesResult.data.filter((sale) =>
-        sale.date?.startsWith(targetMonth)
-      );
-
-      const monthlyData = monthSales.reduce(
-        (acc, sale) => ({
-          total_quantity: acc.total_quantity + (sale.quantity || 0),
-          total_revenue: acc.total_revenue + (sale.total_amount || 0),
-          total_tax: acc.total_tax + (sale.total_tax || 0),
-          transactions_count: acc.transactions_count + 1,
-          average_price: 0, // Will calculate below
-        }),
-        {
-          total_quantity: 0,
-          total_revenue: 0,
-          total_tax: 0,
-          transactions_count: 0,
-          average_price: 0,
-        }
-      );
-
-      monthlyData.average_price =
-        monthlyData.total_quantity > 0
-          ? monthlyData.total_revenue / monthlyData.total_quantity
-          : 0;
-
-      return { success: true, data: monthlyData };
-    } catch (error) {
-      console.error("Error getting monthly sales:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: getMonthlyProduction (for Dashboard compatibility)
-  getMonthlyProduction: async (month = null) => {
-    try {
-      const targetMonth = month || new Date().toISOString().slice(0, 7);
-      const result = await dbUtils.readData(
-        `bricks/production/monthly/${targetMonth}`
-      );
-
-      return {
-        success: true,
-        data: result.data || { total_quantity: 0, total_production: 0 },
-      };
-    } catch (error) {
-      console.error("Error getting monthly production:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: getSaleById
-  getSaleById: async (saleId) => {
-    try {
-      // Try to get by invoice number first
-      const result = await salesService.getSaleByInvoice(saleId);
-      return result;
-    } catch (error) {
-      console.error("Error getting sale by ID:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: updateCustomerInfo
-  updateCustomerInfo: async (customerData) => {
-    try {
-      const { phone, ...otherData } = customerData;
-
-      if (!phone) {
-        return { success: false, error: "Phone number is required" };
-      }
-
-      const customerEntry = {
-        ...otherData,
-        updated_date: dbUtils.dateString(),
-      };
-
-      const result = await dbUtils.writeData(
-        `${DB_PATHS.CUSTOMERS}/${phone}`,
-        customerEntry
-      );
-      return result;
-    } catch (error) {
-      console.error("Error updating customer info:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Backward compatibility: cancelSale
-  cancelSale: async (saleId, reason = "") => {
-    try {
-      const saleResult = await salesService.getSaleById(saleId);
-
-      if (!saleResult.success) {
-        return { success: false, error: "Sale not found" };
-      }
-
-      const updatedData = {
-        status: "cancelled",
-        cancellation_reason: reason,
-        cancelled_date: dbUtils.dateString(),
-        cancelled_timestamp: dbUtils.timestamp(),
-      };
-
-      const result = await salesService.updateSale(saleId, updatedData);
-      return result;
-    } catch (error) {
-      console.error("Error cancelling sale:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  /**
-   * UTILITY FUNCTIONS
-   */
-
-  // Calculate taxes for a given amount
-  calculateTaxes: (taxableAmount, isInterState = false) => {
-    return calculateGSTAmounts(taxableAmount, isInterState);
-  },
-
-  // Generate invoice number (utility function)
-  generateInvoiceNumber,
 };

@@ -17,22 +17,79 @@ import {
 // Import constants and utilities
 import { DEFAULT_COMPANY_INFO, DEFAULT_BANK_DETAILS } from '../../utils/constants';
 
-const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
-  if (!saleData) return null;
+const GSTInvoiceViewer = ({ 
+  open, 
+  onClose, 
+  saleData, 
+  onPrint,
+  // NEW: Additional props for invoice generator (optional)
+  customerData,
+  invoiceData,
+  brickQuantity,
+  pricePerBrick,
+  isGSTInvoice
+}) => {
+  // Handle both existing usage (saleData) and new usage (direct props)
+  let actualSaleData = saleData;
+  
+  // If called from invoice generator, create saleData-like object
+  if (!saleData && customerData && brickQuantity !== undefined) {
+    // Use actual state information from customerData instead of hardcoding
+    const actualState = customerData.actualState || customerData.customer_state || 'GUJARAT';
+    const actualStateCode = customerData.actualStateCode || customerData.customer_state_code || '24';
+    
+    actualSaleData = {
+      customer_name: customerData.name,
+      customer_phone: customerData.phone,
+      customer_email: customerData.email,
+      customer_address: customerData.address || customerData.phone, // Use phone as address fallback
+      customer_state: actualState, // Use actual state instead of hardcoding
+      customer_state_code: actualStateCode, // Use actual state code instead of hardcoding
+      customer_gstin: customerData.gstin || '',
+      quantity: brickQuantity,
+      price_per_brick: pricePerBrick || 2.5,
+      discount_amount: 0,
+      date: new Date().toISOString().split('T')[0],
+      invoice_number: `${isGSTInvoice ? 'GST' : 'NGST'}-${Date.now().toString().slice(-6)}`,
+      includeGST: isGSTInvoice || false,
+      include_gst: isGSTInvoice || false,
+      gst_included: isGSTInvoice || false
+    };
+  }
 
-  // Calculate GST amounts
-  const subtotal = saleData.quantity * saleData.price_per_brick;
-  const discountAmount = saleData.discount_amount || 0;
+  if (!actualSaleData) return null;
+
+  // Check if GST was included during sale recording
+  const isGSTIncluded = actualSaleData.includeGST || actualSaleData.include_gst || actualSaleData.gst_included || false;
+
+  // Calculate amounts based on whether GST was included
+  const subtotal = actualSaleData.quantity * actualSaleData.price_per_brick;
+  const discountAmount = actualSaleData.discount_amount || 0;
   const taxableAmount = subtotal - discountAmount;
-  const isInterState = saleData.customer_state !== "GJ"; // Compare with Gujarat state code
+  
+  // Fix state comparison - handle both 'GJ' and 'GUJARAT' formats
+  const customerState = actualSaleData.customer_state || '';
+  const isInterState = customerState !== "GJ" && customerState !== "GUJARAT" && customerState !== "Gujarat";
   
   let cgstAmount = 0, sgstAmount = 0, igstAmount = 0;
-  if (isInterState) {
-    igstAmount = (taxableAmount * 12) / 100; // 12% IGST for inter-state
-  } else {
-    cgstAmount = (taxableAmount * 6) / 100; // 6% CGST for intra-state
-    sgstAmount = (taxableAmount * 6) / 100; // 6% SGST for intra-state
+  
+  if (isGSTIncluded) {
+    // Use stored GST amounts if available, otherwise calculate
+    if (actualSaleData.cgst_amount !== undefined || actualSaleData.sgst_amount !== undefined || actualSaleData.igst_amount !== undefined) {
+      cgstAmount = actualSaleData.cgst_amount || 0;
+      sgstAmount = actualSaleData.sgst_amount || 0;
+      igstAmount = actualSaleData.igst_amount || 0;
+    } else {
+      // Calculate GST amounts
+      if (isInterState) {
+        igstAmount = (taxableAmount * 12) / 100; // 12% IGST for inter-state
+      } else {
+        cgstAmount = (taxableAmount * 6) / 100; // 6% CGST for intra-state
+        sgstAmount = (taxableAmount * 6) / 100; // 6% SGST for intra-state
+      }
+    }
   }
+  // If GST not included, all GST amounts remain 0
   
   const totalTax = cgstAmount + sgstAmount + igstAmount;
   const totalAmount = taxableAmount + totalTax;
@@ -189,6 +246,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
       onClose={onClose} 
       maxWidth="lg" 
       fullWidth
+      sx={{ zIndex: 1400 }} // Added for proper layering with invoice generator
       PaperProps={{
         sx: { 
           maxHeight: '90vh',
@@ -213,7 +271,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
           {/* Header */}
           <Box sx={{ textAlign: 'center', mb: 1 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '14px' }}>
-              TAX INVOICE
+              {isGSTIncluded ? 'TAX INVOICE' : 'INVOICE'}
             </Typography>
           </Box>
 
@@ -243,7 +301,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                 <strong>Tax is Payable On Reverse Charge:</strong> NO
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>Invoice Number:</strong> {saleData.invoice_number || 'B18'}
+                <strong>Invoice Number:</strong> {actualSaleData.invoice_number || 'B18'}
               </Typography>
             </Box>
             <Box sx={{ flex: 1, p: 1 }}>
@@ -251,7 +309,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                 <strong>Transportation Mode:</strong> BY ROAD
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>Invoice Date:</strong> {formatDate(saleData.date)}
+                <strong>Invoice Date:</strong> {formatDate(actualSaleData.date)}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
                 <strong>State Code:</strong> 24
@@ -266,19 +324,19 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                 Details of Receiver
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>Name:</strong> {saleData.customer_name}
+                <strong>Name:</strong> {actualSaleData.customer_name}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>Address:</strong> {saleData.customer_address}
+                <strong>Address:</strong> {actualSaleData.customer_address}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>State:</strong> {saleData.customer_state}
+                <strong>State:</strong> {actualSaleData.customer_state}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>State Code:</strong> {saleData.customer_state_code || '24'}
+                <strong>State Code:</strong> {actualSaleData.customer_state_code || '24'}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>GSTIN Number:</strong> {saleData.customer_gstin || '24AAOFC4870G1ZC'}
+                <strong>GSTIN Number:</strong> {actualSaleData.customer_gstin || '-'}
               </Typography>
             </Box>
             <Box sx={{ flex: 1, p: 1 }}>
@@ -286,19 +344,19 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                 Billed To
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>Name:</strong> {saleData.customer_name}
+                <strong>Name:</strong> {actualSaleData.customer_name}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>Address:</strong> {saleData.customer_address}
+                <strong>Address:</strong> {actualSaleData.customer_address}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>State:</strong> {saleData.customer_state}
+                <strong>State:</strong> {actualSaleData.customer_state}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>State Code:</strong> {saleData.customer_state_code || '24'}
+                <strong>State Code:</strong> {actualSaleData.customer_state_code || '24'}
               </Typography>
               <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>GSTIN Number:</strong> {saleData.customer_gstin || '24AAOFC4870G1ZC'}
+                <strong>GSTIN Number:</strong> {actualSaleData.customer_gstin || '-'}
               </Typography>
             </Box>
           </Box>
@@ -349,10 +407,10 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                     6815
                   </TableCell>
                   <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
-                    {saleData.quantity.toLocaleString()}
+                    {actualSaleData.quantity.toLocaleString()}
                   </TableCell>
                   <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center', borderRight: '2px solid black' }}>
-                    {saleData.price_per_brick.toFixed(2)}
+                    {actualSaleData.price_per_brick.toFixed(2)}
                   </TableCell>
                   <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
                     {taxableAmount.toFixed(2)}
@@ -387,7 +445,7 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
                     &nbsp;
                   </TableCell>
                   <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
-                    {saleData.quantity.toLocaleString()}
+                    {actualSaleData.quantity.toLocaleString()}
                   </TableCell>
                   <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, borderRight: '2px solid black' }}>
                     &nbsp;
@@ -449,6 +507,9 @@ const GSTInvoiceViewer = ({ open, onClose, saleData, onPrint }) => {
             <Box sx={{ flex: 1, p: 1, borderRight: '1px solid black' }}>
               <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
                 Amount of Tax Subject To Reverse Charge
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: '11px', mb: 1 }}>
+                NO
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1, mt: 2 }}>
                 Bank Details

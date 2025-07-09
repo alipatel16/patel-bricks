@@ -1,9 +1,12 @@
-import { dbUtils } from './firebase';
-import { DB_PATHS } from '../utils/constants';
-import { calculateInventoryValue, isStockLow } from '../utils/calculations';
+// Enhanced Inventory Service with Real-time Sync
+// services/inventoryService.js - Updated version
+
+import { dbUtils } from "./firebase";
+import { DB_PATHS } from "../utils/constants";
+import { calculateInventoryValue, isStockLow } from "../utils/calculations";
 
 /**
- * Inventory Service - Handles all inventory-related operations
+ * Inventory Service - Handles all inventory-related operations with real-time sync
  */
 
 export const inventoryService = {
@@ -17,109 +20,255 @@ export const inventoryService = {
       const result = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
       return {
         success: true,
-        data: result.data || { total_stock: 0, last_updated: Date.now() }
+        data: result.data || { total_stock: 0, last_updated: Date.now() },
       };
     } catch (error) {
-      console.error('Error getting brick inventory:', error);
+      console.error("Error getting brick inventory:", error);
       return { success: false, error: error.message };
     }
   },
 
-  // Update brick stock (add or subtract)
-  updateBrickStock: async (quantity, operation = 'add', notes = '') => {
+  // Update brick stock (add or subtract) with comprehensive sync
+  updateBrickStock: async (quantity, operation = "add", notes = "") => {
     try {
-      const { data: currentInventory } = await inventoryService.getBrickInventory();
-      
+      const { data: currentInventory } =
+        await inventoryService.getBrickInventory();
+
       let newStock;
-      if (operation === 'add') {
+      if (operation === "add") {
         newStock = currentInventory.total_stock + quantity;
-      } else if (operation === 'subtract') {
+      } else if (operation === "subtract") {
         newStock = Math.max(0, currentInventory.total_stock - quantity);
       } else {
         throw new Error('Invalid operation. Use "add" or "subtract"');
       }
 
-      const updates = {
-        [`${DB_PATHS.INVENTORY.BRICKS}/total_stock`]: newStock,
-        [`${DB_PATHS.INVENTORY.BRICKS}/last_updated`]: dbUtils.timestamp(),
+      const timestamp = dbUtils.timestamp();
+      const updates = {};
+
+      // 1. Update main inventory path
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/total_stock`] = newStock;
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/last_updated`] = timestamp;
+
+      // 2. Update legacy path if it exists (for backward compatibility)
+      updates[`${DB_PATHS.BRICKS}/total_stock`] = newStock;
+      updates[`${DB_PATHS.BRICKS}/last_updated`] = timestamp;
+
+      // 3. Log the transaction in inventory history
+      const transactionKey = `adj_${timestamp}`;
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/history/${transactionKey}`] = {
+        type: "adjustment",
+        operation,
+        quantity,
+        previous_stock: currentInventory.total_stock,
+        new_stock: newStock,
+        notes,
+        date: dbUtils.dateString(),
+        timestamp,
+        reference: `INVENTORY_${operation.toUpperCase()}_${transactionKey}`,
       };
 
-      // Log the transaction
-      if (notes) {
-        const transactionKey = dbUtils.timestamp();
-        updates[`${DB_PATHS.INVENTORY.BRICKS}/transactions/${transactionKey}`] = {
-          operation,
-          quantity,
-          previous_stock: currentInventory.total_stock,
-          new_stock: newStock,
-          notes,
-          timestamp: dbUtils.timestamp(),
-        };
-      }
+      // 4. Update inventory transaction log for tracking
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/transactions/${transactionKey}`] = {
+        operation,
+        quantity,
+        previous_stock: currentInventory.total_stock,
+        new_stock: newStock,
+        notes,
+        timestamp,
+      };
+
+      // 5. Update global inventory summary for dashboard
+      updates[`inventory_summary/bricks`] = {
+        total_stock: newStock,
+        last_updated: timestamp,
+        last_operation: operation,
+        last_change: operation === "add" ? quantity : -quantity,
+      };
 
       const result = await dbUtils.batchUpdate(updates);
-      
+
       if (result.success) {
+        // Trigger inventory change event for real-time sync
+        inventoryService.triggerInventoryUpdate("bricks", {
+          previous_stock: currentInventory.total_stock,
+          new_stock: newStock,
+          change: operation === "add" ? quantity : -quantity,
+          operation,
+          timestamp,
+        });
+
         return {
           success: true,
           data: {
             previous_stock: currentInventory.total_stock,
             new_stock: newStock,
-            change: operation === 'add' ? quantity : -quantity,
-          }
+            change: operation === "add" ? quantity : -quantity,
+          },
+          message: `Brick stock ${
+            operation === "add" ? "increased" : "decreased"
+          } by ${quantity}. New total: ${newStock}`,
         };
       }
-      
+
       return result;
     } catch (error) {
-      console.error('Error updating brick stock:', error);
+      console.error("Error updating brick stock:", error);
       return { success: false, error: error.message };
     }
   },
 
-  // Set brick stock to specific amount
-  setBrickStock: async (quantity, notes = 'Manual adjustment') => {
+  // Set brick stock to specific amount with comprehensive sync
+  setBrickStock: async (quantity, notes = "Manual adjustment") => {
     try {
-      const { data: currentInventory } = await inventoryService.getBrickInventory();
-      
-      const updates = {
-        [`${DB_PATHS.INVENTORY.BRICKS}/total_stock`]: quantity,
-        [`${DB_PATHS.INVENTORY.BRICKS}/last_updated`]: dbUtils.timestamp(),
+      const { data: currentInventory } =
+        await inventoryService.getBrickInventory();
+      const change = quantity - currentInventory.total_stock;
+
+      const timestamp = dbUtils.timestamp();
+      const updates = {};
+
+      // 1. Update main inventory path
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/total_stock`] = quantity;
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/last_updated`] = timestamp;
+
+      // 2. Update legacy path if it exists (for backward compatibility)
+      updates[`${DB_PATHS.BRICKS}/total_stock`] = quantity;
+      updates[`${DB_PATHS.BRICKS}/last_updated`] = timestamp;
+
+      // 3. Log the transaction
+      const transactionKey = `set_${timestamp}`;
+      updates[`${DB_PATHS.INVENTORY.BRICKS}/history/${transactionKey}`] = {
+        type: "adjustment",
+        operation: "set",
+        quantity,
+        previous_stock: currentInventory.total_stock,
+        new_stock: quantity,
+        change,
+        notes,
+        date: dbUtils.dateString(),
+        timestamp,
+        reference: `INVENTORY_SET_${transactionKey}`,
       };
 
-      // Log the adjustment
-      const transactionKey = dbUtils.timestamp();
+      // 4. Update inventory transaction log
       updates[`${DB_PATHS.INVENTORY.BRICKS}/transactions/${transactionKey}`] = {
-        operation: 'set',
+        operation: "set",
         quantity,
         previous_stock: currentInventory.total_stock,
         new_stock: quantity,
         notes,
-        timestamp: dbUtils.timestamp(),
+        timestamp,
+      };
+
+      // 5. Update global inventory summary
+      updates[`inventory_summary/bricks`] = {
+        total_stock: quantity,
+        last_updated: timestamp,
+        last_operation: "set",
+        last_change: change,
       };
 
       const result = await dbUtils.batchUpdate(updates);
-      
+
       if (result.success) {
+        // Trigger inventory change event for real-time sync
+        inventoryService.triggerInventoryUpdate("bricks", {
+          previous_stock: currentInventory.total_stock,
+          new_stock: quantity,
+          change,
+          operation: "set",
+          timestamp,
+        });
+
         return {
           success: true,
           data: {
             previous_stock: currentInventory.total_stock,
             new_stock: quantity,
-            change: quantity - currentInventory.total_stock,
-          }
+            change,
+          },
+          message: `Brick stock set to ${quantity}. Change: ${
+            change > 0 ? "+" : ""
+          }${change}`,
         };
       }
-      
+
       return result;
     } catch (error) {
-      console.error('Error setting brick stock:', error);
+      console.error("Error setting brick stock:", error);
       return { success: false, error: error.message };
     }
   },
 
   /**
-   * CEMENT INVENTORY OPERATIONS
+   * REAL-TIME SYNC FUNCTIONS
+   */
+
+  // Event listeners for inventory changes
+  inventoryListeners: new Set(),
+
+  // Add listener for inventory changes
+  addInventoryListener: (callback) => {
+    inventoryService.inventoryListeners.add(callback);
+    return () => inventoryService.inventoryListeners.delete(callback);
+  },
+
+  // Trigger inventory update event
+  triggerInventoryUpdate: (type, data) => {
+    const updateEvent = {
+      type,
+      data,
+      timestamp: Date.now(),
+    };
+
+    // Notify all listeners
+    inventoryService.inventoryListeners.forEach((callback) => {
+      try {
+        callback(updateEvent);
+      } catch (error) {
+        console.error("Error in inventory listener:", error);
+      }
+    });
+  },
+
+  // Listen to inventory changes in Firebase
+  listenToInventoryChanges: (callback) => {
+    const unsubscribeBricks = dbUtils.listenToData(
+      `${DB_PATHS.INVENTORY.BRICKS}/total_stock`,
+      (newStock) => {
+        if (newStock !== null) {
+          callback({
+            type: "bricks",
+            data: { total_stock: newStock },
+            timestamp: Date.now(),
+          });
+        }
+      }
+    );
+
+    const unsubscribeCement = dbUtils.listenToData(
+      `${DB_PATHS.INVENTORY.CEMENT}/total_bags`,
+      (newBags) => {
+        if (newBags !== null) {
+          callback({
+            type: "cement",
+            data: { total_bags: newBags },
+            timestamp: Date.now(),
+          });
+        }
+      }
+    );
+
+    // Return cleanup function
+    return () => {
+      unsubscribeBricks();
+      unsubscribeCement();
+    };
+  },
+
+  /**
+   * CEMENT INVENTORY OPERATIONS (Enhanced)
    */
 
   // Get current cement inventory
@@ -128,85 +277,99 @@ export const inventoryService = {
       const result = await dbUtils.readData(DB_PATHS.INVENTORY.CEMENT);
       return {
         success: true,
-        data: result.data || { 
-          total_bags: 0, 
-          cost_per_bag: 25, 
-          last_updated: Date.now() 
-        }
+        data: result.data || {
+          total_bags: 0,
+          cost_per_bag: 25,
+          last_updated: Date.now(),
+        },
       };
     } catch (error) {
-      console.error('Error getting cement inventory:', error);
+      console.error("Error getting cement inventory:", error);
       return { success: false, error: error.message };
     }
   },
 
-  // Update cement stock
-  updateCementStock: async (bags, operation = 'add', costPerBag = null, notes = '') => {
+  // Update cement stock with sync
+  updateCementStock: async (
+    bags,
+    operation = "add",
+    costPerBag = null,
+    notes = ""
+  ) => {
     try {
-      const { data: currentInventory } = await inventoryService.getCementInventory();
-      
+      const { data: currentInventory } =
+        await inventoryService.getCementInventory();
+
       let newStock;
-      if (operation === 'add') {
+      if (operation === "add") {
         newStock = currentInventory.total_bags + bags;
-      } else if (operation === 'subtract') {
+      } else if (operation === "subtract") {
         newStock = Math.max(0, currentInventory.total_bags - bags);
       } else {
         throw new Error('Invalid operation. Use "add" or "subtract"');
       }
 
-      const updates = {
-        [`${DB_PATHS.INVENTORY.CEMENT}/total_bags`]: newStock,
-        [`${DB_PATHS.INVENTORY.CEMENT}/last_updated`]: dbUtils.timestamp(),
-      };
+      const timestamp = dbUtils.timestamp();
+      const updates = {};
 
-      // Update cost per bag if provided
+      // Update cement inventory
+      updates[`${DB_PATHS.INVENTORY.CEMENT}/total_bags`] = newStock;
+      updates[`${DB_PATHS.INVENTORY.CEMENT}/last_updated`] = timestamp;
+
       if (costPerBag !== null) {
         updates[`${DB_PATHS.INVENTORY.CEMENT}/cost_per_bag`] = costPerBag;
       }
 
-      // Log the transaction
-      if (notes) {
-        const transactionKey = dbUtils.timestamp();
-        updates[`${DB_PATHS.INVENTORY.CEMENT}/transactions/${transactionKey}`] = {
-          operation,
-          bags,
-          previous_stock: currentInventory.total_bags,
-          new_stock: newStock,
-          cost_per_bag: costPerBag || currentInventory.cost_per_bag,
-          notes,
-          timestamp: dbUtils.timestamp(),
-        };
-      }
+      // Log transaction
+      const transactionKey = `cement_${timestamp}`;
+      updates[`${DB_PATHS.INVENTORY.CEMENT}/transactions/${transactionKey}`] = {
+        operation,
+        bags,
+        previous_stock: currentInventory.total_bags,
+        new_stock: newStock,
+        cost_per_bag: costPerBag || currentInventory.cost_per_bag,
+        notes,
+        timestamp,
+      };
 
       const result = await dbUtils.batchUpdate(updates);
-      
+
       if (result.success) {
+        // Trigger cement inventory update
+        inventoryService.triggerInventoryUpdate("cement", {
+          previous_stock: currentInventory.total_bags,
+          new_stock: newStock,
+          change: operation === "add" ? bags : -bags,
+          operation,
+          timestamp,
+        });
+
         return {
           success: true,
           data: {
             previous_stock: currentInventory.total_bags,
             new_stock: newStock,
-            change: operation === 'add' ? bags : -bags,
-          }
+            change: operation === "add" ? bags : -bags,
+            cost_per_bag: costPerBag || currentInventory.cost_per_bag,
+          },
         };
       }
-      
+
       return result;
     } catch (error) {
-      console.error('Error updating cement stock:', error);
+      console.error("Error updating cement stock:", error);
       return { success: false, error: error.message };
     }
   },
 
-  // Purchase cement (add to stock with cost tracking)
-  purchaseCement: async (bags, costPerBag, supplier = '', notes = '') => {
+  purchaseCement: async (bags, costPerBag, supplier = "", notes = "") => {
     try {
       // First update the stock
       const stockResult = await inventoryService.updateCementStock(
-        bags, 
-        'add', 
-        costPerBag, 
-        `Purchase from ${supplier || 'Supplier'}`
+        bags,
+        "add",
+        costPerBag,
+        `Purchase from ${supplier || "Supplier"}`
       );
 
       if (!stockResult.success) {
@@ -218,14 +381,14 @@ export const inventoryService = {
         bags,
         cost_per_bag: costPerBag,
         total_cost: bags * costPerBag,
-        supplier: supplier || 'Unknown Supplier',
+        supplier: supplier || "Unknown Supplier",
         notes,
         date: dbUtils.dateString(),
         timestamp: dbUtils.timestamp(),
       };
 
       const purchaseResult = await dbUtils.pushData(
-        `${DB_PATHS.CEMENT}/purchases`, 
+        `${DB_PATHS.CEMENT}/purchases`,
         purchaseData
       );
 
@@ -236,105 +399,287 @@ export const inventoryService = {
             purchase_id: purchaseResult.key,
             ...purchaseData,
             stock_update: stockResult.data,
-          }
+          },
         };
       }
 
       return purchaseResult;
     } catch (error) {
-      console.error('Error purchasing cement:', error);
+      console.error("Error purchasing cement:", error);
       return { success: false, error: error.message };
     }
   },
 
   /**
-   * COMBINED INVENTORY OPERATIONS
+   * UTILITY FUNCTIONS
    */
 
   // Get complete inventory status
   getInventoryStatus: async () => {
     try {
-      const [brickResult, cementResult, settingsResult] = await Promise.all([
+      const [brickResult, cementResult] = await Promise.all([
         inventoryService.getBrickInventory(),
         inventoryService.getCementInventory(),
-        dbUtils.readData(DB_PATHS.SETTINGS),
       ]);
 
-      if (!brickResult.success || !cementResult.success) {
-        throw new Error('Failed to fetch inventory data');
+      if (brickResult.success && cementResult.success) {
+        return {
+          success: true,
+          data: {
+            bricks: brickResult.data,
+            cement: cementResult.data,
+            last_updated: Math.max(
+              brickResult.data.last_updated || 0,
+              cementResult.data.last_updated || 0
+            ),
+          },
+        };
       }
 
-      const settings = settingsResult.data || {};
-      const brickData = brickResult.data;
-      const cementData = cementResult.data;
-
-      // Calculate inventory values
-      const inventoryValue = calculateInventoryValue(
-        brickData.total_stock,
-        settings.default_brick_price || 2.5,
-        cementData.total_bags,
-        cementData.cost_per_bag
-      );
-
-      // Check stock alerts
-      const lowStockAlerts = {
-        bricks: isStockLow(
-          brickData.total_stock, 
-          settings.low_stock_alert?.bricks || 1000
-        ),
-        cement: isStockLow(
-          cementData.total_bags, 
-          settings.low_stock_alert?.cement || 10
-        ),
-      };
-
-      return {
-        success: true,
-        data: {
-          bricks: brickData,
-          cement: cementData,
-          inventory_value: inventoryValue,
-          low_stock_alerts: lowStockAlerts,
-          last_updated: Math.max(
-            brickData.last_updated || 0,
-            cementData.last_updated || 0
-          ),
-        }
-      };
+      return { success: false, error: "Failed to load inventory status" };
     } catch (error) {
-      console.error('Error getting inventory status:', error);
+      console.error("Error getting inventory status:", error);
       return { success: false, error: error.message };
     }
   },
 
+  // Listen to brick inventory changes
+  listenToBrickInventory: (callback) => {
+    try {
+      return dbUtils.listenToData(DB_PATHS.INVENTORY.BRICKS, callback);
+    } catch (error) {
+      console.error("Error setting up brick inventory listener:", error);
+      return () => {}; // Return empty cleanup function
+    }
+  },
+
+  // Listen to cement inventory changes
+  listenToCementInventory: (callback) => {
+    try {
+      return dbUtils.listenToData(DB_PATHS.INVENTORY.CEMENT, callback);
+    } catch (error) {
+      console.error("Error setting up cement inventory listener:", error);
+      return () => {}; // Return empty cleanup function
+    }
+  },
+
+  // Listen to complete inventory status - THIS IS THE MISSING FUNCTION
+  listenToInventoryStatus: (callback) => {
+    try {
+      const unsubscribers = [];
+
+      // Listen to both brick and cement inventory
+      const brickUnsubscriber = inventoryService.listenToBrickInventory(() => {
+        // When brick inventory changes, get complete status and call callback
+        inventoryService
+          .getInventoryStatus()
+          .then(callback)
+          .catch((error) => {
+            console.error("Error getting inventory status:", error);
+            callback({ success: false, error: error.message });
+          });
+      });
+
+      const cementUnsubscriber = inventoryService.listenToCementInventory(
+        () => {
+          // When cement inventory changes, get complete status and call callback
+          inventoryService
+            .getInventoryStatus()
+            .then(callback)
+            .catch((error) => {
+              console.error("Error getting inventory status:", error);
+              callback({ success: false, error: error.message });
+            });
+        }
+      );
+
+      unsubscribers.push(brickUnsubscriber, cementUnsubscriber);
+
+      // Return function to unsubscribe from all listeners
+      return () => {
+        unsubscribers.forEach((unsubscribe) => {
+          try {
+            if (typeof unsubscribe === "function") {
+              unsubscribe();
+            }
+          } catch (error) {
+            console.error(
+              "Error unsubscribing from inventory listener:",
+              error
+            );
+          }
+        });
+      };
+    } catch (error) {
+      console.error("Error setting up inventory status listener:", error);
+      return () => {}; // Return empty cleanup function
+    }
+  },
+
+  // Get complete inventory status - MAKE SURE THIS EXISTS TOO
+  getInventoryStatus: async () => {
+    try {
+      const [brickResult, cementResult] = await Promise.all([
+        inventoryService.getBrickInventory(),
+        inventoryService.getCementInventory(),
+      ]);
+
+      if (brickResult.success && cementResult.success) {
+        const bricks = brickResult.data;
+        const cement = cementResult.data;
+
+        // Calculate inventory value
+        const brickPrice = 6.15; // Default price per brick
+        const brickValue = (bricks.total_stock || 0) * brickPrice;
+        const cementValue =
+          (cement.total_bags || 0) * (cement.cost_per_bag || 25);
+        const totalValue = brickValue + cementValue;
+
+        // Check for low stock alerts
+        const low_stock_alerts = {
+          bricks: (bricks.total_stock || 0) <= 1000, // LOW_STOCK_ALERTS.BRICKS
+          cement: (cement.total_bags || 0) <= 10, // LOW_STOCK_ALERTS.CEMENT
+        };
+
+        const inventory_value = {
+          brickValue: brickValue.toFixed(2),
+          cementValue: cementValue.toFixed(2),
+          totalValue: totalValue.toFixed(2),
+        };
+
+        return {
+          success: true,
+          data: {
+            bricks,
+            cement,
+            inventory_value,
+            low_stock_alerts,
+            last_updated: Math.max(
+              bricks.last_updated || 0,
+              cement.last_updated || 0
+            ),
+          },
+        };
+      }
+
+      return { success: false, error: "Failed to load inventory status" };
+    } catch (error) {
+      console.error("Error getting inventory status:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Get all manual inventory adjustments for brick stock calculation
+   */
+  getInventoryAdjustments: async () => {
+    try {
+      console.log("📋 Fetching inventory adjustments...");
+
+      // Get adjustments from both history and transactions paths
+      const [historyResult, transactionsResult] = await Promise.all([
+        dbUtils.readData(`${DB_PATHS.INVENTORY.BRICKS}/history`),
+        dbUtils.readData(`${DB_PATHS.INVENTORY.BRICKS}/transactions`),
+      ]);
+
+      const adjustments = [];
+
+      // Process history data (contains detailed adjustment records)
+      if (historyResult.success && historyResult.data) {
+        Object.entries(historyResult.data).forEach(([key, adjustment]) => {
+          // Only include manual adjustments, not production/sales
+          if (adjustment.type === "adjustment") {
+            adjustments.push({
+              id: key,
+              operation: adjustment.operation,
+              quantity: adjustment.quantity,
+              change: adjustment.change,
+              previous_stock: adjustment.previous_stock,
+              new_stock: adjustment.new_stock,
+              notes: adjustment.notes,
+              date: adjustment.date,
+              timestamp: adjustment.timestamp,
+              reference: adjustment.reference,
+              source: "history",
+            });
+          }
+        });
+      }
+
+      // If history is empty, fall back to transactions data
+      if (
+        adjustments.length === 0 &&
+        transactionsResult.success &&
+        transactionsResult.data
+      ) {
+        Object.entries(transactionsResult.data).forEach(
+          ([key, transaction]) => {
+            adjustments.push({
+              id: key,
+              operation: transaction.operation,
+              quantity: transaction.quantity,
+              change: transaction.new_stock - transaction.previous_stock,
+              previous_stock: transaction.previous_stock,
+              new_stock: transaction.new_stock,
+              notes: transaction.notes,
+              timestamp: transaction.timestamp,
+              source: "transactions",
+            });
+          }
+        );
+      }
+
+      // Sort by timestamp (oldest first) for accurate calculation
+      adjustments.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+      console.log(`📋 Found ${adjustments.length} inventory adjustments`);
+
+      return {
+        success: true,
+        data: adjustments,
+      };
+    } catch (error) {
+      console.error("Error getting inventory adjustments:", error);
+      return {
+        success: false,
+        error: error.message,
+        data: [],
+      };
+    }
+  },
+
   // Get inventory history/transactions
-  getInventoryHistory: async (type = 'all', limit = 50) => {
+  getInventoryHistory: async (type = "all", limit = 50) => {
     try {
       const paths = [];
-      
-      if (type === 'all' || type === 'bricks') {
+
+      if (type === "all" || type === "bricks") {
         paths.push(`${DB_PATHS.INVENTORY.BRICKS}/transactions`);
       }
-      
-      if (type === 'all' || type === 'cement') {
+
+      if (type === "all" || type === "cement") {
         paths.push(`${DB_PATHS.INVENTORY.CEMENT}/transactions`);
         paths.push(`${DB_PATHS.CEMENT}/purchases`);
       }
 
       const results = await Promise.all(
-        paths.map(path => dbUtils.readData(path))
+        paths.map((path) => dbUtils.readData(path))
       );
 
       const allTransactions = [];
-      
+
       results.forEach((result, index) => {
         if (result.success && result.data) {
-          const transactions = Object.entries(result.data).map(([key, data]) => ({
-            id: key,
-            type: paths[index].includes('bricks') ? 'brick' : 'cement',
-            category: paths[index].includes('purchases') ? 'purchase' : 'adjustment',
-            ...data,
-          }));
+          const transactions = Object.entries(result.data).map(
+            ([key, data]) => ({
+              id: key,
+              type: paths[index].includes("bricks") ? "brick" : "cement",
+              category: paths[index].includes("purchases")
+                ? "purchase"
+                : "adjustment",
+              ...data,
+            })
+          );
           allTransactions.push(...transactions);
         }
       });
@@ -349,43 +694,68 @@ export const inventoryService = {
         data: sortedTransactions,
       };
     } catch (error) {
-      console.error('Error getting inventory history:', error);
+      console.error("Error getting inventory history:", error);
       return { success: false, error: error.message };
     }
   },
 
-  /**
-   * REAL-TIME LISTENERS
-   */
+  // Simple force refresh for immediate sync
+  forceRefreshInventory: async () => {
+    try {
+      // Read current stock from database
+      const brickResult = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
+      const cementResult = await dbUtils.readData(DB_PATHS.INVENTORY.CEMENT);
 
-  // Listen to brick inventory changes
-  listenToBrickInventory: (callback) => {
-    return dbUtils.listenToData(DB_PATHS.INVENTORY.BRICKS, callback);
+      // Trigger a custom event to notify all components
+      const inventoryUpdateEvent = new CustomEvent("inventoryUpdated", {
+        detail: {
+          bricks: brickResult.data || { total_stock: 0 },
+          cement: cementResult.data || { total_bags: 0 },
+          timestamp: Date.now(),
+        },
+      });
+
+      window.dispatchEvent(inventoryUpdateEvent);
+
+      return {
+        success: true,
+        data: {
+          bricks: brickResult.data,
+          cement: cementResult.data,
+        },
+      };
+    } catch (error) {
+      console.error("Error refreshing inventory:", error);
+      return { success: false, error: error.message };
+    }
   },
 
-  // Listen to cement inventory changes
-  listenToCementInventory: (callback) => {
-    return dbUtils.listenToData(DB_PATHS.INVENTORY.CEMENT, callback);
-  },
+  // Force sync all inventory data across the app
+  forceSyncInventory: async () => {
+    try {
+      const status = await inventoryService.getInventoryStatus();
 
-  // Listen to complete inventory status
-  listenToInventoryStatus: (callback) => {
-    const unsubscribers = [];
-    
-    // Listen to both brick and cement inventory
-    const brickUnsubscriber = inventoryService.listenToBrickInventory(() => {
-      inventoryService.getInventoryStatus().then(callback);
-    });
-    
-    const cementUnsubscriber = inventoryService.listenToCementInventory(() => {
-      inventoryService.getInventoryStatus().then(callback);
-    });
+      if (status.success) {
+        // Trigger update events for all inventory types
+        inventoryService.triggerInventoryUpdate("bricks", {
+          total_stock: status.data.bricks.total_stock,
+          operation: "sync",
+          timestamp: Date.now(),
+        });
 
-    unsubscribers.push(brickUnsubscriber, cementUnsubscriber);
+        inventoryService.triggerInventoryUpdate("cement", {
+          total_bags: status.data.cement.total_bags,
+          operation: "sync",
+          timestamp: Date.now(),
+        });
 
-    // Return function to unsubscribe from all listeners
-    return () => {
-      unsubscribers.forEach(unsubscribe => unsubscribe());
-    };
+        return { success: true, message: "Inventory synced successfully" };
+      }
+
+      return status;
+    } catch (error) {
+      console.error("Error forcing inventory sync:", error);
+      return { success: false, error: error.message };
+    }
   },
 };
