@@ -1,381 +1,807 @@
-// components/sales/InvoiceGenerator.js - Fixed version
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+// components/sales/InvoiceGenerator.js - Updated with GST Invoice Numbering and GSTIN functionality
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Typography,
+  TextField,
   Button,
   Grid,
-  TextField,
-  InputAdornment,
-  Autocomplete,
+  Card,
+  CardContent,
   Box,
-  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Alert,
-  Divider,
-} from '@mui/material';
+  Chip,
+  IconButton,
+  CircularProgress,
+} from "@mui/material";
 import {
-  DateRange as DateRangeIcon,
-  LocationOn as LocationOnIcon,
   Receipt as ReceiptIcon,
-  Warning as WarningIcon,
-} from '@mui/icons-material';
+  Visibility as ViewIcon,
+  Edit as EditIcon,
+  Save as SaveIcon,
+  Close as CloseIcon,
+  Numbers as NumberIcon,
+} from "@mui/icons-material";
+import toast from "react-hot-toast";
+import { formatCurrency, formatQuantity } from "../../utils/calculations";
+import { DB_PATHS } from "../../utils/constants";
+import { dbUtils } from "../../services/firebase";
 
-// Import the invoice viewer component
-import GSTInvoiceViewer from './GSTInvoiceViewer';
+// Import the existing GST Invoice Viewer
+import GSTInvoiceViewer from "./GSTInvoiceViewer";
 
-const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
+const InvoiceGenerator = ({
+  open,
+  onClose,
+  customer,
+  salesHistory,
+  // Props for editing existing invoice
+  editingInvoice = null,
+  isEditMode = false,
+}) => {
   const [formData, setFormData] = useState({
-    fromDate: '',
-    toDate: '',
-    selectedSite: null,
-    allSites: false, // Changed to false since we don't allow "all sites"
-    gstBricks: '',
-    nonGstBricks: '',
+    fromDate: "",
+    toDate: "",
+    selectedSite: "",
+    gstBricks: "",
+    nonGstBricks: "",
   });
+
   const [showInvoice, setShowInvoice] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [generatedInvoiceData, setGeneratedInvoiceData] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
+  const [customerSites, setCustomerSites] = useState([]);
+
+  // Firebase save states
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedInvoiceId, setSavedInvoiceId] = useState(null);
+
+  // Invoice viewer states
   const [gstInvoiceViewerOpen, setGstInvoiceViewerOpen] = useState(false);
   const [nonGstInvoiceViewerOpen, setNonGstInvoiceViewerOpen] = useState(false);
-  const [generatedInvoiceData, setGeneratedInvoiceData] = useState(null);
 
-  // Store customer data when dialog opens to prevent it from being lost
+  // Customer GSTIN state
+  const [customerGSTIN, setCustomerGSTIN] = useState("");
+  const [loadingGSTIN, setLoadingGSTIN] = useState(false);
+
+  // NEW: GST Invoice numbering states
+  const [gstInvoiceConfig, setGstInvoiceConfig] = useState(null);
+  const [loadingInvoiceConfig, setLoadingInvoiceConfig] = useState(false);
+  const [nextGstInvoiceNumber, setNextGstInvoiceNumber] = useState("");
+
+  // NEW: Fetch GST invoice configuration from settings
   useEffect(() => {
-    if (open && customer) {
-      setSelectedCustomer(customer);
-      
-    }
-  }, [open, customer]);
+    const fetchInvoiceConfig = async () => {
+      if (!open) return;
 
-  // Get available sites for the customer
-  const availableSites = useMemo(() => {
-    if (!selectedCustomer || !salesHistory) {
-      return [];
-    }
-    
-    const sites = new Set();
-    const customerSales = salesHistory.filter(sale => {
-      const isMatch = sale.customer_name === selectedCustomer.name && 
-                     sale.customer_phone === selectedCustomer.phone;
-      
-      if (isMatch && sale.location_name) {
-        sites.add(sale.location_name);
+      try {
+        setLoadingInvoiceConfig(true);
+        const result = await dbUtils.readData("settings/invoice_config");
+
+        if (result.success && result.data && result.data.gstInvoiceNumbering) {
+          setGstInvoiceConfig(result.data.gstInvoiceNumbering);
+
+          // Generate next GST invoice number
+          const prefix = result.data.gstInvoiceNumbering.prefix || "GST-INV";
+          const currentNumber =
+            result.data.gstInvoiceNumbering.currentNumber || 1;
+          setNextGstInvoiceNumber(`${prefix}-${currentNumber}`);
+
+          console.log(
+            "GST Invoice config loaded:",
+            result.data.gstInvoiceNumbering
+          );
+        } else {
+          // Use default config if not found
+          const defaultConfig = {
+            prefix: "GST-INV",
+            currentNumber: 1,
+            autoIncrement: true,
+          };
+          setGstInvoiceConfig(defaultConfig);
+          setNextGstInvoiceNumber(
+            `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
+          );
+          console.log("Using default GST invoice config");
+        }
+      } catch (error) {
+        console.error("Error fetching GST invoice config:", error);
+        // Fallback to default
+        const defaultConfig = {
+          prefix: "GST-INV",
+          currentNumber: 1,
+          autoIncrement: true,
+        };
+        setGstInvoiceConfig(defaultConfig);
+        setNextGstInvoiceNumber(
+          `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
+        );
+      } finally {
+        setLoadingInvoiceConfig(false);
       }
-      
-      return isMatch;
-    });
-    
-    return Array.from(sites).map(site => ({ label: site, value: site }));
-  }, [selectedCustomer, salesHistory]);
-
-  // Calculate total bricks purchased by customer and actual rate
-  const customerSalesData = useMemo(() => {
-    if (!selectedCustomer || !salesHistory || !formData.fromDate || !formData.toDate || !formData.selectedSite) {
-      return { totalBricks: 0, averageRate: 2.5, customerState: 'GJ', customerStateCode: '24' };
-    }
-
-    const filtered = salesHistory.filter(sale => {
-      // Filter by customer
-      const isCustomerMatch = sale.customer_name === selectedCustomer.name && 
-                             sale.customer_phone === selectedCustomer.phone;
-      
-      // Filter by date range
-      const saleDate = new Date(sale.date);
-      const fromDate = new Date(formData.fromDate);
-      const toDate = new Date(formData.toDate);
-      toDate.setHours(23, 59, 59, 999);
-      const isDateInRange = saleDate >= fromDate && saleDate <= toDate;
-      
-      // Filter by specific site only (no "all sites" option)
-      const isSiteMatch = formData.selectedSite && sale.location_name === formData.selectedSite.value;
-      
-      return isCustomerMatch && isDateInRange && isSiteMatch;
-    });
-
-    
-
-    const totalBricks = filtered.reduce((total, sale) => total + parseInt(sale.quantity || 0), 0);
-    
-    // Calculate weighted average rate based on quantities
-    let totalValue = 0;
-    let totalQuantity = 0;
-    
-    // Get customer's actual state from sales data (use the most recent sale)
-    let customerState = 'GJ'; // Default fallback
-    let customerStateCode = '24'; // Default fallback
-    
-    if (filtered.length > 0) {
-      // Use the most recent sale's state information
-      const mostRecentSale = filtered.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-      customerState = mostRecentSale.customer_state || 'GJ';
-      customerStateCode = mostRecentSale.customer_state_code || '24';
-    }
-    
-    filtered.forEach(sale => {
-      const quantity = parseInt(sale.quantity || 0);
-      const rate = parseFloat(sale.price_per_brick || 0);
-      totalValue += quantity * rate;
-      totalQuantity += quantity;
-    });
-    
-    const averageRate = totalQuantity > 0 ? totalValue / totalQuantity : 2.5;
-    
-    const result = { 
-      totalBricks, 
-      averageRate, 
-      customerState, 
-      customerStateCode 
     };
-    
-    
-    
-    return result;
-  }, [selectedCustomer, salesHistory, formData]);
 
-  const totalCustomerBricks = customerSalesData.totalBricks;
-  const actualAverageRate = customerSalesData.averageRate;
-  const actualCustomerState = customerSalesData.customerState;
-  const actualCustomerStateCode = customerSalesData.customerStateCode;
+    fetchInvoiceConfig();
+  }, [open]);
 
-  // Real-time validation function
-  const validateBrickDistribution = useCallback(() => {
+  // Fetch customer GSTIN from Firebase
+  useEffect(() => {
+    const fetchCustomerGSTIN = async () => {
+      if (!customer || !open) return;
+
+      try {
+        setLoadingGSTIN(true);
+
+        // Generate customer ID using phone number (as per customerService.js)
+        const customerId = customer.phone;
+        const result = await dbUtils.readData(
+          `${DB_PATHS.CUSTOMERS}/${customerId}`
+        );
+
+        if (result.success && result.data && result.data.gstin) {
+          setCustomerGSTIN(result.data.gstin);
+          console.log("Customer GSTIN fetched:", result.data.gstin);
+        } else {
+          setCustomerGSTIN("");
+          console.log("No GSTIN found for customer");
+        }
+      } catch (error) {
+        console.error("Error fetching customer GSTIN:", error);
+        setCustomerGSTIN("");
+      } finally {
+        setLoadingGSTIN(false);
+      }
+    };
+
+    fetchCustomerGSTIN();
+  }, [customer, open]);
+
+  // FIXED: Load existing invoice data if in edit mode but ALWAYS show form first
+  useEffect(() => {
+    if (isEditMode && editingInvoice && open) {
+      console.log("Loading invoice for editing:", editingInvoice);
+
+      // Pre-populate form data
+      setFormData({
+        fromDate: editingInvoice.fromDate || "",
+        toDate: editingInvoice.toDate || "",
+        selectedSite: editingInvoice.selectedSite || "",
+        gstBricks: editingInvoice.gstBricks?.toString() || "",
+        nonGstBricks: editingInvoice.nonGstBricks?.toString() || "",
+      });
+      setSavedInvoiceId(editingInvoice.id);
+
+      // FIXED: Always show form first in edit mode, never auto-show invoice
+      setShowInvoice(false);
+      setGeneratedInvoiceData(null);
+    } else {
+      // Reset for new invoice generation
+      setFormData({
+        fromDate: "",
+        toDate: "",
+        selectedSite: "",
+        gstBricks: "",
+        nonGstBricks: "",
+      });
+      setShowInvoice(false);
+      setGeneratedInvoiceData(null);
+      setSavedInvoiceId(null);
+    }
+  }, [isEditMode, editingInvoice, open]);
+
+  // Get customer sites from sales history
+  useEffect(() => {
+    if (customer && salesHistory) {
+      const customerSales = salesHistory.filter(
+        (sale) =>
+          sale.customer_name === customer.name &&
+          sale.customer_phone === customer.phone
+      );
+
+      const sites = [
+        ...new Set(
+          customerSales.map((sale) => sale.location_name).filter(Boolean)
+        ),
+      ];
+      setCustomerSites(sites);
+    }
+  }, [customer, salesHistory]);
+
+  // Calculate customer sales data
+  const customerSalesData = useMemo(() => {
+    if (
+      !customer ||
+      !salesHistory ||
+      !formData.fromDate ||
+      !formData.toDate ||
+      !formData.selectedSite
+    ) {
+      return { sales: [], totalBricks: 0, totalAmount: 0, averageRate: 0 };
+    }
+
+    const customerSales = salesHistory.filter(
+      (sale) =>
+        sale.customer_name === customer.name &&
+        sale.customer_phone === customer.phone &&
+        sale.location_name === formData.selectedSite &&
+        sale.date >= formData.fromDate &&
+        sale.date <= formData.toDate
+    );
+
+    const totalBricks = customerSales.reduce(
+      (sum, sale) => sum + parseInt(sale.quantity || 0),
+      0
+    );
+    const totalAmount = customerSales.reduce(
+      (sum, sale) => sum + parseFloat(sale.total_amount || 0),
+      0
+    );
+    const averageRate = totalBricks > 0 ? totalAmount / totalBricks : 0;
+
+    return {
+      sales: customerSales,
+      totalBricks,
+      totalAmount,
+      averageRate,
+    };
+  }, [
+    customer,
+    salesHistory,
+    formData.fromDate,
+    formData.toDate,
+    formData.selectedSite,
+  ]);
+
+  // Validation
+  const validateForm = () => {
     const errors = {};
-    const gstBricks = parseInt(formData.gstBricks) || 0;
-    const nonGstBricks = parseInt(formData.nonGstBricks) || 0;
-    const totalAllocated = gstBricks + nonGstBricks;
 
-    // Check if site is selected
-    if (!formData.selectedSite) {
-      errors.site = 'Please select a specific site';
+    if (!formData.fromDate) errors.fromDate = "From date is required";
+    if (!formData.toDate) errors.toDate = "To date is required";
+    if (!formData.selectedSite) errors.selectedSite = "Please select a site";
+
+    if (
+      formData.fromDate &&
+      formData.toDate &&
+      formData.fromDate > formData.toDate
+    ) {
+      errors.dateRange = "From date must be before to date";
     }
 
-    if (gstBricks < 0) {
-      errors.gstBricks = 'GST bricks cannot be negative';
+    const gstBricks = parseInt(formData.gstBricks || 0);
+    const nonGstBricks = parseInt(formData.nonGstBricks || 0);
+    const totalInputBricks = gstBricks + nonGstBricks;
+
+    if (totalInputBricks === 0) {
+      errors.bricks =
+        "Please specify at least some bricks for GST or Non-GST invoice";
     }
 
-    if (nonGstBricks < 0) {
-      errors.nonGstBricks = 'Non-GST bricks cannot be negative';
-    }
-
-    if (totalAllocated > totalCustomerBricks && totalCustomerBricks > 0) {
-      errors.total = `Total allocated bricks (${totalAllocated.toLocaleString()}) cannot exceed customer's total purchases (${totalCustomerBricks.toLocaleString()})`;
-    }
-
-    if (totalAllocated === 0 && formData.fromDate && formData.toDate && formData.selectedSite) {
-      errors.total = 'Please specify at least some bricks for GST or Non-GST';
+    if (totalInputBricks > customerSalesData.totalBricks) {
+      errors.bricks = `Total bricks (${totalInputBricks}) cannot exceed customer's purchases (${customerSalesData.totalBricks})`;
     }
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [formData.gstBricks, formData.nonGstBricks, formData.selectedSite, totalCustomerBricks, formData.fromDate, formData.toDate]);
-
-  // Run validation whenever relevant fields change
-  useEffect(() => {
-    validateBrickDistribution();
-  }, [validateBrickDistribution]);
-
-  const handleClose = () => {
-    setFormData({
-      fromDate: '',
-      toDate: '',
-      selectedSite: null,
-      allSites: false, // Changed to false
-      gstBricks: '',
-      nonGstBricks: '',
-    });
-    setShowInvoice(false);
-    setSelectedCustomer(null);
-    setValidationErrors({});
-    setGeneratedInvoiceData(null);
-    setGstInvoiceViewerOpen(false);
-    setNonGstInvoiceViewerOpen(false);
-    onClose();
   };
 
-  const handleSiteSelectionChange = (event, newValue) => {
-    setFormData({
-      ...formData,
-      selectedSite: newValue,
-      allSites: false, // Always false since we don't allow "all sites"
-    });
-  };
-
-  const handleGenerateInvoice = () => {
-    if (!validateBrickDistribution()) {
-      return;
+  // Handle input changes
+  const handleInputChange = (field, value) => {
+    if (field === "gstBricks" || field === "nonGstBricks") {
+      handleBrickQuantityChange(field, value);
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: value }));
     }
-    
-    // Prepare invoice data
-    const invoiceData = {
-      fromDate: formData.fromDate,
-      toDate: formData.toDate,
-      selectedSite: formData.selectedSite,
-      allSites: false, // Always false now
-      gstBricks: parseInt(formData.gstBricks) || 0,
-      nonGstBricks: parseInt(formData.nonGstBricks) || 0,
-      customerData: {
-        ...selectedCustomer,
-        actualState: actualCustomerState,
-        actualStateCode: actualCustomerStateCode
-      },
-      totalCustomerBricks: totalCustomerBricks,
-      actualRate: actualAverageRate
-    };
-    
-    setGeneratedInvoiceData(invoiceData);
-    
-    setShowInvoice(true);
-  };
-
-  const handleOpenGSTInvoice = () => {
-    setGstInvoiceViewerOpen(true);
-  };
-
-  const handleOpenNonGSTInvoice = () => {
-    setNonGstInvoiceViewerOpen(true);
-  };
-
-  const handleCloseGSTInvoice = () => {
-    setGstInvoiceViewerOpen(false);
-  };
-
-  const handleCloseNonGSTInvoice = () => {
-    setNonGstInvoiceViewerOpen(false);
   };
 
   const handleBrickQuantityChange = (field, value) => {
-    // Handle empty string - clear both fields or set other to total
-    if (value === '') {
-      if (totalCustomerBricks > 0) {
-        const otherField = field === 'gstBricks' ? 'nonGstBricks' : 'gstBricks';
-        setFormData(prev => ({
-          ...prev,
-          [field]: '',
-          [otherField]: '' // Clear both when one is cleared
-        }));
-      } else {
-        setFormData(prev => ({ ...prev, [field]: value }));
-      }
+    const totalCustomerBricks = customerSalesData.totalBricks;
+
+    if (value === "") {
+      const otherField = field === "gstBricks" ? "nonGstBricks" : "gstBricks";
+      setFormData((prev) => ({
+        ...prev,
+        [field]: "",
+        [otherField]: "",
+      }));
       return;
     }
 
-    // Only allow positive integers
     const numValue = parseInt(value);
-    if (isNaN(numValue) || numValue < 0) {
-      return;
-    }
+    if (isNaN(numValue) || numValue < 0) return;
 
-    // Always auto-calculate the other field when typing
     if (totalCustomerBricks > 0) {
-      const otherField = field === 'gstBricks' ? 'nonGstBricks' : 'gstBricks';
+      const otherField = field === "gstBricks" ? "nonGstBricks" : "gstBricks";
       const currentValue = parseInt(value || 0);
       const remaining = totalCustomerBricks - currentValue;
-      
-      // Update both fields - current field with typed value, other field with remaining
-      setFormData(prev => ({
+
+      setFormData((prev) => ({
         ...prev,
         [field]: value,
-        [otherField]: remaining >= 0 ? remaining.toString() : '0'
+        [otherField]: remaining >= 0 ? remaining.toString() : "0",
       }));
     } else {
-      // If no total bricks yet, just update the current field
-      setFormData(prev => ({ ...prev, [field]: value }));
+      setFormData((prev) => ({ ...prev, [field]: value }));
     }
   };
 
-  // If showing invoice, render the invoice generation component
-  if (showInvoice) {
+  // Generate invoice
+  const handleGenerateInvoice = () => {
+    if (!validateForm()) return;
+
+    const gstBricks = parseInt(formData.gstBricks || 0);
+    const nonGstBricks = parseInt(formData.nonGstBricks || 0);
+    const actualRate = customerSalesData.averageRate;
+
+    // Enhanced customer data with GSTIN
+    const enhancedCustomerData = {
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      address: formData.selectedSite,
+      gstin: customerGSTIN || "", // Include GSTIN from fetched data
+    };
+
+    const invoiceData = {
+      customerData: enhancedCustomerData,
+      dateRange: {
+        from: formData.fromDate,
+        to: formData.toDate,
+      },
+      selectedSite: formData.selectedSite,
+      gstBricks,
+      nonGstBricks,
+      actualRate,
+      totalBricks: gstBricks + nonGstBricks,
+      gstAmount: gstBricks * actualRate * 1.12,
+      nonGstAmount: nonGstBricks * actualRate,
+      totalAmount: gstBricks * actualRate * 1.12 + nonGstBricks * actualRate,
+      generatedOn: new Date().toISOString(),
+      // Include customer GSTIN specifically for GST invoice processing
+      customerGSTIN: customerGSTIN || "",
+      // NEW: Include GST invoice number only if GST bricks > 0
+      gstInvoiceNumber: gstBricks > 0 ? nextGstInvoiceNumber : null,
+    };
+
+    setGeneratedInvoiceData(invoiceData);
+    setShowInvoice(true);
+  };
+
+  // NEW: Auto-increment GST invoice number
+  const incrementGstInvoiceNumber = async () => {
+    if (!gstInvoiceConfig || !gstInvoiceConfig.autoIncrement) return;
+
+    try {
+      const newNumber = gstInvoiceConfig.currentNumber + 1;
+      const updatedConfig = {
+        ...gstInvoiceConfig,
+        currentNumber: newNumber,
+      };
+
+      // Update the settings in Firebase
+      const result = await dbUtils.readData("settings/invoice_config");
+      if (result.success && result.data) {
+        const updatedInvoiceConfig = {
+          ...result.data,
+          gstInvoiceNumbering: updatedConfig,
+        };
+
+        await dbUtils.writeData(
+          "settings/invoice_config",
+          updatedInvoiceConfig
+        );
+        console.log("GST invoice number incremented to:", newNumber);
+      }
+    } catch (error) {
+      console.error("Error incrementing GST invoice number:", error);
+    }
+  };
+
+  // Save invoice to Firebase
+  const handleSaveInvoice = async () => {
+    if (!generatedInvoiceData) {
+      toast.error("Please generate invoice first");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      const invoiceId =
+        savedInvoiceId ||
+        `invoice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const currentDate = new Date().toISOString().split("T")[0];
+      const timestamp = Date.now();
+
+      const invoiceRecord = {
+        id: invoiceId,
+        customerId: `${customer.name}_${customer.phone}`,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        // Include customer GSTIN in saved record
+        customerGSTIN: customerGSTIN || "",
+
+        // Form data
+        fromDate: formData.fromDate,
+        toDate: formData.toDate,
+        selectedSite: formData.selectedSite,
+        gstBricks: parseInt(formData.gstBricks || 0),
+        nonGstBricks: parseInt(formData.nonGstBricks || 0),
+
+        // NEW: Include GST invoice number only if GST bricks were generated
+        gstInvoiceNumber: generatedInvoiceData.gstInvoiceNumber || null,
+
+        // Generated invoice data
+        invoiceData: generatedInvoiceData,
+
+        // Metadata
+        type: "generated_invoice",
+        status: "completed",
+        createdDate: currentDate,
+        updatedDate: currentDate,
+        timestamp: timestamp,
+        updatedTimestamp: timestamp,
+        createdBy: "system",
+      };
+
+      // Save to Firebase
+      const invoicesPath = `${DB_PATHS.SALES}/invoices/${invoiceId}`;
+      const result = await dbUtils.writeData(invoicesPath, invoiceRecord);
+
+      if (result.success) {
+        setSavedInvoiceId(invoiceId);
+
+        // NEW: Auto-increment GST invoice number only if this was a new GST invoice
+        if (!isEditMode && generatedInvoiceData.gstInvoiceNumber) {
+          await incrementGstInvoiceNumber();
+        }
+
+        toast.success(
+          isEditMode
+            ? "Invoice updated successfully"
+            : "Invoice saved successfully"
+        );
+      } else {
+        throw new Error(result.error || "Failed to save invoice");
+      }
+    } catch (error) {
+      console.error("Error saving invoice:", error);
+      toast.error("Failed to save invoice");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle dialog close
+  const handleClose = () => {
+    if (!isSaving) {
+      setFormData({
+        fromDate: "",
+        toDate: "",
+        selectedSite: "",
+        gstBricks: "",
+        nonGstBricks: "",
+      });
+      setShowInvoice(false);
+      setGeneratedInvoiceData(null);
+      setValidationErrors({});
+      setSavedInvoiceId(null);
+      setCustomerGSTIN(""); // Reset GSTIN
+      setNextGstInvoiceNumber(""); // Reset invoice number
+      onClose();
+    }
+  };
+
+  // Handle view invoices
+  const handleViewGSTInvoice = () => setGstInvoiceViewerOpen(true);
+  const handleViewNonGSTInvoice = () => setNonGstInvoiceViewerOpen(true);
+  const handleCloseGSTInvoice = () => setGstInvoiceViewerOpen(false);
+  const handleCloseNonGSTInvoice = () => setNonGstInvoiceViewerOpen(false);
+
+  // FIXED: Handle back to form from generated invoice view
+  const handleBackToForm = () => {
+    setShowInvoice(false);
+    setGeneratedInvoiceData(null);
+  };
+
+  if (!customer) return null;
+
+  // Show generated invoice interface
+  if (showInvoice && generatedInvoiceData) {
     return (
       <>
-        <Dialog 
-          open={open} 
+        <Dialog
+          open={open}
           onClose={handleClose}
           maxWidth="lg"
           fullWidth
           sx={{ zIndex: 1300 }}
         >
           <DialogTitle>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <ReceiptIcon color="primary" />
-              Invoice Generated for {selectedCustomer?.name}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <ReceiptIcon color="primary" />
+                <Typography variant="h6">
+                  {isEditMode ? "Invoice Updated" : "Invoice Generated"} for{" "}
+                  {customer.name}
+                </Typography>
+              </Box>
+              <IconButton onClick={handleClose} disabled={isSaving}>
+                <CloseIcon />
+              </IconButton>
             </Box>
           </DialogTitle>
 
           <DialogContent>
             <Box sx={{ p: 2 }}>
-              <Alert severity="success" sx={{ mb: 2 }}>
+              <Alert
+                severity={savedInvoiceId ? "info" : "success"}
+                sx={{ mb: 2 }}
+              >
                 <Typography variant="h6" gutterBottom>
-                  Invoice Successfully Generated!
+                  {savedInvoiceId
+                    ? "Invoice Ready for Update"
+                    : "Invoice Successfully Generated!"}
                 </Typography>
                 <Typography variant="body2">
-                  Two copies have been created:
+                  {savedInvoiceId
+                    ? "Make any changes and save to update the invoice."
+                    : "Your invoice has been generated. You can view or save it now."}
                 </Typography>
-                <ul>
-                  <li>GST Invoice: {formData.gstBricks} bricks with 12% GST</li>
-                  <li>Non-GST Invoice: {formData.nonGstBricks} bricks without GST</li>
-                </ul>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Customer: {selectedCustomer?.name} ({actualCustomerState})<br/>
-                  Period: {formData.fromDate} to {formData.toDate}<br/>
-                  Site: {formData.selectedSite?.label}
-                </Typography>
+                {/* Show GSTIN status */}
+                {customerGSTIN && (
+                  <Typography
+                    variant="body2"
+                    sx={{ mt: 1, fontWeight: "bold", color: "success.main" }}
+                  >
+                    ✓ Customer GSTIN ({customerGSTIN}) will be included in GST
+                    invoices
+                  </Typography>
+                )}
+                {!customerGSTIN && (
+                  <Typography
+                    variant="body2"
+                    sx={{ mt: 1, fontWeight: "bold", color: "warning.main" }}
+                  >
+                    ⚠ No GSTIN found - GST invoice will show as unregistered
+                    customer
+                  </Typography>
+                )}
+                {/* NEW: Show GST invoice number */}
+                {/* {generatedInvoiceData.gstInvoiceNumber && (
+                  <Typography
+                    variant="body2"
+                    sx={{ mt: 1, fontWeight: "bold", color: "error.main" }}
+                  >
+                    📋 GST Invoice Number:{" "}
+                    {generatedInvoiceData.gstInvoiceNumber}
+                  </Typography>
+                )} */}
               </Alert>
 
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                <Button 
-                  variant="contained" 
-                  color="primary"
-                  onClick={handleOpenGSTInvoice}
-                  disabled={!generatedInvoiceData?.gstBricks || generatedInvoiceData.gstBricks === 0}
-                >
-                  View GST Invoice ({formData.gstBricks} bricks)
-                </Button>
-                <Button 
-                  variant="contained" 
-                  color="secondary"
-                  onClick={handleOpenNonGSTInvoice}
-                  disabled={!generatedInvoiceData?.nonGstBricks || generatedInvoiceData.nonGstBricks === 0}
-                >
-                  View Non-GST Invoice ({formData.nonGstBricks} bricks)
-                </Button>
-              </Box>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom color="error">
+                        GST Invoice Details
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Bricks:</strong>{" "}
+                        {formatQuantity(generatedInvoiceData.gstBricks)}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Rate:</strong>{" "}
+                        {formatCurrency(generatedInvoiceData.actualRate)} per
+                        brick
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Amount (with 12% GST):</strong>{" "}
+                        {formatCurrency(generatedInvoiceData.gstAmount)}
+                      </Typography>
+                      {/* Show customer GSTIN status for GST invoice */}
+                      <Typography
+                        variant="body2"
+                        sx={{ mt: 1, fontStyle: "italic" }}
+                      >
+                        <strong>Customer GSTIN:</strong>{" "}
+                        {customerGSTIN || "Not available"}
+                      </Typography>
+                      {/* NEW: Show GST invoice number */}
+                      {/* {generatedInvoiceData.gstInvoiceNumber && (
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            mt: 1,
+                            fontWeight: "bold",
+                            color: "error.main",
+                          }}
+                        >
+                          <NumberIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                          <strong>Invoice Number:</strong>{" "}
+                          {generatedInvoiceData.gstInvoiceNumber}
+                        </Typography>
+                      )} */}
+                      <Box sx={{ mt: 2 }}>
+                        <Button
+                          variant="contained"
+                          color="error"
+                          startIcon={<ViewIcon />}
+                          onClick={handleViewGSTInvoice}
+                          disabled={generatedInvoiceData.gstBricks === 0}
+                          fullWidth
+                        >
+                          View GST Invoice
+                        </Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography
+                        variant="h6"
+                        gutterBottom
+                        color="success.main"
+                      >
+                        Non-GST Invoice Details
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Bricks:</strong>{" "}
+                        {formatQuantity(generatedInvoiceData.nonGstBricks)}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Rate:</strong>{" "}
+                        {formatCurrency(generatedInvoiceData.actualRate)} per
+                        brick
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Amount (without GST):</strong>{" "}
+                        {formatCurrency(generatedInvoiceData.nonGstAmount)}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{ mt: 1, fontStyle: "italic" }}
+                      >
+                        <strong>Note:</strong> No GSTIN or invoice number
+                        required for non-GST invoice
+                      </Typography>
+                      <Box sx={{ mt: 2 }}>
+                        <Button
+                          variant="contained"
+                          color="success"
+                          startIcon={<ViewIcon />}
+                          onClick={handleViewNonGSTInvoice}
+                          disabled={generatedInvoiceData.nonGstBricks === 0}
+                          fullWidth
+                        >
+                          View Non-GST Invoice
+                        </Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        Invoice Summary
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="body2" color="text.secondary">
+                            Total Bricks
+                          </Typography>
+                          <Typography variant="h6">
+                            {formatQuantity(generatedInvoiceData.totalBricks)}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="body2" color="text.secondary">
+                            GST Amount
+                          </Typography>
+                          <Typography variant="h6" color="error.main">
+                            {formatCurrency(generatedInvoiceData.gstAmount)}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="body2" color="text.secondary">
+                            Non-GST Amount
+                          </Typography>
+                          <Typography variant="h6" color="success.main">
+                            {formatCurrency(generatedInvoiceData.nonGstAmount)}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="body2" color="text.secondary">
+                            Total Amount
+                          </Typography>
+                          <Typography variant="h6" color="primary.main">
+                            {formatCurrency(generatedInvoiceData.totalAmount)}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
             </Box>
           </DialogContent>
 
-          <DialogActions>
-            <Button onClick={() => setShowInvoice(false)}>
-              Back to Form
+          <DialogActions sx={{ p: 3 }}>
+            <Button onClick={handleBackToForm} disabled={isSaving}>
+              Back to Edit
             </Button>
-            <Button onClick={handleClose} variant="contained">
+            <Button onClick={handleClose} disabled={isSaving}>
               Close
+            </Button>
+            <Button
+              onClick={handleSaveInvoice}
+              variant="contained"
+              disabled={isSaving}
+              startIcon={
+                isSaving ? <CircularProgress size={20} /> : <SaveIcon />
+              }
+            >
+              {isSaving
+                ? "Saving..."
+                : savedInvoiceId
+                ? "Update Invoice"
+                : "Save Invoice"}
             </Button>
           </DialogActions>
         </Dialog>
 
-        {/* GST Invoice Viewer - Higher z-index */}
+        {/* GST Invoice Viewer - NOW INCLUDES CUSTOMER GSTIN AND INVOICE NUMBER */}
         {generatedInvoiceData && (
           <GSTInvoiceViewer
             open={gstInvoiceViewerOpen}
             onClose={handleCloseGSTInvoice}
-            customerData={generatedInvoiceData.customerData}
-            invoiceData={generatedInvoiceData}
+            customerData={{
+              ...generatedInvoiceData.customerData,
+              gstin: customerGSTIN || "", // Pass GSTIN for GST invoice
+            }}
+            invoiceData={{
+              ...generatedInvoiceData,
+              actualInvoiceNumber: generatedInvoiceData.gstInvoiceNumber || "",
+            }}
             brickQuantity={generatedInvoiceData.gstBricks}
-            pricePerBrick={generatedInvoiceData.actualRate} // Use actual calculated rate
+            pricePerBrick={generatedInvoiceData.actualRate}
             isGSTInvoice={true}
           />
         )}
 
-        {/* Non-GST Invoice Viewer - Higher z-index */}
+        {/* Non-GST Invoice Viewer - NO GSTIN OR INVOICE NUMBER */}
         {generatedInvoiceData && (
           <GSTInvoiceViewer
             open={nonGstInvoiceViewerOpen}
             onClose={handleCloseNonGSTInvoice}
-            customerData={generatedInvoiceData.customerData}
-            invoiceData={generatedInvoiceData}
+            customerData={{
+              ...generatedInvoiceData.customerData,
+              gstin: "", // Explicitly no GSTIN for non-GST invoice
+            }}
+            invoiceData={{
+              ...generatedInvoiceData,
+              invoiceNumber: "", // No invoice number for non-GST
+            }}
             brickQuantity={generatedInvoiceData.nonGstBricks}
-            pricePerBrick={generatedInvoiceData.actualRate} // Use actual calculated rate
+            pricePerBrick={generatedInvoiceData.actualRate}
             isGSTInvoice={false}
           />
         )}
@@ -383,20 +809,31 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
     );
   }
 
-  // Form to collect inputs
+  // Show form interface (this is what should show in edit mode)
   return (
-    <Dialog 
-      open={open} 
+    <Dialog
+      open={open}
       onClose={handleClose}
       maxWidth="md"
       fullWidth
       sx={{ zIndex: 1300 }}
     >
       <DialogTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <ReceiptIcon color="primary" />
-          Generate GST/Non-GST Invoice for {selectedCustomer?.name || 'Customer'}
+          <Typography variant="h6">
+            {isEditMode
+              ? `Edit Invoice for ${customer.name}`
+              : `Generate GST/Non-GST Invoice for ${customer.name}`}
+          </Typography>
         </Box>
+        {isEditMode && (
+          <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
+            <EditIcon sx={{ fontSize: 16, mr: 0.5 }} />
+            Editing existing invoice - modify the values below and click
+            "Generate Invoices" to update
+          </Typography>
+        )}
       </DialogTitle>
 
       <DialogContent>
@@ -406,28 +843,59 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
               Invoice Parameters
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Select the date range, specific site, and brick distribution for generating GST and Non-GST invoices
+              {isEditMode
+                ? "Update the date range, site, and brick quantities as needed."
+                : "Select the date range and site to generate invoices based on actual sales data."}
             </Typography>
+
+            {/* Customer GSTIN Status Display */}
+            <Alert
+              severity={customerGSTIN ? "success" : "warning"}
+              sx={{ mb: 2 }}
+              icon={loadingGSTIN ? <CircularProgress size={20} /> : undefined}
+            >
+              <Typography variant="body2">
+                {loadingGSTIN ? (
+                  "Loading customer GSTIN..."
+                ) : customerGSTIN ? (
+                  <>
+                    <strong>Customer GSTIN:</strong> {customerGSTIN} - Will be
+                    included in GST invoices
+                  </>
+                ) : (
+                  <>
+                    <strong>No GSTIN found</strong> - Customer not registered
+                    for GST. GST invoices will show as unregistered customer.
+                  </>
+                )}
+              </Typography>
+            </Alert>
+
+            {/* NEW: GST Invoice Number Preview */}
+            {/* {nextGstInvoiceNumber && !loadingInvoiceConfig && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <NumberIcon
+                    sx={{ fontSize: 16, mr: 0.5, verticalAlign: "middle" }}
+                  />
+                  <strong>Next GST Invoice Number:</strong>{" "}
+                  {nextGstInvoiceNumber}
+                  {loadingInvoiceConfig && " (Loading...)"}
+                </Typography>
+              </Alert>
+            )} */}
           </Grid>
-          
+
           <Grid item xs={12} md={6}>
             <TextField
               label="From Date"
               type="date"
-              value={formData.fromDate}
-              onChange={(e) => setFormData({ ...formData, fromDate: e.target.value })}
               fullWidth
-              required
-              InputLabelProps={{
-                shrink: true,
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <DateRangeIcon />
-                  </InputAdornment>
-                ),
-              }}
+              value={formData.fromDate}
+              onChange={(e) => handleInputChange("fromDate", e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              error={!!validationErrors.fromDate}
+              helperText={validationErrors.fromDate}
             />
           </Grid>
 
@@ -435,209 +903,198 @@ const InvoiceGenerator = ({ open, onClose, customer, salesHistory }) => {
             <TextField
               label="To Date"
               type="date"
+              fullWidth
               value={formData.toDate}
-              onChange={(e) => setFormData({ ...formData, toDate: e.target.value })}
-              fullWidth
-              required
-              InputLabelProps={{
-                shrink: true,
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <DateRangeIcon />
-                  </InputAdornment>
-                ),
-              }}
+              onChange={(e) => handleInputChange("toDate", e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              error={!!validationErrors.toDate}
+              helperText={validationErrors.toDate}
             />
           </Grid>
 
           <Grid item xs={12}>
-            <Autocomplete
-              options={availableSites}
-              value={formData.selectedSite}
-              onChange={handleSiteSelectionChange}
-              disabled={availableSites.length === 0}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Select Site *"
-                  required
-                  error={!!validationErrors.site}
-                  helperText={
-                    validationErrors.site || 
-                    (availableSites.length === 0 
-                      ? 'No sites available for this customer. Please check date range.' 
-                      : 'Select a specific site for invoice generation')
-                  }
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <LocationOnIcon />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
+            <FormControl fullWidth error={!!validationErrors.selectedSite}>
+              <InputLabel>Select Site/Location</InputLabel>
+              <Select
+                value={formData.selectedSite}
+                onChange={(e) =>
+                  handleInputChange("selectedSite", e.target.value)
+                }
+                label="Select Site/Location"
+              >
+                {customerSites.map((site) => (
+                  <MenuItem key={site} value={site}>
+                    {site}
+                  </MenuItem>
+                ))}
+              </Select>
+              {validationErrors.selectedSite && (
+                <Typography variant="caption" color="error">
+                  {validationErrors.selectedSite}
+                </Typography>
               )}
-              isOptionEqualToValue={(option, value) => option?.value === value?.value}
-            />
+            </FormControl>
           </Grid>
 
-          {/* No sites available warning */}
-          {formData.fromDate && formData.toDate && availableSites.length === 0 && (
+          {validationErrors.dateRange && (
             <Grid item xs={12}>
-              <Alert severity="warning">
-                <Typography variant="body2">
-                  No purchase sites found for this customer in the selected date range. 
-                  Please check the date range or verify that the customer has made purchases during this period.
-                </Typography>
-              </Alert>
+              <Alert severity="error">{validationErrors.dateRange}</Alert>
             </Grid>
           )}
 
-          {/* Customer Brick Summary */}
-          {formData.fromDate && formData.toDate && formData.selectedSite && (
-            <Grid item xs={12}>
-              <Box 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'info.50', 
-                  borderRadius: 1,
-                  border: 1,
-                  borderColor: 'info.200'
-                }}
-              >
-                <Typography variant="subtitle2" gutterBottom>
-                  Customer Purchase Summary:
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Customer: {selectedCustomer?.name} ({selectedCustomer?.phone})
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  State: {actualCustomerState} ({actualCustomerStateCode})
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Period: {formData.fromDate} to {formData.toDate}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Site: {formData.selectedSite?.label || 'Not selected'}
-                </Typography>
-                <Typography variant="body2" color="success.main" sx={{ mt: 1, fontWeight: 'bold' }}>
-                  Total Bricks Purchased at this Site: {totalCustomerBricks.toLocaleString()}
-                </Typography>
-                <Typography variant="body2" color="primary.main" sx={{ fontWeight: 'bold' }}>
-                  Average Rate: ₹{actualAverageRate.toFixed(2)} per brick
-                </Typography>
-              </Box>
-            </Grid>
-          )}
+          {customerSalesData.totalBricks > 0 && (
+            <>
+              <Grid item xs={12}>
+                <Card variant="outlined" sx={{ bgcolor: "background.default" }}>
+                  <CardContent>
+                    <Typography
+                      variant="subtitle1"
+                      gutterBottom
+                      sx={{ fontWeight: "bold" }}
+                    >
+                      Customer Purchase Summary
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">
+                          Total Bricks
+                        </Typography>
+                        <Typography variant="h6">
+                          {formatQuantity(customerSalesData.totalBricks)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">
+                          Total Amount
+                        </Typography>
+                        <Typography variant="h6">
+                          {formatCurrency(customerSalesData.totalAmount)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">
+                          Average Rate
+                        </Typography>
+                        <Typography variant="h6">
+                          {formatCurrency(customerSalesData.averageRate)}/brick
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              </Grid>
 
-          <Divider sx={{ width: '100%', my: 2 }} />
+              <Grid item xs={12} md={6}>
+                <TextField
+                  label="GST Invoice Bricks"
+                  type="number"
+                  fullWidth
+                  value={formData.gstBricks}
+                  onChange={(e) =>
+                    handleInputChange("gstBricks", e.target.value)
+                  }
+                  inputProps={{ min: 0, max: customerSalesData.totalBricks }}
+                  helperText={`Bricks for GST invoice (12% tax will be added)${
+                    customerGSTIN ? " - GSTIN: " + customerGSTIN : " - No GSTIN"
+                  }${
+                    nextGstInvoiceNumber
+                      ? " - Number: " + nextGstInvoiceNumber
+                      : ""
+                  }`}
+                />
+              </Grid>
 
-          {/* Brick Distribution Section */}
-          <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <WarningIcon color="warning" />
-              Brick Distribution for Invoice
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Specify how many bricks should be included in GST vs Non-GST invoices
-            </Typography>
-          </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  label="Non-GST Invoice Bricks"
+                  type="number"
+                  fullWidth
+                  value={formData.nonGstBricks}
+                  onChange={(e) =>
+                    handleInputChange("nonGstBricks", e.target.value)
+                  }
+                  inputProps={{ min: 0, max: customerSalesData.totalBricks }}
+                  helperText="Bricks for Non-GST invoice (no tax, no GSTIN or invoice number required)"
+                />
+              </Grid>
 
-          <Grid item xs={12} md={6}>
-            <TextField
-              label="Bricks for GST Invoice"
-              type="number"
-              value={formData.gstBricks}
-              onChange={(e) => handleBrickQuantityChange('gstBricks', e.target.value)}
-              fullWidth
-              inputProps={{ min: 0, max: totalCustomerBricks }}
-              error={!!validationErrors.gstBricks}
-              helperText={validationErrors.gstBricks || 'Bricks to include in GST calculation (12% tax)'}
-            />
-          </Grid>
+              {validationErrors.bricks && (
+                <Grid item xs={12}>
+                  <Alert severity="error">{validationErrors.bricks}</Alert>
+                </Grid>
+              )}
 
-          <Grid item xs={12} md={6}>
-            <TextField
-              label="Bricks for Non-GST Invoice"
-              type="number"
-              value={formData.nonGstBricks}
-              onChange={(e) => handleBrickQuantityChange('nonGstBricks', e.target.value)}
-              fullWidth
-              inputProps={{ min: 0, max: totalCustomerBricks }}
-              error={!!validationErrors.nonGstBricks}
-              helperText={validationErrors.nonGstBricks || 'Bricks to exclude from GST (no tax)'}
-            />
-          </Grid>
-
-          {/* Validation Errors */}
-          {validationErrors.total && (
-            <Grid item xs={12}>
-              <Alert severity="error">
-                {validationErrors.total}
-              </Alert>
-            </Grid>
-          )}
-
-          {/* Summary */}
-          {(formData.gstBricks || formData.nonGstBricks) && totalCustomerBricks > 0 && (
-            <Grid item xs={12}>
-              <Box 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'primary.50', 
-                  borderRadius: 1,
-                  border: 1,
-                  borderColor: 'primary.200'
-                }}
-              >
-                <Typography variant="subtitle2" gutterBottom>
-                  Invoice Summary:
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  GST Invoice: {(parseInt(formData.gstBricks) || 0).toLocaleString()} bricks (with 12% GST)
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Non-GST Invoice: {(parseInt(formData.nonGstBricks) || 0).toLocaleString()} bricks (without GST)
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Rate per brick: ₹{actualAverageRate.toFixed(2)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Total: {((parseInt(formData.gstBricks) || 0) + (parseInt(formData.nonGstBricks) || 0)).toLocaleString()} of {totalCustomerBricks.toLocaleString()} bricks
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Remaining: {(totalCustomerBricks - ((parseInt(formData.gstBricks) || 0) + (parseInt(formData.nonGstBricks) || 0))).toLocaleString()} bricks
-                </Typography>
-                {/* Estimated amounts */}
-                {(parseInt(formData.gstBricks) || 0) > 0 && (
-                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold', mt: 1 }}>
-                    GST Invoice Amount: ₹{((parseInt(formData.gstBricks) || 0) * actualAverageRate * 1.12).toFixed(2)} (with 12% GST)
-                  </Typography>
-                )}
-                {(parseInt(formData.nonGstBricks) || 0) > 0 && (
-                  <Typography variant="body2" color="info.main" sx={{ fontWeight: 'bold' }}>
-                    Non-GST Invoice Amount: ₹{((parseInt(formData.nonGstBricks) || 0) * actualAverageRate).toFixed(2)} (without GST)
-                  </Typography>
-                )}
-              </Box>
-            </Grid>
+              <Grid item xs={12}>
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: "primary.50",
+                    borderRadius: 1,
+                    border: "1px solid",
+                    borderColor: "primary.200",
+                  }}
+                >
+                  {(parseInt(formData.gstBricks) || 0) > 0 && (
+                    <Typography
+                      variant="body2"
+                      color="error.main"
+                      sx={{ fontWeight: "bold", mt: 1 }}
+                    >
+                      GST Invoice Amount:{" "}
+                      {formatCurrency(
+                        (parseInt(formData.gstBricks) || 0) *
+                          customerSalesData.averageRate *
+                          1.12
+                      )}{" "}
+                      (with 12% GST)
+                      {customerGSTIN && (
+                        <span style={{ fontSize: "11px", display: "block" }}>
+                          {" "}
+                          - Customer GSTIN: {customerGSTIN}
+                        </span>
+                      )}
+                      {/* {nextGstInvoiceNumber && (
+                        <span style={{ fontSize: "11px", display: "block" }}>
+                          {" "}
+                          - Invoice Number: {nextGstInvoiceNumber}
+                        </span>
+                      )} */}
+                    </Typography>
+                  )}
+                  {(parseInt(formData.nonGstBricks) || 0) > 0 && (
+                    <Typography
+                      variant="body2"
+                      color="success.main"
+                      sx={{ fontWeight: "bold" }}
+                    >
+                      Non-GST Invoice Amount:{" "}
+                      {formatCurrency(
+                        (parseInt(formData.nonGstBricks) || 0) *
+                          customerSalesData.averageRate
+                      )}{" "}
+                      (without GST)
+                    </Typography>
+                  )}
+                </Box>
+              </Grid>
+            </>
           )}
         </Grid>
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={handleClose}>
-          Cancel
-        </Button>
-        <Button 
+        <Button onClick={handleClose}>Cancel</Button>
+        <Button
           onClick={handleGenerateInvoice}
           variant="contained"
-          disabled={!formData.fromDate || !formData.toDate || !formData.selectedSite || Object.keys(validationErrors).length > 0}
+          disabled={
+            !formData.fromDate ||
+            !formData.toDate ||
+            !formData.selectedSite ||
+            Object.keys(validationErrors).length > 0
+          }
         >
-          Generate Invoices
+          {isEditMode ? "Update Invoice" : "Generate Invoices"}
         </Button>
       </DialogActions>
     </Dialog>

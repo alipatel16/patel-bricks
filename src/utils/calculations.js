@@ -314,7 +314,7 @@ export const calculateTotalSaleAmount = (quantity, pricePerBrick, discount = 0, 
  */
 
 // Validate customer data
-export const validateCustomerData = (customerData) => {
+export const validateCustomerData = (customerData, includeGSTINValidation = false) => {
   const errors = {};
   
   // Required fields
@@ -337,7 +337,7 @@ export const validateCustomerData = (customerData) => {
   }
   
   // GSTIN validation (if provided)
-  if (customerData.gstin && !VALIDATION_RULES.GSTIN_REGEX.test(customerData.gstin)) {
+  if (includeGSTINValidation && customerData.gstin && !VALIDATION_RULES.GSTIN_REGEX.test(customerData.gstin)) {
     errors.gstin = 'Please enter a valid GSTIN (15 characters)';
   }
   
@@ -374,7 +374,7 @@ export const validateLocationData = (locationData) => {
 };
 
 // Validate sale data
-export const validateSaleData = (saleData) => {
+export const validateSaleData = (saleData, includeGST: any) => {
   const errors = {};
   
   // Product validation

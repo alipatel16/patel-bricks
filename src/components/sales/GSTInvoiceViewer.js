@@ -47,7 +47,7 @@ const GSTInvoiceViewer = ({
       price_per_brick: pricePerBrick || 2.5,
       discount_amount: 0,
       date: new Date().toISOString().split('T')[0],
-      invoice_number: `${isGSTInvoice ? 'GST' : 'NGST'}-${Date.now().toString().slice(-6)}`,
+      invoice_number: invoiceData?.actualInvoiceNumber || `${isGSTInvoice ? 'GST' : 'NGST'}-${Date.now().toString().slice(-6)}`,
       includeGST: isGSTInvoice || false,
       include_gst: isGSTInvoice || false,
       gst_included: isGSTInvoice || false

@@ -24,7 +24,9 @@ export const DB_PATHS = {
   SALES: 'bricks/sales',
   CUSTOMERS: 'customers',
   COMPANY: 'company',
-  BANK_DETAILS: 'settings/bank_details', // Added path for editable bank details
+  BANK_DETAILS: 'settings/bank_details',
+  PAYMENTS: 'bricks/sales/payments',
+  INVOICES: 'bricks/sales/invoices',
   INVENTORY: {
     BRICKS: 'bricks/inventory',
     CEMENT: 'cement/inventory',

@@ -188,7 +188,7 @@ function Sales() {
         customerEmail: data.customerEmail,
         customerGSTIN: data.customerGSTIN,
         vehicleNumber: data.vehicleNumber,
-      });
+      }, data.includeGST);
 
       if (!validation.isValid) {
         const firstError = Object.values(validation.errors)[0];
