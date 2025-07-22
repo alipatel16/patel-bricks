@@ -41,6 +41,7 @@ import {
   CheckCircle as CheckCircleIcon,
   AttachMoney as MoneyIcon,
   Refresh as RefreshIcon,
+  ShoppingCart as PurchaseHistoryIcon,
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 
@@ -53,6 +54,7 @@ import { useInventory, useBrickInventory, useCementInventory } from '../context/
 // Import services for calculated stock
 import { productionService } from '../services/productionService';
 import { salesService } from '../services/salesService';
+import { inventoryService } from '../services/inventoryService';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -86,6 +88,10 @@ function Inventory() {
   const [calculatedBrickStock, setCalculatedBrickStock] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
+  // NEW: State for cement purchase history
+  const [cementPurchaseHistory, setCementPurchaseHistory] = useState([]);
+  const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
+
   // State management
   const [currentTab, setCurrentTab] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -105,6 +111,7 @@ function Inventory() {
       notes: '',
       costPerBag: '',
       supplier: '',
+      date: new Date().toISOString().split('T')[0], // NEW: Add date field
     }
   });
 
@@ -134,6 +141,27 @@ function Inventory() {
     }
   };
 
+  // NEW: Function to load cement purchase history
+  const loadCementPurchaseHistory = async () => {
+    try {
+      setPurchaseHistoryLoading(true);
+      // Get cement purchase history from the service
+      const result = await inventoryService.getCementPurchaseHistory(100);
+      
+      if (result.success) {
+        setCementPurchaseHistory(result.data || []);
+      } else {
+        console.error('Failed to load cement purchase history:', result.error);
+        setCementPurchaseHistory([]);
+      }
+    } catch (error) {
+      console.error('Error loading cement purchase history:', error);
+      setCementPurchaseHistory([]);
+    } finally {
+      setPurchaseHistoryLoading(false);
+    }
+  };
+
   // ✅ NEW: Load calculated brick stock
   const loadCalculatedBrickStock = async () => {
     const stock = await calculateActualBrickStock();
@@ -155,6 +183,11 @@ function Inventory() {
     return () => clearInterval(interval);
   }, []);
 
+  // NEW: Load cement purchase history on mount
+  useEffect(() => {
+    loadCementPurchaseHistory();
+  }, []);
+
   // Load inventory history
   const loadInventoryHistory = async () => {
     try {
@@ -171,6 +204,7 @@ function Inventory() {
       await Promise.all([
         loadCalculatedBrickStock(),
         loadInventoryHistory(),
+        loadCementPurchaseHistory(), // NEW: Also refresh purchase history
         inventoryActions.refreshInventory()
       ]);
       appActions.showNotification('Inventory data refreshed', 'success');
@@ -197,6 +231,7 @@ function Inventory() {
         costPerBag: cement.cost_per_bag || 25,
         supplier: '',
         notes: '',
+        date: new Date().toISOString().split('T')[0], // NEW: Set today's date as default
       });
     }
     setDialogOpen(true);
@@ -233,11 +268,13 @@ function Inventory() {
           break;
 
         case 'cement-purchase':
-          result = await inventoryActions.purchaseCement(
+          // NEW: Pass date to purchase cement function
+          result = await inventoryActions.purchaseCementWithDate(
             quantity,
             parseFloat(data.costPerBag),
             data.supplier,
-            data.notes
+            data.notes,
+            data.date // NEW: Include the selected date
           );
           break;
 
@@ -248,6 +285,10 @@ function Inventory() {
       if (result.success) {
         handleCloseDialog();
         loadInventoryHistory();
+        // NEW: Refresh purchase history after cement purchase
+        if (dialogType === 'cement-purchase') {
+          loadCementPurchaseHistory();
+        }
         // Refresh calculated stock after brick operations
         if (dialogType === 'brick-adjust') {
           loadCalculatedBrickStock();
@@ -281,6 +322,15 @@ function Inventory() {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+    });
+  };
+
+  // NEW: Format date for purchase history (date only)
+  const formatPurchaseDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
     });
   };
 
@@ -504,13 +554,14 @@ function Inventory() {
         </CardContent>
       </Card>
 
-      {/* Tabs */}
+      {/* Tabs - NEW: Added 4th tab for Cement Purchase History */}
       <Card sx={{padding : 1}}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={currentTab} onChange={handleTabChange}>
             <Tab label="Brick Inventory" />
             <Tab label="Cement Inventory" />
             <Tab label="Transaction History" />
+            <Tab label="Cement Purchase History"/>
           </Tabs>
         </Box>
 
@@ -742,9 +793,106 @@ function Inventory() {
             </Table>
           </TableContainer>
         </TabPanel>
+
+        {/* NEW: Cement Purchase History Tab */}
+        <TabPanel value={currentTab} index={3}>
+          {purchaseHistoryLoading && <LinearProgress sx={{ mb: 2 }} />}
+
+          <TableContainer component={Paper} variant="outlined">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: "bold" }}>Purchase Date</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Bags</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Cost per Bag</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Total Cost</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Supplier</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Notes</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {cementPurchaseHistory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                      <Typography color="textSecondary">
+                        No cement purchase history available
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  cementPurchaseHistory.map((purchase, index) => (
+                    <TableRow key={purchase.id || index} hover>
+                      <TableCell>
+                        {formatPurchaseDate(purchase.date || purchase.timestamp)}
+                      </TableCell>
+                      <TableCell align="right">
+                        {purchase.bags.toLocaleString()}
+                      </TableCell>
+                      <TableCell align="right">
+                        ₹{purchase.cost_per_bag}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                        ₹{purchase.total_cost.toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        {purchase.supplier || 'Unknown Supplier'}
+                      </TableCell>
+                      <TableCell>
+                        {purchase.notes || '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Purchase Summary */}
+          {cementPurchaseHistory.length > 0 && (
+            <Card sx={{ mt: 3 }} variant="outlined">
+              <CardContent>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Purchase Summary
+                </Typography>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={4}>
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
+                        Total Purchases
+                      </Typography>
+                      <Typography variant="h6" color="primary">
+                        {cementPurchaseHistory.length}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
+                        Total Bags Purchased
+                      </Typography>
+                      <Typography variant="h6" color="warning.main">
+                        {cementPurchaseHistory.reduce((sum, p) => sum + (p.bags || 0), 0).toLocaleString()}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
+                        Total Amount Spent
+                      </Typography>
+                      <Typography variant="h6" color="success.main" sx={{ fontWeight: 600 }}>
+                        ₹{cementPurchaseHistory.reduce((sum, p) => sum + (p.total_cost || 0), 0).toLocaleString()}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          )}
+        </TabPanel>
       </Card>
 
-      {/* Inventory Operation Dialog */}
+      {/* Inventory Operation Dialog - ENHANCED: Added date field for cement purchase */}
       <Dialog 
         open={dialogOpen} 
         onClose={handleCloseDialog}
@@ -756,6 +904,30 @@ function Inventory() {
           
           <DialogContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+              {/* NEW: Date field for cement purchase */}
+              {dialogType === 'cement-purchase' && (
+                <Controller
+                  name="date"
+                  control={control}
+                  rules={{
+                    required: "Purchase date is required",
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Purchase Date"
+                      type="date"
+                      fullWidth
+                      error={!!errors.date}
+                      helperText={errors.date?.message}
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                    />
+                  )}
+                />
+              )}
+
               <Controller
                 name="quantity"
                 control={control}

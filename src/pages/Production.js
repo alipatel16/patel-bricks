@@ -30,6 +30,8 @@ import {
   useTheme,
   alpha,
   Pagination,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -40,6 +42,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
   LocalShipping as TruckIcon,
+  Calculate as CalculateIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 
@@ -75,6 +78,9 @@ function Production() {
   const [editingProduction, setEditingProduction] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // New state for auto-calculation toggle
+  const [autoCalculateCement, setAutoCalculateCement] = useState(false);
+
   // Pagination state for production history
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -89,6 +95,7 @@ function Production() {
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
+      date: new Date().toISOString().split('T')[0], // Today's date
       quantity: "",
       shift: "morning",
       notes: "",
@@ -99,15 +106,16 @@ function Production() {
 
   const watchQuantity = watch("quantity");
   const watchOverrideCement = watch("overrideCement");
+  const watchDate = watch("date");
 
   // Load production data on mount
   useEffect(() => {
     loadProductionData();
   }, []);
 
-  // Calculate cement needed when quantity changes
+  // Calculate cement needed when quantity changes (only if auto-calculation is enabled)
   useEffect(() => {
-    if (watchQuantity && !watchOverrideCement) {
+    if (watchQuantity && autoCalculateCement && !watchOverrideCement) {
       const cementNeeded = calculateCementNeeded(
         parseInt(watchQuantity) || 0,
         settings.cement_per_brick_ratio || 0.05
@@ -116,6 +124,7 @@ function Production() {
     }
   }, [
     watchQuantity,
+    autoCalculateCement,
     watchOverrideCement,
     settings.cement_per_brick_ratio,
     setValue,
@@ -183,31 +192,65 @@ function Production() {
     }
   };
 
+  // Handle auto-calculate cement
+  const handleAutoCalculateCement = () => {
+    const quantity = parseInt(watch("quantity")) || 0;
+    if (quantity > 0) {
+      const cementNeeded = calculateCementNeeded(
+        quantity,
+        settings.cement_per_brick_ratio || 0.05
+      );
+      setValue("cementUsed", cementNeeded);
+      appActions.showNotification("Cement calculated automatically", "info");
+    } else {
+      appActions.showNotification("Please enter quantity first", "warning");
+    }
+  };
+
   // Handle form submission
   const onSubmit = async (data) => {
     try {
-      // Validate cement capacity
-      const capacity = validateProductionCapacity(
-        parseInt(data.quantity),
-        cement.total_bags,
-        settings.cement_per_brick_ratio || 0.05
-      );
+      console.log("Form submitted with data:", data);
+      console.log("Available cement:", cement.total_bags);
+      
+      // Manual validation for cement
+      const cementUsed = parseFloat(data.cementUsed);
+      
+      console.log("Cement used:", cementUsed);
+      
+      // Additional validation: Check if cement object exists
+      if (!cement || cement.total_bags === undefined || cement.total_bags === null) {
+        console.log("Cement data not available");
+        alert("Cement inventory data not available. Please refresh the page.");
+        appActions.showNotification("Cement inventory data not available. Please refresh the page.", "error");
+        return;
+      }
+      
+      if (!cementUsed || cementUsed <= 0) {
+        console.log("Invalid cement amount");
+        alert("Please enter a valid cement amount");
+        appActions.showNotification("Please enter a valid cement amount", "error");
+        return;
+      }
 
-      if (!capacity.isValid) {
-        appActions.showNotification(
-          `Insufficient cement. Required: ${capacity.requiredCement} bags, Available: ${capacity.availableCement} bags`,
-          "error"
-        );
+      if (cementUsed > cement.total_bags) {
+        console.log("Insufficient cement - showing error");
+        const errorMessage = `Insufficient cement. Required: ${cementUsed} bags, Available: ${cement.total_bags} bags`;
+        alert(errorMessage);
+        appActions.showNotification(errorMessage, "error");
         return;
       }
 
       const productionData = {
+        date: data.date, // Pass the selected date
         quantity: parseInt(data.quantity),
-        cementUsed: parseFloat(data.cementUsed),
+        cementUsed: cementUsed,
         shift: data.shift,
         notes: data.notes,
-        overrideCementCalculation: data.overrideCement,
+        overrideCementCalculation: true, // Always manual now
       };
+
+      console.log("Submitting production data:", productionData);
 
       const result = await productionService.addProduction(productionData);
 
@@ -216,18 +259,28 @@ function Production() {
           "Production recorded successfully",
           "success"
         );
-        reset();
+        reset({
+          date: new Date().toISOString().split('T')[0], // Reset to today
+          quantity: "",
+          shift: "morning",
+          notes: "",
+          overrideCement: false,
+          cementUsed: "",
+        });
         setDialogOpen(false);
         loadProductionData();
         inventoryActions.refreshInventory();
       } else {
+        console.log("Production service error:", result.error);
+        alert("Error: " + (result.error || "Failed to record production"));
         appActions.showNotification(
           result.error || "Failed to record production",
           "error"
         );
       }
     } catch (error) {
-      
+      console.error("Error in onSubmit:", error);
+      alert("Error: Failed to record production");
       appActions.showNotification("Failed to record production", "error");
     }
   };
@@ -235,6 +288,7 @@ function Production() {
   // Handle edit production
   const handleEditProduction = (production) => {
     setEditingProduction(production);
+    setValue("date", production.date);
     setValue("quantity", production.quantity);
     setValue("cementUsed", production.cement_used);
     setValue("shift", production.shift);
@@ -246,7 +300,15 @@ function Production() {
   const handleDialogClose = () => {
     setDialogOpen(false);
     setEditingProduction(null);
-    reset();
+    setAutoCalculateCement(false);
+    reset({
+      date: new Date().toISOString().split('T')[0], // Reset to today
+      quantity: "",
+      shift: "morning",
+      notes: "",
+      overrideCement: false,
+      cementUsed: "",
+    });
   };
 
   // Format date for display
@@ -636,6 +698,28 @@ function Production() {
             <Box
               sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}
             >
+              {/* Date Field */}
+              <Controller
+                name="date"
+                control={control}
+                rules={{
+                  required: "Date is required",
+                }}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="Production Date"
+                    type="date"
+                    fullWidth
+                    error={!!errors.date}
+                    helperText={errors.date?.message}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+                )}
+              />
+
               <Controller
                 name="quantity"
                 control={control}
@@ -655,30 +739,32 @@ function Production() {
                 )}
               />
 
-              <Controller
-                name="cementUsed"
-                control={control}
-                rules={{
-                  required: "Cement amount is required",
-                  min: {
-                    value: 0,
-                    message: "Cement amount cannot be negative",
-                  },
-                }}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Cement Used (bags)"
-                    type="number"
-                    fullWidth
-                    error={!!errors.cementUsed}
-                    helperText={
-                      errors.cementUsed?.message ||
-                      `Available: ${cement.total_bags} bags`
-                    }
-                  />
-                )}
-              />
+              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
+                <Controller
+                  name="cementUsed"
+                  control={control}
+                  rules={{
+                    required: "Cement amount is required",
+                    min: {
+                      value: 0,
+                      message: "Cement amount cannot be negative",
+                    },
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Cement Used (bags)"
+                      type="number"
+                      fullWidth
+                      error={!!errors.cementUsed}
+                      helperText={
+                        errors.cementUsed?.message ||
+                        `Available: ${cement.total_bags} bags`
+                      }
+                    />
+                  )}
+                />
+              </Box>
 
               <Controller
                 name="shift"

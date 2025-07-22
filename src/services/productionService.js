@@ -20,6 +20,7 @@ export const productionService = {
   addProduction: async (productionData) => {
     try {
       const {
+        date, // NEW: Accept date parameter
         quantity,
         cementUsed,
         shift = "morning",
@@ -31,6 +32,27 @@ export const productionService = {
       // Validate input
       if (!quantity || quantity <= 0) {
         return { success: false, error: "Invalid quantity provided" };
+      }
+
+      // NEW: Validate and use provided date or default to current date
+      const productionDate = date || dbUtils.dateString();
+      
+      // Validate date format (YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(productionDate)) {
+        return { success: false, error: "Invalid date format. Use YYYY-MM-DD" };
+      }
+
+      // Check if production already exists for this date
+      const existingProduction = await dbUtils.readData(
+        `${DB_PATHS.PRODUCTION}/daily/${productionDate}`
+      );
+      
+      if (existingProduction.data) {
+        return { 
+          success: false, 
+          error: `Production already recorded for ${productionDate}. Please edit the existing record or choose a different date.` 
+        };
       }
 
       // Get current cement inventory and settings
@@ -46,28 +68,24 @@ export const productionService = {
       const settings = settingsResult.data || {};
       const cementRatio = settings.cement_per_brick_ratio || 0.05;
 
-      // Calculate cement needed if not overridden
-      const requiredCement = overrideCementCalculation
-        ? cementUsed
-        : calculateCementNeeded(quantity, cementRatio);
+      // NEW: Use manual cement amount (cementUsed) directly, 
+      // but still calculate for validation purposes if needed
+      const requiredCement = cementUsed; // Use manual input directly
 
-      // Validate production capacity
-      const capacity = validateProductionCapacity(
-        quantity,
-        cementResult.data.total_bags,
-        cementRatio
-      );
-
-      if (!capacity.isValid) {
+      // Manual validation for cement availability
+      if (requiredCement > cementResult.data.total_bags) {
         return {
           success: false,
-          error: `Insufficient cement. Required: ${capacity.requiredCement} bags, Available: ${capacity.availableCement} bags`,
-          data: capacity,
+          error: `Insufficient cement. Required: ${requiredCement} bags, Available: ${cementResult.data.total_bags} bags`,
+          data: {
+            requiredCement,
+            availableCement: cementResult.data.total_bags,
+            isValid: false
+          },
         };
       }
 
-      const currentDate = dbUtils.dateString();
-      const currentMonth = currentDate.substring(0, 7); // YYYY-MM
+      const currentMonth = productionDate.substring(0, 7); // YYYY-MM
       const timestamp = dbUtils.timestamp();
 
       // Prepare production entry
@@ -81,17 +99,17 @@ export const productionService = {
           Number(quantity),
           Number(requiredCement)
         ),
-        date: currentDate,
+        date: productionDate, // Use the provided/selected date
         timestamp,
       };
 
       // Prepare batch updates
       const updates = {};
 
-      // 1. Add to daily production
-      updates[`${DB_PATHS.PRODUCTION}/daily/${currentDate}`] = productionEntry;
+      // 1. Add to daily production using the selected date
+      updates[`${DB_PATHS.PRODUCTION}/daily/${productionDate}`] = productionEntry;
 
-      // 2. Update monthly totals
+      // 2. Update monthly totals for the selected date's month
       const monthlyResult = await dbUtils.readData(
         `${DB_PATHS.PRODUCTION}/monthly/${currentMonth}`
       );
@@ -122,8 +140,8 @@ export const productionService = {
         last_updated: timestamp,
       };
 
-      // 3. Update cement daily usage
-      updates[`${DB_PATHS.CEMENT}/usage/daily/${currentDate}`] = {
+      // 3. Update cement daily usage for the selected date
+      updates[`${DB_PATHS.CEMENT}/usage/daily/${productionDate}`] = {
         bags_used: requiredCement,
         bricks_produced: quantity,
         efficiency: calculateProductionEfficiency(quantity, requiredCement),
@@ -142,19 +160,23 @@ export const productionService = {
         inventoryService.updateBrickStock(
           quantity,
           "add",
-          `Production: ${quantity} bricks`
+          `Production: ${quantity} bricks on ${productionDate}`
         ),
         inventoryService.updateCementStock(
           requiredCement,
           "subtract",
           null,
-          `Production: ${quantity} bricks`
+          `Production: ${quantity} bricks on ${productionDate}`
         ),
       ]);
 
       if (!brickStockResult.success || !cementStockResult.success) {
         // Note: Production was saved but inventory update failed
         // In a real app, you might want to implement rollback logic
+        console.warn("Production saved but inventory update failed", {
+          brickStockResult,
+          cementStockResult
+        });
       }
 
       return {
@@ -168,7 +190,7 @@ export const productionService = {
         },
       };
     } catch (error) {
-      
+      console.error("Error adding production:", error);
       return { success: false, error: error.message };
     }
   },
@@ -184,7 +206,7 @@ export const productionService = {
         data: result.data,
       };
     } catch (error) {
-      
+      console.error("Error getting production by date:", error);
       return { success: false, error: error.message };
     }
   },
@@ -225,7 +247,7 @@ export const productionService = {
         data: productions,
       };
     } catch (error) {
-      
+      console.error("Error getting production history:", error);
       return { success: false, error: error.message };
     }
   },
@@ -255,7 +277,7 @@ export const productionService = {
         data: monthlyData,
       };
     } catch (error) {
-      
+      console.error("Error getting monthly production:", error);
       return { success: false, error: error.message };
     }
   },
@@ -347,7 +369,7 @@ export const productionService = {
         data: stats,
       };
     } catch (error) {
-      
+      console.error("Error getting production stats:", error);
       return { success: false, error: error.message };
     }
   },
@@ -428,7 +450,7 @@ export const productionService = {
         },
       };
     } catch (error) {
-      
+      console.error("Error getting production trends:", error);
       return { success: false, error: error.message };
     }
   },
@@ -484,7 +506,7 @@ export const productionService = {
         data: usage,
       };
     } catch (error) {
-      
+      console.error("Error getting cement usage:", error);
       return { success: false, error: error.message };
     }
   },
@@ -538,7 +560,7 @@ export const productionService = {
 
       return result;
     } catch (error) {
-      
+      console.error("Error updating production:", error);
       return { success: false, error: error.message };
     }
   },
@@ -552,7 +574,22 @@ export const productionService = {
       );
       return result;
     } catch (error) {
-      
+      console.error("Error deleting production:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // NEW: Helper function to check if production exists for a date
+  checkProductionExists: async (date) => {
+    try {
+      const result = await productionService.getProductionByDate(date);
+      return {
+        success: true,
+        exists: !!result.data,
+        data: result.data
+      };
+    } catch (error) {
+      console.error("Error checking production existence:", error);
       return { success: false, error: error.message };
     }
   },

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useCallback } 
 import { inventoryService } from '../services/inventoryService';
 import { useApp } from './AppContext';
 
-// Initial state
+// Initial state (same as before)
 const initialState = {
   // Brick inventory
   bricks: {
@@ -55,7 +55,7 @@ const initialState = {
   },
 };
 
-// Action types
+// Action types (same as before)
 const ActionTypes = {
   // Brick inventory actions
   SET_BRICK_INVENTORY: 'SET_BRICK_INVENTORY',
@@ -88,7 +88,7 @@ const ActionTypes = {
   RESET_INVENTORY: 'RESET_INVENTORY',
 };
 
-// Reducer function
+// Reducer function (same as before)
 function inventoryReducer(state, action) {
   switch (action.type) {
     case ActionTypes.SET_BRICK_INVENTORY:
@@ -321,7 +321,7 @@ export function InventoryProvider({ children }) {
         throw new Error(result.error);
       }
     } catch (error) {
-      
+      console.error("Error loading inventory data:", error);
       dispatch({ type: ActionTypes.SET_STATUS_ERROR, payload: error.message });
       appActions.showNotification('Failed to load inventory data', 'error');
     }
@@ -373,7 +373,7 @@ export function InventoryProvider({ children }) {
         throw new Error(result.error);
       }
     } catch (error) {
-      
+      console.error("Error loading inventory history:", error);
       dispatch({ type: ActionTypes.SET_HISTORY_ERROR, payload: error.message });
       appActions.showNotification('Failed to load inventory history', 'error');
     }
@@ -403,7 +403,7 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
-        
+        console.error("Error updating brick stock:", error);
         dispatch({ type: ActionTypes.SET_BRICK_ERROR, payload: error.message });
         appActions.showNotification('Failed to update brick stock', 'error');
         return { success: false, error: error.message };
@@ -428,7 +428,7 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
-        
+        console.error("Error setting brick stock:", error);
         dispatch({ type: ActionTypes.SET_BRICK_ERROR, payload: error.message });
         appActions.showNotification('Failed to set brick stock', 'error');
         return { success: false, error: error.message };
@@ -463,13 +463,14 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
-        
+        console.error("Error updating cement stock:", error);
         dispatch({ type: ActionTypes.SET_CEMENT_ERROR, payload: error.message });
         appActions.showNotification('Failed to update cement stock', 'error');
         return { success: false, error: error.message };
       }
     },
 
+    // ORIGINAL: Purchase cement function (keeping for backward compatibility)
     purchaseCement: async (bags, costPerBag, supplier = '', notes = '') => {
       try {
         dispatch({ type: ActionTypes.SET_CEMENT_LOADING, payload: true });
@@ -478,7 +479,7 @@ export function InventoryProvider({ children }) {
         
         if (result.success) {
           appActions.showNotification(
-            `Purchased ${bags} bags of cement for $${(bags * costPerBag).toFixed(2)}`,
+            `Purchased ${bags} bags of cement for ₹${(bags * costPerBag).toFixed(2)}`,
             'success'
           );
           
@@ -501,7 +502,47 @@ export function InventoryProvider({ children }) {
         
         return result;
       } catch (error) {
+        console.error("Error purchasing cement:", error);
+        dispatch({ type: ActionTypes.SET_CEMENT_ERROR, payload: error.message });
+        appActions.showNotification('Failed to record cement purchase', 'error');
+        return { success: false, error: error.message };
+      }
+    },
+
+    // NEW: Purchase cement with date support
+    purchaseCementWithDate: async (bags, costPerBag, supplier = '', notes = '', date = null) => {
+      try {
+        dispatch({ type: ActionTypes.SET_CEMENT_LOADING, payload: true });
         
+        const result = await inventoryService.purchaseCement(bags, costPerBag, supplier, notes, date);
+        
+        if (result.success) {
+          const purchaseDate = date || new Date().toISOString().split('T')[0];
+          appActions.showNotification(
+            `Purchased ${bags} bags of cement for ₹${(bags * costPerBag).toFixed(2)} on ${purchaseDate}`,
+            'success'
+          );
+          
+          // Add to history
+          dispatch({
+            type: ActionTypes.ADD_HISTORY_TRANSACTION,
+            payload: {
+              id: result.data.purchase_id,
+              type: 'cement',
+              category: 'purchase',
+              ...result.data,
+            },
+          });
+          
+          // Reload inventory data to sync everything
+          await loadInventoryData();
+        } else {
+          throw new Error(result.error);
+        }
+        
+        return result;
+      } catch (error) {
+        console.error("Error purchasing cement with date:", error);
         dispatch({ type: ActionTypes.SET_CEMENT_ERROR, payload: error.message });
         appActions.showNotification('Failed to record cement purchase', 'error');
         return { success: false, error: error.message };
@@ -579,6 +620,7 @@ export function useCementInventory() {
     cement,
     updateStock: actions.updateCementStock,
     purchaseCement: actions.purchaseCement,
+    purchaseCementWithDate: actions.purchaseCementWithDate, // NEW: Expose the date-specific function
     isLoading: cement.loading,
     error: cement.error,
   };

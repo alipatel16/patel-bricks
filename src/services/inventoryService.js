@@ -22,7 +22,7 @@ export const inventoryService = {
         data: result.data || { total_stock: 0, last_updated: Date.now() },
       };
     } catch (error) {
-      
+      console.error("Error getting brick inventory:", error);
       return { success: false, error: error.message };
     }
   },
@@ -112,7 +112,7 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      
+      console.error("Error updating brick stock:", error);
       return { success: false, error: error.message };
     }
   },
@@ -195,7 +195,7 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      
+      console.error("Error setting brick stock:", error);
       return { success: false, error: error.message };
     }
   },
@@ -226,7 +226,7 @@ export const inventoryService = {
       try {
         callback(updateEvent);
       } catch (error) {
-        
+        console.error("Error in inventory listener:", error);
       }
     });
   },
@@ -283,7 +283,7 @@ export const inventoryService = {
         },
       };
     } catch (error) {
-      
+      console.error("Error getting cement inventory:", error);
       return { success: false, error: error.message };
     }
   },
@@ -356,46 +356,57 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      
+      console.error("Error updating cement stock:", error);
       return { success: false, error: error.message };
     }
   },
 
-  purchaseCement: async (bags, costPerBag, supplier = "", notes = "") => {
+  // ENHANCED: Purchase cement with optional date support
+  purchaseCement: async (bags, costPerBag, supplier = "", notes = "", date = null) => {
     try {
+      // Use provided date or current date
+      const purchaseDate = date || dbUtils.dateString();
+      
       // First update the stock
       const stockResult = await inventoryService.updateCementStock(
         bags,
         "add",
         costPerBag,
-        `Purchase from ${supplier || "Supplier"}`
+        `Purchase from ${supplier || "Supplier"} on ${purchaseDate}`
       );
 
       if (!stockResult.success) {
         return stockResult;
       }
 
-      // Record the purchase transaction
+      // Record the purchase transaction with date
       const purchaseData = {
         bags,
         cost_per_bag: costPerBag,
         total_cost: bags * costPerBag,
         supplier: supplier || "Unknown Supplier",
         notes,
-        date: dbUtils.dateString(),
+        date: purchaseDate, // Store the purchase date
         timestamp: dbUtils.timestamp(),
       };
 
-      const purchaseResult = await dbUtils.pushData(
-        `${DB_PATHS.CEMENT}/purchases`,
-        purchaseData
-      );
+      // ENHANCED: Store in both legacy path and new date-wise path
+      const purchaseKey = `purchase_${purchaseData.timestamp}`;
+      const updates = {};
+
+      // Store in legacy purchases path
+      updates[`${DB_PATHS.CEMENT}/purchases/${purchaseKey}`] = purchaseData;
+
+      // NEW: Store in date-wise purchases for better querying
+      updates[`${DB_PATHS.CEMENT}/purchases_by_date/${purchaseDate}/${purchaseKey}`] = purchaseData;
+
+      const purchaseResult = await dbUtils.batchUpdate(updates);
 
       if (purchaseResult.success) {
         return {
           success: true,
           data: {
-            purchase_id: purchaseResult.key,
+            purchase_id: purchaseKey,
             ...purchaseData,
             stock_update: stockResult.data,
           },
@@ -404,7 +415,79 @@ export const inventoryService = {
 
       return purchaseResult;
     } catch (error) {
-      
+      console.error("Error purchasing cement:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // NEW: Get cement purchase history
+  getCementPurchaseHistory: async (limit = 100) => {
+    try {
+      const result = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases`);
+
+      if (!result.success || !result.data) {
+        return { success: true, data: [] };
+      }
+
+      // Convert to array and sort by timestamp (most recent first)
+      let purchases = Object.entries(result.data).map(([key, data]) => ({
+        id: key,
+        ...data,
+      }));
+
+      // Sort by timestamp or date (most recent first)
+      purchases = purchases
+        .sort((a, b) => {
+          const aTime = new Date(a.date || a.timestamp).getTime();
+          const bTime = new Date(b.date || b.timestamp).getTime();
+          return bTime - aTime;
+        })
+        .slice(0, limit);
+
+      return {
+        success: true,
+        data: purchases,
+      };
+    } catch (error) {
+      console.error("Error getting cement purchase history:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // NEW: Get cement purchases by date range
+  getCementPurchasesByDateRange: async (startDate, endDate) => {
+    try {
+      const result = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases_by_date`);
+
+      if (!result.success || !result.data) {
+        return { success: true, data: [] };
+      }
+
+      let purchases = [];
+
+      // Filter purchases by date range
+      Object.entries(result.data).forEach(([date, dayPurchases]) => {
+        if (date >= startDate && date <= endDate) {
+          Object.entries(dayPurchases).forEach(([key, data]) => {
+            purchases.push({
+              id: key,
+              ...data,
+            });
+          });
+        }
+      });
+
+      // Sort by date (most recent first)
+      purchases = purchases.sort((a, b) => {
+        return new Date(b.date || b.timestamp) - new Date(a.date || a.timestamp);
+      });
+
+      return {
+        success: true,
+        data: purchases,
+      };
+    } catch (error) {
+      console.error("Error getting cement purchases by date range:", error);
       return { success: false, error: error.message };
     }
   },
@@ -414,105 +497,6 @@ export const inventoryService = {
    */
 
   // Get complete inventory status
-  getInventoryStatus: async () => {
-    try {
-      const [brickResult, cementResult] = await Promise.all([
-        inventoryService.getBrickInventory(),
-        inventoryService.getCementInventory(),
-      ]);
-
-      if (brickResult.success && cementResult.success) {
-        return {
-          success: true,
-          data: {
-            bricks: brickResult.data,
-            cement: cementResult.data,
-            last_updated: Math.max(
-              brickResult.data.last_updated || 0,
-              cementResult.data.last_updated || 0
-            ),
-          },
-        };
-      }
-
-      return { success: false, error: "Failed to load inventory status" };
-    } catch (error) {
-      
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Listen to brick inventory changes
-  listenToBrickInventory: (callback) => {
-    try {
-      return dbUtils.listenToData(DB_PATHS.INVENTORY.BRICKS, callback);
-    } catch (error) {
-      
-      return () => {}; // Return empty cleanup function
-    }
-  },
-
-  // Listen to cement inventory changes
-  listenToCementInventory: (callback) => {
-    try {
-      return dbUtils.listenToData(DB_PATHS.INVENTORY.CEMENT, callback);
-    } catch (error) {
-      
-      return () => {}; // Return empty cleanup function
-    }
-  },
-
-  // Listen to complete inventory status - THIS IS THE MISSING FUNCTION
-  listenToInventoryStatus: (callback) => {
-    try {
-      const unsubscribers = [];
-
-      // Listen to both brick and cement inventory
-      const brickUnsubscriber = inventoryService.listenToBrickInventory(() => {
-        // When brick inventory changes, get complete status and call callback
-        inventoryService
-          .getInventoryStatus()
-          .then(callback)
-          .catch((error) => {
-            
-            callback({ success: false, error: error.message });
-          });
-      });
-
-      const cementUnsubscriber = inventoryService.listenToCementInventory(
-        () => {
-          // When cement inventory changes, get complete status and call callback
-          inventoryService
-            .getInventoryStatus()
-            .then(callback)
-            .catch((error) => {
-              
-              callback({ success: false, error: error.message });
-            });
-        }
-      );
-
-      unsubscribers.push(brickUnsubscriber, cementUnsubscriber);
-
-      // Return function to unsubscribe from all listeners
-      return () => {
-        unsubscribers.forEach((unsubscribe) => {
-          try {
-            if (typeof unsubscribe === "function") {
-              unsubscribe();
-            }
-          } catch (error) {
-            
-          }
-        });
-      };
-    } catch (error) {
-      
-      return () => {}; // Return empty cleanup function
-    }
-  },
-
-  // Get complete inventory status - MAKE SURE THIS EXISTS TOO
   getInventoryStatus: async () => {
     try {
       const [brickResult, cementResult] = await Promise.all([
@@ -560,8 +544,78 @@ export const inventoryService = {
 
       return { success: false, error: "Failed to load inventory status" };
     } catch (error) {
-      
+      console.error("Error getting inventory status:", error);
       return { success: false, error: error.message };
+    }
+  },
+
+  // Listen to brick inventory changes
+  listenToBrickInventory: (callback) => {
+    try {
+      return dbUtils.listenToData(DB_PATHS.INVENTORY.BRICKS, callback);
+    } catch (error) {
+      console.error("Error listening to brick inventory:", error);
+      return () => {}; // Return empty cleanup function
+    }
+  },
+
+  // Listen to cement inventory changes
+  listenToCementInventory: (callback) => {
+    try {
+      return dbUtils.listenToData(DB_PATHS.INVENTORY.CEMENT, callback);
+    } catch (error) {
+      console.error("Error listening to cement inventory:", error);
+      return () => {}; // Return empty cleanup function
+    }
+  },
+
+  // Listen to complete inventory status - THIS IS THE MISSING FUNCTION
+  listenToInventoryStatus: (callback) => {
+    try {
+      const unsubscribers = [];
+
+      // Listen to both brick and cement inventory
+      const brickUnsubscriber = inventoryService.listenToBrickInventory(() => {
+        // When brick inventory changes, get complete status and call callback
+        inventoryService
+          .getInventoryStatus()
+          .then(callback)
+          .catch((error) => {
+            console.error("Error getting inventory status:", error);
+            callback({ success: false, error: error.message });
+          });
+      });
+
+      const cementUnsubscriber = inventoryService.listenToCementInventory(
+        () => {
+          // When cement inventory changes, get complete status and call callback
+          inventoryService
+            .getInventoryStatus()
+            .then(callback)
+            .catch((error) => {
+              console.error("Error getting inventory status:", error);
+              callback({ success: false, error: error.message });
+            });
+        }
+      );
+
+      unsubscribers.push(brickUnsubscriber, cementUnsubscriber);
+
+      // Return function to unsubscribe from all listeners
+      return () => {
+        unsubscribers.forEach((unsubscribe) => {
+          try {
+            if (typeof unsubscribe === "function") {
+              unsubscribe();
+            }
+          } catch (error) {
+            console.error("Error unsubscribing from inventory listener:", error);
+          }
+        });
+      };
+    } catch (error) {
+      console.error("Error setting up inventory status listener:", error);
+      return () => {}; // Return empty cleanup function
     }
   },
 
@@ -570,7 +624,7 @@ export const inventoryService = {
    */
   getInventoryAdjustments: async () => {
     try {
-      
+      console.log("Getting inventory adjustments...");
 
       // Get adjustments from both history and transactions paths
       const [historyResult, transactionsResult] = await Promise.all([
@@ -628,14 +682,14 @@ export const inventoryService = {
       // Sort by timestamp (oldest first) for accurate calculation
       adjustments.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-      
+      console.log(`Found ${adjustments.length} inventory adjustments`);
 
       return {
         success: true,
         data: adjustments,
       };
     } catch (error) {
-      
+      console.error("Error getting inventory adjustments:", error);
       return {
         success: false,
         error: error.message,
@@ -690,7 +744,7 @@ export const inventoryService = {
         data: sortedTransactions,
       };
     } catch (error) {
-      
+      console.error("Error getting inventory history:", error);
       return { success: false, error: error.message };
     }
   },
@@ -721,7 +775,7 @@ export const inventoryService = {
         },
       };
     } catch (error) {
-      
+      console.error("Error force refreshing inventory:", error);
       return { success: false, error: error.message };
     }
   },
@@ -750,7 +804,7 @@ export const inventoryService = {
 
       return status;
     } catch (error) {
-      
+      console.error("Error force syncing inventory:", error);
       return { success: false, error: error.message };
     }
   },
