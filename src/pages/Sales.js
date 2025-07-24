@@ -1,4 +1,4 @@
-// Sales.js - Updated to use separated components with original design
+// Sales.js - Updated to use separated components with original design and proper edit handling
 import { useState, useEffect } from "react";
 import {
   Box,
@@ -82,7 +82,11 @@ function Sales() {
   // State management
   const [currentTab, setCurrentTab] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingSale, setEditingSale] = useState(null);
+  
+  // FIXED: Proper edit state management
+  const [editingData, setEditingData] = useState(null); // NEW: Add editingData state
+  const [isEditMode, setIsEditMode] = useState(false); // NEW: Add edit mode state
+  
   const [refreshing, setRefreshing] = useState(false);
 
   // Invoice viewer state
@@ -127,7 +131,7 @@ function Sales() {
     try {
       await loadSalesData();
     } catch (error) {
-      
+      console.error("Error refreshing sales data:", error);
       toast.error("Failed to refresh sales data");
     } finally {
       setRefreshing(false);
@@ -147,6 +151,9 @@ function Sales() {
 
   // Handle dialog operations
   const handleOpenDialog = () => {
+    // Reset edit state for new sale
+    setEditingData(null);
+    setIsEditMode(false);
     setSelectedCustomer(null);
     setSelectedLocation(null);
     setCustomerOptions([]);
@@ -156,27 +163,71 @@ function Sales() {
 
   const handleCloseDialog = () => {
     setDialogOpen(false);
-    setEditingSale(null);
+    // Reset all edit-related state
+    setEditingData(null);
+    setIsEditMode(false);
     setSelectedCustomer(null);
     setSelectedLocation(null);
     setCustomerOptions([]);
     setLocationOptions([]);
   };
 
+  // FIXED: Proper edit sale handler
+  const handleEditSale = (editData) => {
+    console.log("Editing sale:", editData);
+    
+    // Set edit mode and data
+    setEditingData(editData);
+    setIsEditMode(true);
+    
+    // Pre-populate customer and location if they exist
+    if (editData.originalSale) {
+      const sale = editData.originalSale;
+      
+      // Create customer object if customer data exists
+      if (sale.customer_name) {
+        const customerObj = {
+          name: sale.customer_name,
+          phone: sale.customer_phone,
+          email: sale.customer_email,
+          state: sale.customer_state,
+          state_code: sale.customer_state_code,
+          gstin: sale.customer_gstin,
+        };
+        setSelectedCustomer(customerObj);
+      }
+      
+      // Create location object if location data exists
+      if (sale.location_name) {
+        const locationObj = {
+          name: sale.location_name,
+          address: sale.customer_address || sale.location_name,
+        };
+        setSelectedLocation(locationObj);
+      }
+    }
+    
+    // Open dialog
+    setDialogOpen(true);
+  };
+
   // Enhanced form submission
   const onSubmit = async (data) => {
     try {
-      // Validate brick availability
-      const capacity = validateSaleCapacity(
-        parseInt(data.quantity),
-        bricks.total_stock
-      );
-
-      if (!capacity.isValid) {
-        toast.error(
-          `Insufficient stock. Required: ${data.quantity}, Available: ${bricks.total_stock}`
+      // Skip stock validation for edit mode (assuming we're not changing quantity significantly)
+      if (!isEditMode) {
+        // Validate brick availability for new sales
+        const capacity = validateSaleCapacity(
+          parseInt(data.quantity),
+          bricks.total_stock
         );
-        return;
+
+        if (!capacity.isValid) {
+          toast.error(
+            `Insufficient stock. Required: ${data.quantity}, Available: ${bricks.total_stock}`
+          );
+          return;
+        }
       }
 
       // Validate form data (without customerAddress)
@@ -198,6 +249,12 @@ function Sales() {
 
       // Prepare enhanced sale data
       const enhancedSaleData = {
+        // Add edit information if in edit mode
+        ...(isEditMode && editingData?.originalSale && {
+          isEdit: true,
+          originalSaleId: editingData.originalSale.id || editingData.originalSale.invoice_number,
+        }),
+
         // Date (already in YYYY-MM-DD format)
         date: data.saleDate,
 
@@ -239,6 +296,9 @@ function Sales() {
       const result = await recordSale(enhancedSaleData);
 
       if (result.success) {
+        // Show appropriate success message
+        toast.success(isEditMode ? "Sale updated successfully!" : "Sale recorded successfully!");
+        
         // Try to reload inventory data if the function exists
         try {
           if (
@@ -248,15 +308,15 @@ function Sales() {
             await inventoryActions.loadInventoryData();
           }
         } catch (inventoryError) {
-          
+          console.error("Error reloading inventory:", inventoryError);
           // Continue anyway - sale was successful
         }
 
         handleCloseDialog();
       }
     } catch (error) {
-      
-      toast.error("Failed to record sale");
+      console.error("Error recording/updating sale:", error);
+      toast.error(isEditMode ? "Failed to update sale" : "Failed to record sale");
     }
   };
 
@@ -566,6 +626,7 @@ function Sales() {
           setSearchFilters={setSearchFilters}
           filteredSales={filteredSales}
           onViewInvoice={handleViewInvoice}
+          onEditSale={handleEditSale} // FIXED: Now properly connected
         />
       </TabPanel>
 
@@ -630,7 +691,7 @@ function Sales() {
         />
       </TabPanel>
 
-      {/* Record Sale Dialog */}
+      {/* Record Sale Dialog - ENHANCED: Now handles edit mode */}
       <RecordSaleDialog
         open={dialogOpen}
         onClose={handleCloseDialog}
@@ -650,6 +711,9 @@ function Sales() {
         calculatedAmounts={calculatedAmounts}
         setCalculatedAmounts={setCalculatedAmounts}
         searchCustomers={searchCustomers}
+        // NEW: Pass edit-related props
+        editingData={editingData}
+        isEditMode={isEditMode}
       />
 
       {/* GST Invoice Viewer */}

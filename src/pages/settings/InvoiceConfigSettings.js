@@ -1,4 +1,4 @@
-// components/settings/InvoiceConfigSettings.js - Updated with GST Invoice Numbering
+// components/settings/InvoiceConfigSettings.js - Updated with GST Invoice Numbering and Vehicle Management
 
 import { useState, useEffect } from 'react';
 import {
@@ -27,6 +27,7 @@ import {
   DialogContent,
   DialogActions,
   Divider,
+  Chip,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -38,6 +39,7 @@ import {
   Description as DescriptionIcon,
   Percent as TaxIcon,
   Receipt as InvoiceIcon,
+  DirectionsCar as VehicleIcon,
 } from '@mui/icons-material';
 import { HSN_CODES, GST_RATES, INVOICE_SETTINGS } from '../../utils/constants';
 import { dbUtils } from '../../services/firebase';
@@ -63,12 +65,14 @@ const DEFAULT_INVOICE_CONFIG = {
     startingNumber: 1,
     autoIncrement: true,
   },
-  // NEW: GST Invoice specific numbering
+  // GST Invoice specific numbering
   gstInvoiceNumbering: {
     prefix: 'GST-INV',
     currentNumber: 1,
     autoIncrement: true,
   },
+  // NEW: Vehicle management
+  vehicles: [],
 };
 
 const InvoiceConfigSettings = () => {
@@ -82,6 +86,16 @@ const InvoiceConfigSettings = () => {
   const [termsDialogOpen, setTermsDialogOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState(null);
   const [newTerm, setNewTerm] = useState('');
+
+  // NEW: Dialog states for vehicle management
+  const [vehicleDialogOpen, setVehicleDialogOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState(null);
+  const [newVehicle, setNewVehicle] = useState({
+    number: '',
+    driver: '',
+    capacity: '',
+    notes: '',
+  });
 
   useEffect(() => {
     loadInvoiceConfig();
@@ -102,6 +116,8 @@ const InvoiceConfigSettings = () => {
             ...DEFAULT_INVOICE_CONFIG.gstInvoiceNumbering,
             ...result.data.gstInvoiceNumbering,
           },
+          // NEW: Ensure vehicles array exists
+          vehicles: result.data.vehicles || [],
         };
         setInvoiceConfig(mergedConfig);
       } else {
@@ -140,7 +156,7 @@ const InvoiceConfigSettings = () => {
       errors.startingNumber = 'Starting number must be at least 1';
     }
 
-    // NEW: GST Invoice numbering validation
+    // GST Invoice numbering validation
     if (!config.gstInvoiceNumbering.prefix || config.gstInvoiceNumbering.prefix.trim().length < 1) {
       errors.gstPrefix = 'GST Invoice prefix is required';
     }
@@ -237,7 +253,7 @@ const InvoiceConfigSettings = () => {
     }
   };
 
-  // Terms dialog handlers
+  // Terms dialog handlers (existing functionality preserved)
   const handleAddTerm = () => {
     if (newTerm.trim()) {
       setInvoiceConfig(prev => ({
@@ -280,6 +296,79 @@ const InvoiceConfigSettings = () => {
     setTermsDialogOpen(false);
     setEditingTerm(null);
     setNewTerm('');
+  };
+
+  // NEW: Vehicle management handlers
+  const handleAddVehicle = () => {
+    if (newVehicle.number.trim()) {
+      const vehicleData = {
+        id: `vehicle_${Date.now()}`,
+        number: newVehicle.number.trim().toUpperCase(),
+        driver: newVehicle.driver.trim(),
+        capacity: newVehicle.capacity.trim(),
+        notes: newVehicle.notes.trim(),
+        createdAt: new Date().toISOString(),
+      };
+
+      setInvoiceConfig(prev => ({
+        ...prev,
+        vehicles: [...(prev.vehicles || []), vehicleData]
+      }));
+      
+      setNewVehicle({ number: '', driver: '', capacity: '', notes: '' });
+      setVehicleDialogOpen(false);
+      toast.success('Vehicle added successfully!');
+    }
+  };
+
+  const handleEditVehicle = (index) => {
+    setEditingVehicle(index);
+    const vehicle = invoiceConfig.vehicles[index];
+    setNewVehicle({
+      number: vehicle.number || '',
+      driver: vehicle.driver || '',
+      capacity: vehicle.capacity || '',
+      notes: vehicle.notes || '',
+    });
+    setVehicleDialogOpen(true);
+  };
+
+  const handleUpdateVehicle = () => {
+    if (newVehicle.number.trim() && editingVehicle !== null) {
+      const updatedVehicles = [...invoiceConfig.vehicles];
+      updatedVehicles[editingVehicle] = {
+        ...updatedVehicles[editingVehicle],
+        number: newVehicle.number.trim().toUpperCase(),
+        driver: newVehicle.driver.trim(),
+        capacity: newVehicle.capacity.trim(),
+        notes: newVehicle.notes.trim(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      setInvoiceConfig(prev => ({
+        ...prev,
+        vehicles: updatedVehicles
+      }));
+      
+      setNewVehicle({ number: '', driver: '', capacity: '', notes: '' });
+      setEditingVehicle(null);
+      setVehicleDialogOpen(false);
+      toast.success('Vehicle updated successfully!');
+    }
+  };
+
+  const handleDeleteVehicle = (index) => {
+    setInvoiceConfig(prev => ({
+      ...prev,
+      vehicles: prev.vehicles.filter((_, i) => i !== index)
+    }));
+    toast.success('Vehicle removed successfully!');
+  };
+
+  const handleCloseVehicleDialog = () => {
+    setVehicleDialogOpen(false);
+    setEditingVehicle(null);
+    setNewVehicle({ number: '', driver: '', capacity: '', notes: '' });
   };
 
   if (loading) {
@@ -328,7 +417,7 @@ const InvoiceConfigSettings = () => {
         </Box>
 
         <Alert severity="info" sx={{ mb: 3 }}>
-          Configure invoice settings, GST rates, and terms & conditions for your business.
+          Configure invoice settings, GST rates, vehicle management, and terms & conditions for your business.
         </Alert>
 
         <Grid container spacing={3}>
@@ -502,7 +591,7 @@ const InvoiceConfigSettings = () => {
             />
           </Grid>
 
-          {/* NEW: GST Invoice Specific Numbering */}
+          {/* GST Invoice Specific Numbering */}
           <Grid item xs={12}>
             <Divider sx={{ my: 2 }} />
             <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'error.main' }}>
@@ -585,8 +674,84 @@ const InvoiceConfigSettings = () => {
             </Card>
           </Grid>
 
+          {/* NEW: Vehicle Management Section */}
+          <Grid item xs={12}>
+            <Divider sx={{ my: 2 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                <VehicleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Vehicle Management
+              </Typography>
+              {isEditing && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<AddIcon />}
+                  onClick={() => setVehicleDialogOpen(true)}
+                  color="primary"
+                >
+                  Add Vehicle
+                </Button>
+              )}
+            </Box>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Manage your fleet vehicles. These vehicle numbers will auto-populate when recording sales.
+            </Alert>
+
+            {invoiceConfig.vehicles && invoiceConfig.vehicles.length > 0 ? (
+              <List dense>
+                {invoiceConfig.vehicles.map((vehicle, index) => (
+                  <ListItem key={vehicle.id || index} divider>
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="subtitle2" fontWeight="bold">
+                            {vehicle.number}
+                          </Typography>
+                          {vehicle.driver && (
+                            <Chip label={vehicle.driver} size="small" variant="outlined" />
+                          )}
+                          {vehicle.capacity && (
+                            <Chip label={`${vehicle.capacity}T`} size="small" color="primary" variant="outlined" />
+                          )}
+                        </Box>
+                      }
+                      secondary={vehicle.notes || 'No additional notes'}
+                    />
+                    {isEditing && (
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditVehicle(index)}
+                          sx={{ mr: 1 }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteVehicle(index)}
+                          color="error"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    )}
+                  </ListItem>
+                ))}
+              </List>
+            ) : (
+              <Card variant="outlined" sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+                <VehicleIcon sx={{ fontSize: 48, color: 'grey.400', mb: 1 }} />
+                <Typography variant="body2" color="text.secondary">
+                  No vehicles added yet. {isEditing ? 'Click "Add Vehicle" to add your first vehicle.' : 'Enable editing to add vehicles.'}
+                </Typography>
+              </Card>
+            )}
+          </Grid>
+
           {/* Invoice Format Options */}
           <Grid item xs={12}>
+            <Divider sx={{ my: 2 }} />
             <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
               Invoice Format Options
             </Typography>
@@ -647,6 +812,7 @@ const InvoiceConfigSettings = () => {
 
           {/* Terms & Conditions */}
           <Grid item xs={12}>
+            <Divider sx={{ my: 2 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                 Terms & Conditions
@@ -720,6 +886,72 @@ const InvoiceConfigSettings = () => {
             disabled={!newTerm.trim()}
           >
             {editingTerm !== null ? 'Update' : 'Add'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* NEW: Vehicle Dialog */}
+      <Dialog open={vehicleDialogOpen} onClose={handleCloseVehicleDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <VehicleIcon sx={{ mr: 1 }} />
+            {editingVehicle !== null ? 'Edit Vehicle' : 'Add New Vehicle'}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            <TextField
+              autoFocus
+              label="Vehicle Number"
+              fullWidth
+              required
+              value={newVehicle.number}
+              onChange={(e) => setNewVehicle(prev => ({ ...prev, number: e.target.value.toUpperCase() }))}
+              placeholder="e.g., GJ01AB1234"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <VehicleIcon />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Driver Name"
+              fullWidth
+              value={newVehicle.driver}
+              onChange={(e) => setNewVehicle(prev => ({ ...prev, driver: e.target.value }))}
+              placeholder="Driver's name (optional)"
+            />
+            <TextField
+              label="Capacity"
+              fullWidth
+              value={newVehicle.capacity}
+              onChange={(e) => setNewVehicle(prev => ({ ...prev, capacity: e.target.value }))}
+              placeholder="e.g., 10 (in tons)"
+              InputProps={{
+                endAdornment: <InputAdornment position="end">Tons</InputAdornment>,
+              }}
+            />
+            <TextField
+              label="Notes"
+              fullWidth
+              multiline
+              rows={2}
+              value={newVehicle.notes}
+              onChange={(e) => setNewVehicle(prev => ({ ...prev, notes: e.target.value }))}
+              placeholder="Additional notes about this vehicle..."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseVehicleDialog}>Cancel</Button>
+          <Button 
+            onClick={editingVehicle !== null ? handleUpdateVehicle : handleAddVehicle}
+            variant="contained"
+            disabled={!newVehicle.number.trim()}
+          >
+            {editingVehicle !== null ? 'Update' : 'Add'}
           </Button>
         </DialogActions>
       </Dialog>

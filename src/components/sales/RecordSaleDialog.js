@@ -1,4 +1,4 @@
-// components/Sales/RecordSaleDialog.js - Fixed version with proper reset
+// components/Sales/RecordSaleDialog.js - Your existing code with minimal edit mode support added
 import { useState, useEffect } from "react";
 import {
   Box,
@@ -53,6 +53,7 @@ import {
 } from "../../utils/constants";
 import { productionService } from "../../services/productionService";
 import { salesService } from "../../services/salesService";
+import { dbUtils } from "../../services/firebase"; // NEW: Import for loading vehicles
 
 const RecordSaleDialog = ({
   open,
@@ -73,6 +74,9 @@ const RecordSaleDialog = ({
   calculatedAmounts,
   setCalculatedAmounts,
   searchCustomers,
+  // ONLY ADDITION: Edit mode props
+  editingData,
+  isEditMode,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -80,6 +84,10 @@ const RecordSaleDialog = ({
   // Customer search timeout
   const [customerSearchTimeout, setCustomerSearchTimeout] = useState(null);
   const [calculatedBrickStock, setCalculatedBrickStock] = useState(0);
+
+  // NEW: Vehicle management state
+  const [vehicleOptions, setVehicleOptions] = useState([]);
+  const [vehicleLoading, setVehicleLoading] = useState(false);
 
   // Default form values
   const defaultValues = {
@@ -122,6 +130,64 @@ const RecordSaleDialog = ({
   const watchDiscountType = watch("discountType");
   const watchCustomerState = watch("customerState");
   const watchIncludeGST = watch("includeGST");
+  const watchVehicleNumber = watch("vehicleNumber"); // NEW: Watch vehicle number
+
+  // ONLY ADDITION: Handle edit mode - populate form with existing data
+  useEffect(() => {
+    if (isEditMode && editingData && open) {
+      console.log("Setting edit mode data:", editingData);
+      
+      // Reset form with edit data
+      reset({
+        saleDate: editingData.saleDate || new Date().toISOString().split("T")[0],
+        customerName: editingData.customerName || "",
+        customerPhone: editingData.customerPhone || "",
+        customerEmail: editingData.customerEmail || "",
+        customerState: editingData.customerState || "GJ",
+        customerStateCode: editingData.customerStateCode || "24",
+        customerGSTIN: editingData.customerGSTIN || "",
+        locationName: editingData.locationName || "",
+        quantity: editingData.quantity || "",
+        pricePerBrick: editingData.pricePerBrick || 6.15,
+        vehicleNumber: editingData.vehicleNumber || "",
+        challanNumber: editingData.challanNumber || "",
+        discount: editingData.discount || 0,
+        discountType: editingData.discountType || "amount",
+        paymentMethod: editingData.paymentMethod || "cash",
+        notes: editingData.notes || "",
+        includeGST: editingData.includeGST || false,
+      });
+    } else if (!isEditMode && open) {
+      // Reset to default values for new sale
+      reset(defaultValues);
+    }
+  }, [isEditMode, editingData, open, reset]);
+
+  // NEW: Load vehicles from settings
+  const loadVehicleOptions = async () => {
+    try {
+      setVehicleLoading(true);
+      const result = await dbUtils.readData('settings/invoice_config');
+      
+      if (result.success && result.data && result.data.vehicles) {
+        setVehicleOptions(result.data.vehicles);
+      } else {
+        setVehicleOptions([]);
+      }
+    } catch (error) {
+      console.error('Error loading vehicles:', error);
+      setVehicleOptions([]);
+    } finally {
+      setVehicleLoading(false);
+    }
+  };
+
+  // NEW: Load vehicles on component mount
+  useEffect(() => {
+    if (open) {
+      loadVehicleOptions();
+    }
+  }, [open]);
 
   // Handle state change and auto-update state code
   useEffect(() => {
@@ -134,8 +200,6 @@ const RecordSaleDialog = ({
   // Function to calculate actual brick stock (enhanced version)
   const calculateActualBrickStock = async () => {
     try {
-      
-
       // Fetch all required data including manual adjustments
       const [productionResult, salesResult] = await Promise.all([
         productionService.getProductionHistory(1000),
@@ -160,7 +224,7 @@ const RecordSaleDialog = ({
 
       return totalProduction - totalSales;
     } catch (error) {
-      
+      console.error("Error calculating brick stock:", error);
       return 0;
     }
   };
@@ -194,7 +258,7 @@ const RecordSaleDialog = ({
               setCustomerOptions(suggestions.map((s) => s.customer));
             }
           } catch (error) {
-            
+            console.error("Error searching customers:", error);
           } finally {
             setCustomerSearchLoading(false);
           }
@@ -356,6 +420,20 @@ const RecordSaleDialog = ({
     }
   };
 
+  // NEW: Handle vehicle selection from autocomplete
+  const handleVehicleSelect = (event, value) => {
+    if (value && typeof value === "object") {
+      // Selected from existing vehicles
+      setValue("vehicleNumber", value.number);
+    } else if (value && typeof value === "string") {
+      // Free text entry for new vehicle
+      setValue("vehicleNumber", value.toUpperCase());
+    } else {
+      // Clear selection
+      setValue("vehicleNumber", "");
+    }
+  };
+
   // Handle dialog close
   const handleClose = () => {
     reset(defaultValues);
@@ -371,25 +449,28 @@ const RecordSaleDialog = ({
     try {
       await onSubmit(data);
       
-      // Reset the form automatically for next sale after successful submission
-      // Small delay to ensure any success messages are shown first
-      setTimeout(() => {
-        reset(defaultValues);
-        setSelectedCustomer(null);
-        setSelectedLocation(null);
-        setCustomerOptions([]);
-        setLocationOptions([]);
-        setCalculatedAmounts({
-          subtotal: 0,
-          discountAmount: 0,
-          taxableAmount: 0,
-          totalTax: 0,
-          totalAmount: 0,
-          isInterState: false,
-        });
-      }, 1000); // Increased delay to ensure success toast is visible
+      // ONLY MODIFICATION: Don't auto-reset in edit mode
+      if (!isEditMode) {
+        // Reset the form automatically for next sale after successful submission
+        // Small delay to ensure any success messages are shown first
+        setTimeout(() => {
+          reset(defaultValues);
+          setSelectedCustomer(null);
+          setSelectedLocation(null);
+          setCustomerOptions([]);
+          setLocationOptions([]);
+          setCalculatedAmounts({
+            subtotal: 0,
+            discountAmount: 0,
+            taxableAmount: 0,
+            totalTax: 0,
+            totalAmount: 0,
+            isInterState: false,
+          });
+        }, 1000); // Increased delay to ensure success toast is visible
+      }
     } catch (error) {
-      
+      console.error("Error submitting form:", error);
       // Don't reset on error, let user see the error and fix it
     }
   };
@@ -407,10 +488,11 @@ const RecordSaleDialog = ({
           <ShoppingCartIcon sx={{ mr: 2 }} />
           <Box>
             <Typography variant="h6" fontWeight="bold">
-              Record New Sale
+              {/* ONLY MODIFICATION: Change title based on edit mode */}
+              {isEditMode ? "Edit Sale" : "Record New Sale"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Fill in the details below to record a new sale
+              {isEditMode ? "Update the sale details below" : "Fill in the details below to record a new sale"}
             </Typography>
           </Box>
         </Box>
@@ -815,28 +897,71 @@ const RecordSaleDialog = ({
               </Typography>
             </Grid>
 
+            {/* ENHANCED: Vehicle Number with Autocomplete */}
             <Grid item xs={12} md={6}>
-              <Controller
-                name="vehicleNumber"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Vehicle Number"
-                    fullWidth
-                    placeholder="e.g., GJ01AB1234"
-                    error={!!errors.vehicleNumber}
-                    helperText={errors.vehicleNumber?.message}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <VehicleIcon color="primary" />
-                        </InputAdornment>
-                      ),
-                    }}
-                    onChange={(e) =>
-                      field.onChange(e.target.value.toUpperCase())
-                    }
+              <Autocomplete
+                options={vehicleOptions}
+                getOptionLabel={(option) => option.number || option}
+                onChange={handleVehicleSelect}
+                loading={vehicleLoading}
+                freeSolo
+                inputValue={watchVehicleNumber}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                      <Typography variant="body2" fontWeight="bold">
+                        {option.number}
+                      </Typography>
+                      {option.driver && (
+                        <Typography variant="caption" color="text.secondary">
+                          Driver: {option.driver}
+                        </Typography>
+                      )}
+                      {option.capacity && (
+                        <Typography variant="caption" color="text.secondary">
+                          Capacity: {option.capacity} tons
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <Controller
+                    name="vehicleNumber"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...params}
+                        {...field}
+                        label="Vehicle Number"
+                        fullWidth
+                        placeholder="e.g., GJ01AB1234"
+                        error={!!errors.vehicleNumber}
+                        helperText={
+                          errors.vehicleNumber?.message ||
+                          "Type to search vehicles or enter new number"
+                        }
+                        InputProps={{
+                          ...params.InputProps,
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <VehicleIcon color="primary" />
+                            </InputAdornment>
+                          ),
+                          endAdornment: (
+                            <>
+                              {vehicleLoading ? (
+                                <CircularProgress color="inherit" size={20} />
+                              ) : null}
+                              {params.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                        onChange={(e) =>
+                          field.onChange(e.target.value.toUpperCase())
+                        }
+                      />
+                    )}
                   />
                 )}
               />
@@ -1062,7 +1187,11 @@ const RecordSaleDialog = ({
             isSubmitting ? <CircularProgress size={20} /> : <ShoppingCartIcon />
           }
         >
-          {isSubmitting ? "Recording..." : "Record Sale"}
+          {/* ONLY MODIFICATION: Change button text based on edit mode */}
+          {isSubmitting 
+            ? (isEditMode ? "Updating..." : "Recording...") 
+            : (isEditMode ? "Update Sale" : "Record Sale")
+          }
         </Button>
       </DialogActions>
     </Dialog>
