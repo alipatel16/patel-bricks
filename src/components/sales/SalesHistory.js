@@ -1,4 +1,4 @@
-// components/Sales/SalesHistory.js - Fixed version with correct GST handling
+// components/Sales/SalesHistory.js - Fixed version with correct GST handling and Edit functionality
 import { useState, useEffect } from 'react';
 import {
   Box,
@@ -30,6 +30,7 @@ import {
 import {
   Search as SearchIcon,
   Print as PrintIcon,
+  Edit as EditIcon, // NEW: Import Edit icon
 } from '@mui/icons-material';
 import { formatCurrency, formatQuantity } from '../../utils/calculations';
 
@@ -39,7 +40,8 @@ const SalesHistory = ({
   searchFilters, 
   setSearchFilters, 
   filteredSales, 
-  onViewInvoice 
+  onViewInvoice,
+  onEditSale, // NEW: Add onEditSale prop for edit functionality
 }) => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -90,6 +92,39 @@ const SalesHistory = ({
   // Check if sale includes GST for display purposes
   const isGSTIncluded = (sale) => {
     return sale.include_gst || sale.gst_included || sale.includeGST || false;
+  };
+
+  // NEW: Handle edit sale - convert sale data to form format
+  const handleEditSale = (sale) => {
+    // Convert sale data to match RecordSaleDialog form format
+    const editData = {
+      // Original sale data for identification
+      originalSale: sale,
+      
+      // Form data matching RecordSaleDialog defaultValues structure
+      saleDate: sale.date || new Date().toISOString().split("T")[0],
+      customerName: sale.customer_name || "",
+      customerPhone: sale.customer_phone || "",
+      customerEmail: sale.customer_email || "",
+      customerState: sale.customer_state || "GJ",
+      customerStateCode: sale.customer_state_code || "24",
+      customerGSTIN: sale.customer_gstin || "",
+      locationName: sale.location_name || "",
+      quantity: sale.quantity || "",
+      pricePerBrick: sale.price_per_brick || 6.15,
+      vehicleNumber: sale.vehicle_number || "",
+      challanNumber: sale.challan_number || "",
+      discount: sale.discount_amount || 0,
+      discountType: sale.discount_type || "amount",
+      paymentMethod: sale.payment_method || "cash",
+      notes: sale.notes || "",
+      includeGST: isGSTIncluded(sale),
+    };
+
+    // Call the parent component's edit handler
+    if (onEditSale) {
+      onEditSale(editData);
+    }
   };
 
   return (
@@ -319,14 +354,28 @@ const SalesHistory = ({
                         )}
                       </TableCell>
                       <TableCell>
-                        <Tooltip title="View Invoice">
-                          <IconButton
-                            size="small"
-                            onClick={() => onViewInvoice(sale)}
-                          >
-                            <PrintIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          {/* NEW: Edit Button */}
+                          <Tooltip title="Edit Sale">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditSale(sale)}
+                              color="primary"
+                            >
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                          
+                          {/* Existing View Invoice Button */}
+                          <Tooltip title="View Invoice">
+                            <IconButton
+                              size="small"
+                              onClick={() => onViewInvoice(sale)}
+                            >
+                              <PrintIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))}
