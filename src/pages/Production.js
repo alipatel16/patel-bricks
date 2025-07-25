@@ -210,31 +210,31 @@ function Production() {
   // Handle form submission
   const onSubmit = async (data) => {
     try {
-      console.log("Form submitted with data:", data);
-      console.log("Available cement:", cement.total_bags);
+      
+      
       
       // Manual validation for cement
       const cementUsed = parseFloat(data.cementUsed);
       
-      console.log("Cement used:", cementUsed);
+      
       
       // Additional validation: Check if cement object exists
       if (!cement || cement.total_bags === undefined || cement.total_bags === null) {
-        console.log("Cement data not available");
+        
         alert("Cement inventory data not available. Please refresh the page.");
         appActions.showNotification("Cement inventory data not available. Please refresh the page.", "error");
         return;
       }
       
       if (!cementUsed || cementUsed <= 0) {
-        console.log("Invalid cement amount");
+        
         alert("Please enter a valid cement amount");
         appActions.showNotification("Please enter a valid cement amount", "error");
         return;
       }
 
       if (cementUsed > cement.total_bags) {
-        console.log("Insufficient cement - showing error");
+        
         const errorMessage = `Insufficient cement. Required: ${cementUsed} bags, Available: ${cement.total_bags} bags`;
         alert(errorMessage);
         appActions.showNotification(errorMessage, "error");
@@ -250,7 +250,7 @@ function Production() {
         overrideCementCalculation: true, // Always manual now
       };
 
-      console.log("Submitting production data:", productionData);
+      
 
       const result = await productionService.addProduction(productionData);
 
@@ -271,7 +271,7 @@ function Production() {
         loadProductionData();
         inventoryActions.refreshInventory();
       } else {
-        console.log("Production service error:", result.error);
+        
         alert("Error: " + (result.error || "Failed to record production"));
         appActions.showNotification(
           result.error || "Failed to record production",
@@ -279,7 +279,7 @@ function Production() {
         );
       }
     } catch (error) {
-      console.error("Error in onSubmit:", error);
+      
       alert("Error: Failed to record production");
       appActions.showNotification("Failed to record production", "error");
     }

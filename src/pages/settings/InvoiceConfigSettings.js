@@ -125,7 +125,7 @@ const InvoiceConfigSettings = () => {
         setInvoiceConfig(DEFAULT_INVOICE_CONFIG);
       }
     } catch (error) {
-      console.error('Error loading invoice config:', error);
+      
       setInvoiceConfig(DEFAULT_INVOICE_CONFIG);
       toast.error('Failed to load invoice configuration');
     } finally {
@@ -246,7 +246,7 @@ const InvoiceConfigSettings = () => {
         throw new Error(result.error || 'Failed to save configuration');
       }
     } catch (error) {
-      console.error('Error saving invoice config:', error);
+      
       toast.error('Failed to save invoice configuration');
     } finally {
       setSaving(false);

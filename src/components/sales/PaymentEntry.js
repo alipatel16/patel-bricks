@@ -111,7 +111,7 @@ const PaymentEntry = ({ open, onClose, customer, onPaymentSaved }) => {
             timestamp: timestamp,
           });
         } catch (customerError) {
-          console.error('Failed to update customer payment record:', customerError);
+          
           // Continue anyway as main payment was saved
         }
 
@@ -127,7 +127,7 @@ const PaymentEntry = ({ open, onClose, customer, onPaymentSaved }) => {
       }
 
     } catch (error) {
-      console.error('Error saving payment entry:', error);
+      
       toast.error('Failed to save payment entry');
     } finally {
       setIsLoading(false);

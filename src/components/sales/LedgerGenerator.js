@@ -1,4 +1,4 @@
-// components/sales/LedgerGenerator.js - Customer Ledger Generator Component
+// components/sales/LedgerGenerator.js - Customer Ledger Generator Component with PDF Implementation
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
@@ -30,7 +30,6 @@ import {
 } from '@mui/material';
 import {
   PictureAsPdf as PdfIcon,
-  TableChart as ExcelIcon,
   CalendarToday as CalendarIcon,
   Assessment as LedgerIcon,
   FileDownload as DownloadIcon,
@@ -49,7 +48,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
 
-  // Form management for date range
+  // Form management for date range - REMOVED EXCEL FORMAT
   const {
     control,
     handleSubmit,
@@ -59,7 +58,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
     defaultValues: {
       dateFrom: '',
       dateTo: new Date().toISOString().split('T')[0],
-      format: 'pdf',
+      format: 'pdf', // Only PDF now
     },
   });
 
@@ -112,7 +111,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
       setLoadingInvoices(false);
 
     } catch (error) {
-      console.error('Error fetching payment and invoice history:', error);
+      
       setPaymentHistory([]);
       setGeneratedInvoices([]);
       setLoadingPayments(false);
@@ -270,64 +269,285 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
         format: data.format,
       };
 
-      if (data.format === 'pdf') {
-        await generatePDFLedger(documentData);
-      } else {
-        await generateExcelLedger(documentData);
-      }
-
-      toast.success(`${data.format.toUpperCase()} ledger generated successfully`);
+      await generatePDFLedger(documentData);
+      toast.success('PDF ledger generated and opened successfully');
 
     } catch (error) {
-      console.error('Error generating ledger:', error);
+      
       toast.error('Failed to generate ledger');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Generate PDF Ledger
+  // UPDATED: Actual PDF generation implementation
   const generatePDFLedger = async (data) => {
-    // TODO: Implement PDF generation using jsPDF or similar library
-    // This is a placeholder for the actual PDF generation logic
-    console.log('Generating PDF Ledger:', data);
+    // Create a new window for the printable ledger
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
     
-    // Example of what the PDF generation might look like:
-    /*
-    const jsPDF = require('jspdf');
-    const doc = new jsPDF();
-    
-    // Add header
-    doc.setFontSize(20);
-    doc.text('Customer Ledger', 20, 20);
-    
-    // Add customer info
-    doc.setFontSize(12);
-    doc.text(`Customer: ${data.customer.name}`, 20, 40);
-    doc.text(`Phone: ${data.customer.phone}`, 20, 50);
-    
-    // Add summary
-    doc.text(`Total Invoices: ${formatCurrency(data.summary.totalInvoices)}`, 20, 70);
-    doc.text(`Total Credits: ${formatCurrency(data.summary.totalCredits)}`, 20, 80);
-    doc.text(`Remaining Balance: ${formatCurrency(data.summary.remainingPayment)}`, 20, 90);
-    
-    // Add table (simplified)
-    // ... table generation logic
-    
-    doc.save(`ledger_${data.customer.name}_${Date.now()}.pdf`);
-    */
-    
-    // Simulate async operation
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  };
+    if (!printWindow) {
+      throw new Error('Could not open print window. Please check popup blockers.');
+    }
 
-  // Generate Excel Ledger
-  const generateExcelLedger = async (data) => {
-    // TODO: Implement Excel generation using xlsx library
-    console.log('Generating Excel Ledger:', data);
-    
-    // Simulate async operation
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Generate HTML content for the ledger
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title></title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+            line-height: 1.4;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #1976d2;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .company-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1976d2;
+            margin-bottom: 5px;
+          }
+          .ledger-title {
+            font-size: 20px;
+            margin: 10px 0;
+            color: #333;
+          }
+          .customer-info {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+          }
+          .label {
+            font-weight: bold;
+            color: #555;
+          }
+          .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .table th, .table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+          }
+          .table th {
+            background-color: #1976d2;
+            color: white;
+            font-weight: bold;
+          }
+          .table tr:nth-child(even) {
+            background-color: #f9f9f9;
+          }
+          .text-right {
+            text-align: right;
+          }
+          .debit {
+            color: #d32f2f;
+            font-weight: bold;
+          }
+          .credit {
+            color: #2e7d32;
+            font-weight: bold;
+          }
+          .balance {
+            font-weight: bold;
+          }
+          .summary {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+          }
+          .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+          }
+          .total-amount {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1976d2;
+          }
+          .print-button {
+            background-color: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 20px 10px 10px 0;
+          }
+          .print-button:hover {
+            background-color: #1565c0;
+          }
+          @page {
+            margin: 0.5in;
+            size: A4;
+          }
+          @media print {
+            .print-button {
+              display: none;
+            }
+            body {
+              margin: 0;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            * {
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+          }
+          .badge {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+          }
+          .badge-gst {
+            background-color: #ffebee;
+            color: #c62828;
+          }
+          .badge-non-gst {
+            background-color: #fff3e0;
+            color: #ef6c00;
+          }
+          .badge-payment {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company-name">Your Company Name</div>
+          <div class="ledger-title">CUSTOMER LEDGER STATEMENT</div>
+        </div>
+
+        <div class="customer-info">
+          <div class="info-row">
+            <span class="label">Customer Name:</span>
+            <span>${data.customer.name}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Phone:</span>
+            <span>${data.customer.phone}</span>
+          </div>
+          ${data.customer.email ? `
+          <div class="info-row">
+            <span class="label">Email:</span>
+            <span>${data.customer.email}</span>
+          </div>
+          ` : ''}
+          <div class="info-row">
+            <span class="label">Statement Period:</span>
+            <span>${data.dateRange.from} to ${data.dateRange.to}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Generated On:</span>
+            <span>${new Date(data.generatedOn).toLocaleDateString()}</span>
+          </div>
+        </div>
+
+        <button class="print-button" onclick="window.print()">🖨️ Print Ledger</button>
+        <button class="print-button" onclick="window.close()">❌ Close</button>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Particulars</th>
+              <th class="text-right">Debit (₹)</th>
+              <th class="text-right">Credit (₹)</th>
+              <th class="text-right">Balance (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.entries.map(entry => `
+              <tr>
+                <td>${new Date(entry.date).toLocaleDateString()}</td>
+                <td>
+                  ${entry.particulars}
+                  <br>
+                  <span class="badge ${
+                    entry.type === 'gst_invoice' ? 'badge-gst' : 
+                    entry.type === 'non_gst_invoice' ? 'badge-non-gst' : 
+                    'badge-payment'
+                  }">
+                    ${
+                      entry.type === 'gst_invoice' ? 'GST Invoice' : 
+                      entry.type === 'non_gst_invoice' ? 'Non-GST Invoice' : 
+                      'Payment'
+                    }
+                  </span>
+                </td>
+                <td class="text-right ${entry.debit > 0 ? 'debit' : ''}">
+                  ${entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
+                </td>
+                <td class="text-right ${entry.credit > 0 ? 'credit' : ''}">
+                  ${entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
+                </td>
+                <td class="text-right balance">
+                  ${formatCurrency(Math.abs(entry.balance))} ${entry.balance < 0 ? '(Cr)' : '(Dr)'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="summary">
+          <h3 style="margin-top: 0; color: #1976d2;">Ledger Summary</h3>
+          <div class="summary-row">
+            <span class="label">Total Invoices:</span>
+            <span class="debit">${formatCurrency(data.summary.totalInvoices)}</span>
+          </div>
+          <div class="summary-row">
+            <span class="label">Total Credits:</span>
+            <span class="credit">${formatCurrency(data.summary.totalCredits)}</span>
+          </div>
+          <div class="summary-row">
+            <span class="label">Total Transactions:</span>
+            <span>${data.summary.totalTransactions}</span>
+          </div>
+          <hr style="margin: 15px 0;">
+          <div class="summary-row">
+            <span class="label total-amount">Outstanding Balance:</span>
+            <span class="total-amount ${data.summary.remainingPayment >= 0 ? 'debit' : 'credit'}">
+              ${formatCurrency(Math.abs(data.summary.remainingPayment))} ${data.summary.remainingPayment < 0 ? '(Credit)' : '(Debit)'}
+            </span>
+          </div>
+        </div>
+
+        <div style="margin-top: 40px; text-align: center; color: #666; font-size: 12px;">
+          <p>This is a computer-generated ledger statement.</p>
+          <p>Generated on ${new Date().toLocaleString()}</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Write content to the new window
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+
+    // Focus the window
+    printWindow.focus();
   };
 
   // Handle dialog close
@@ -368,7 +588,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
         <DialogContent sx={{ pt: 2 }}>
           <Grid container spacing={3}>
             
-            {/* Filters Section */}
+            {/* Filters Section - REMOVED EXCEL FORMAT */}
             <Grid item xs={12}>
               <Card variant="outlined">
                 <CardContent>
@@ -376,7 +596,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
                     Ledger Filters
                   </Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={6}>
                       <Controller
                         name="dateFrom"
                         control={control}
@@ -394,7 +614,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
                         )}
                       />
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={6}>
                       <Controller
                         name="dateTo"
                         control={control}
@@ -409,29 +629,6 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
                               startAdornment: <CalendarIcon sx={{ mr: 1, color: 'text.secondary' }} />,
                             }}
                           />
-                        )}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <Controller
-                        name="format"
-                        control={control}
-                        render={({ field }) => (
-                          <FormControl fullWidth>
-                            <InputLabel>Export Format</InputLabel>
-                            <Select {...field} label="Export Format">
-                              <MenuItem value="pdf">
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <PdfIcon /> PDF
-                                </Box>
-                              </MenuItem>
-                              <MenuItem value="excel">
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <ExcelIcon /> Excel
-                                </Box>
-                              </MenuItem>
-                            </Select>
-                          </FormControl>
                         )}
                       />
                     </Grid>
@@ -608,9 +805,9 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
             type="submit" 
             variant="contained"
             disabled={isGenerating || !previewData || previewData.entries.length === 0}
-            startIcon={isGenerating ? <CircularProgress size={20} /> : <DownloadIcon />}
+            startIcon={isGenerating ? <CircularProgress size={20} /> : <PdfIcon />}
           >
-            {isGenerating ? 'Generating...' : `Generate ${watchedValues.format?.toUpperCase()}`}
+            {isGenerating ? 'Generating...' : 'Generate PDF Ledger'}
           </Button>
         </DialogActions>
       </form>

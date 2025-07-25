@@ -109,10 +109,10 @@ const InvoiceGenerator = ({
           setNextGstInvoiceNumber(
             `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
           );
-          console.log("Using default GST invoice config");
+          
         }
       } catch (error) {
-        console.error("Error fetching GST invoice config:", error);
+        
         // Fallback to default
         const defaultConfig = {
           prefix: "GST-INV",
@@ -147,13 +147,13 @@ const InvoiceGenerator = ({
 
         if (result.success && result.data && result.data.gstin) {
           setCustomerGSTIN(result.data.gstin);
-          console.log("Customer GSTIN fetched:", result.data.gstin);
+          
         } else {
           setCustomerGSTIN("");
-          console.log("No GSTIN found for customer");
+          
         }
       } catch (error) {
-        console.error("Error fetching customer GSTIN:", error);
+        
         setCustomerGSTIN("");
       } finally {
         setLoadingGSTIN(false);
@@ -166,7 +166,7 @@ const InvoiceGenerator = ({
   // FIXED: Load existing invoice data if in edit mode but ALWAYS show form first
   useEffect(() => {
     if (isEditMode && editingInvoice && open) {
-      console.log("Loading invoice for editing:", editingInvoice);
+      
 
       // Pre-populate form data
       setFormData({
@@ -397,10 +397,10 @@ const InvoiceGenerator = ({
           "settings/invoice_config",
           updatedInvoiceConfig
         );
-        console.log("GST invoice number incremented to:", newNumber);
+        
       }
     } catch (error) {
-      console.error("Error incrementing GST invoice number:", error);
+      
     }
   };
 
@@ -472,7 +472,7 @@ const InvoiceGenerator = ({
         throw new Error(result.error || "Failed to save invoice");
       }
     } catch (error) {
-      console.error("Error saving invoice:", error);
+      
       toast.error("Failed to save invoice");
     } finally {
       setIsSaving(false);

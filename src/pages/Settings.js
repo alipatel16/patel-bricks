@@ -162,7 +162,7 @@ function Settings() {
         toast.error("No data found to backup");
       }
     } catch (error) {
-      console.error("Backup error:", error);
+      
       toast.error("Failed to create backup: " + error.message);
     } finally {
       setIsBackupLoading(false);
@@ -187,12 +187,12 @@ function Settings() {
         await set(ref(database), data);
 
         // For now, just show success message
-        console.log("Data to restore:", data);
+        
         toast.success(
           "Data restore functionality ready (implement Firebase restore)"
         );
       } catch (error) {
-        console.error("Restore error:", error);
+        
         toast.error("Failed to restore data: " + error.message);
       } finally {
         setIsRestoreLoading(false);
@@ -225,7 +225,7 @@ function Settings() {
         "Data reset functionality ready (implement Firebase reset)"
       );
     } catch (error) {
-      console.error("Reset error:", error);
+      
       toast.error("Failed to reset data: " + error.message);
     } finally {
       setIsResetLoading(false);
