@@ -143,10 +143,10 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
 
     try {
       setLoadingInvoices(true);
-      console.log('Fetching invoices for customer:', customer.name);
+      
       
       const result = await dbUtils.readData(`bricks/sales/invoices`);
-      console.log('Invoice fetch result:', result);
+      
       
       if (result.success && result.data) {
         const invoices = Object.entries(result.data)
@@ -157,14 +157,14 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
           )
           .sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
 
-        console.log('Filtered invoices:', invoices);
+        
         setCustomerInvoices(invoices);
       } else {
-        console.log('No invoice data found');
+        
         setCustomerInvoices([]);
       }
     } catch (error) {
-      console.error('Error fetching customer invoices:', error);
+      
       setCustomerInvoices([]);
     } finally {
       setLoadingInvoices(false);
@@ -241,7 +241,7 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
   };
 
   const handlePaymentSaved = async (paymentData) => {
-    console.log('Payment saved successfully:', paymentData);
+    
   };
 
   const handleGenerateLedger = () => {
@@ -257,7 +257,7 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
 
   // NEW: Invoice Management Dialog handlers
   const handleViewInvoices = () => {
-    console.log('Viewing invoices for:', selectedCustomer.name);
+    
     setCustomerForInvoiceManagement(selectedCustomer);
     setInvoiceManagementOpen(true);
     handleMenuClose();
@@ -273,7 +273,7 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
 
   // Edit invoice handler
   const handleEditInvoice = (invoice) => {
-    console.log('Editing invoice:', invoice);
+    
     setEditingInvoice(invoice);
     setCustomerForInvoice(customerForInvoiceManagement);
     setIsEditMode(true);
@@ -291,7 +291,7 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
           toast.error('Failed to delete invoice');
         }
       } catch (error) {
-        console.error('Error deleting invoice:', error);
+        
         toast.error('Failed to delete invoice');
       }
     }
@@ -299,7 +299,7 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
 
   // View invoice details handler
   const handleViewInvoiceDetails = (invoice) => {
-    console.log('Viewing invoice details:', invoice);
+    
     setSelectedInvoiceForView(invoice);
     setViewingInvoiceData(invoice.invoiceData);
     setInvoiceViewDialogOpen(true);

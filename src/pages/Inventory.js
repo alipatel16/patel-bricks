@@ -151,11 +151,11 @@ function Inventory() {
       if (result.success) {
         setCementPurchaseHistory(result.data || []);
       } else {
-        console.error('Failed to load cement purchase history:', result.error);
+        
         setCementPurchaseHistory([]);
       }
     } catch (error) {
-      console.error('Error loading cement purchase history:', error);
+      
       setCementPurchaseHistory([]);
     } finally {
       setPurchaseHistoryLoading(false);

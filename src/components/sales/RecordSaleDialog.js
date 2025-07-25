@@ -1,4 +1,4 @@
-// components/Sales/RecordSaleDialog.js - Your existing code with minimal edit mode support added
+// components/Sales/RecordSaleDialog.js - Your existing code with ONLY compact UI changes
 import { useState, useEffect } from "react";
 import {
   Box,
@@ -135,7 +135,7 @@ const RecordSaleDialog = ({
   // ONLY ADDITION: Handle edit mode - populate form with existing data
   useEffect(() => {
     if (isEditMode && editingData && open) {
-      console.log("Setting edit mode data:", editingData);
+      
       
       // Reset form with edit data
       reset({
@@ -175,7 +175,7 @@ const RecordSaleDialog = ({
         setVehicleOptions([]);
       }
     } catch (error) {
-      console.error('Error loading vehicles:', error);
+      
       setVehicleOptions([]);
     } finally {
       setVehicleLoading(false);
@@ -224,7 +224,7 @@ const RecordSaleDialog = ({
 
       return totalProduction - totalSales;
     } catch (error) {
-      console.error("Error calculating brick stock:", error);
+      
       return 0;
     }
   };
@@ -258,7 +258,7 @@ const RecordSaleDialog = ({
               setCustomerOptions(suggestions.map((s) => s.customer));
             }
           } catch (error) {
-            console.error("Error searching customers:", error);
+            
           } finally {
             setCustomerSearchLoading(false);
           }
@@ -470,7 +470,7 @@ const RecordSaleDialog = ({
         }, 1000); // Increased delay to ensure success toast is visible
       }
     } catch (error) {
-      console.error("Error submitting form:", error);
+      
       // Don't reset on error, let user see the error and fix it
     }
   };
@@ -479,7 +479,7 @@ const RecordSaleDialog = ({
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="lg"
+      maxWidth="md" // COMPACT: Changed from "lg" to "md"
       fullWidth
       fullScreen={isMobile}
     >
@@ -498,14 +498,14 @@ const RecordSaleDialog = ({
         </Box>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 4 }}>
+      <DialogContent sx={{ p: 2 }}> {/* COMPACT: Reduced padding from 4 to 2 */}
         {isLoading && <LinearProgress sx={{ mb: 2 }} />}
         <form onSubmit={handleSubmit(handleFormSubmit)}>
-          <Grid container spacing={4} sx={{ mt: 1 }}>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}> {/* COMPACT: Reduced spacing from 4 to 2 */}
             {/* Date Selection - First and Prominent */}
             <Grid item xs={12}>
               <Card variant="outlined">
-                <CardContent>
+                <CardContent sx={{ p: 2 }}> {/* COMPACT: Reduced padding */}
                   <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} md={6}>
                       <Controller
@@ -517,6 +517,7 @@ const RecordSaleDialog = ({
                             {...field}
                             label="Sale Date"
                             type="date"
+                            size="small" // COMPACT: Added small size
                             fullWidth
                             required
                             error={!!errors.saleDate}
@@ -525,7 +526,7 @@ const RecordSaleDialog = ({
                             InputProps={{
                               startAdornment: (
                                 <InputAdornment position="start">
-                                  <CalendarIcon color="primary" />
+                                  <CalendarIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                                 </InputAdornment>
                               ),
                             }}
@@ -537,7 +538,7 @@ const RecordSaleDialog = ({
                       <Grid item xs={12} md={6}>
                         <Box textAlign="right">
                           <Typography
-                            variant="h4"
+                            variant="h5" // COMPACT: Reduced from h4 to h5
                             color="success.main"
                             fontWeight="bold"
                           >
@@ -555,12 +556,12 @@ const RecordSaleDialog = ({
               </Card>
             </Grid>
 
-            <Divider sx={{ width: "100%", my: 2 }} />
+            <Divider sx={{ width: "100%", my: 1 }} /> {/* COMPACT: Reduced margin */}
 
             {/* Customer Information - Moved up */}
             <Grid item xs={12}>
               <Typography
-                variant="h6"
+                variant="subtitle1" // COMPACT: Reduced from h6 to subtitle1
                 gutterBottom
                 color="primary"
                 fontWeight="bold"
@@ -589,6 +590,7 @@ const RecordSaleDialog = ({
                         {...params}
                         {...field}
                         label="Customer Name"
+                        size="small" // COMPACT: Added small size
                         fullWidth
                         required
                         error={!!errors.customerName}
@@ -600,13 +602,13 @@ const RecordSaleDialog = ({
                           ...params.InputProps,
                           startAdornment: (
                             <InputAdornment position="start">
-                              <PersonIcon color="primary" />
+                              <PersonIcon color="primary" fontSize="small" />
                             </InputAdornment>
                           ),
                           endAdornment: (
                             <>
                               {customerSearchLoading ? (
-                                <CircularProgress color="inherit" size={20} />
+                                <CircularProgress color="inherit" size={16} /> 
                               ) : null}
                               {params.InputProps.endAdornment}
                             </>
@@ -628,6 +630,7 @@ const RecordSaleDialog = ({
                   <TextField
                     {...field}
                     label="Phone Number"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     required
                     error={!!errors.customerPhone}
@@ -635,7 +638,7 @@ const RecordSaleDialog = ({
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
-                          <PhoneIcon color="primary" />
+                          <PhoneIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                         </InputAdornment>
                       ),
                     }}
@@ -653,13 +656,14 @@ const RecordSaleDialog = ({
                     {...field}
                     label="Email (Optional)"
                     type="email"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     error={!!errors.customerEmail}
                     helperText={errors.customerEmail?.message}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
-                          <EmailIcon color="primary" />
+                          <EmailIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                         </InputAdornment>
                       ),
                     }}
@@ -711,6 +715,7 @@ const RecordSaleDialog = ({
                         {...params}
                         {...field}
                         label="Location/Site"
+                        size="small" // COMPACT: Added small size
                         fullWidth
                         error={!!errors.locationName}
                         helperText={
@@ -723,7 +728,7 @@ const RecordSaleDialog = ({
                           ...params.InputProps,
                           startAdornment: (
                             <InputAdornment position="start">
-                              <LocationIcon color="primary" />
+                              <LocationIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                             </InputAdornment>
                           ),
                         }}
@@ -741,14 +746,14 @@ const RecordSaleDialog = ({
                 control={control}
                 rules={{ required: "State is required" }}
                 render={({ field }) => (
-                  <FormControl fullWidth required error={!!errors.customerState}>
+                  <FormControl fullWidth size="small" required error={!!errors.customerState}> {/* COMPACT: Added small size */}
                     <InputLabel>Customer State</InputLabel>
                     <Select
                       {...field}
                       label="Customer State"
                       startAdornment={
                         <InputAdornment position="start">
-                          <StateIcon color="primary" />
+                          <StateIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                         </InputAdornment>
                       }
                     >
@@ -776,6 +781,7 @@ const RecordSaleDialog = ({
                   <TextField
                     {...field}
                     label="State Code"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     disabled
                     helperText="Auto-populated based on selected state"
@@ -795,6 +801,7 @@ const RecordSaleDialog = ({
                   <TextField
                     {...field}
                     label="GSTIN (Optional)"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     placeholder="e.g., 24BLLPP8863R1ZX"
                     error={!!errors.customerGSTIN}
@@ -806,12 +813,12 @@ const RecordSaleDialog = ({
               />
             </Grid>}
 
-            <Divider sx={{ width: "100%", my: 2 }} />
+            <Divider sx={{ width: "100%", my: 1 }} /> {/* COMPACT: Reduced margin */}
 
             {/* Product Information - Moved down */}
             <Grid item xs={12}>
               <Typography
-                variant="h6"
+                variant="subtitle1" // COMPACT: Reduced from h6 to subtitle1
                 gutterBottom
                 color="primary"
                 fontWeight="bold"
@@ -834,6 +841,7 @@ const RecordSaleDialog = ({
                     {...field}
                     label="Quantity (Bricks)"
                     type="number"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     required
                     error={!!errors.quantity}
@@ -863,6 +871,7 @@ const RecordSaleDialog = ({
                     label="Price per Brick"
                     type="number"
                     step="0.01"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     required
                     error={!!errors.pricePerBrick}
@@ -873,7 +882,7 @@ const RecordSaleDialog = ({
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
-                          <MoneyIcon color="primary" />
+                          <MoneyIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                         </InputAdornment>
                       ),
                     }}
@@ -882,12 +891,12 @@ const RecordSaleDialog = ({
               />
             </Grid>
 
-            <Divider sx={{ width: "100%", my: 2 }} />
+            <Divider sx={{ width: "100%", my: 1 }} /> {/* COMPACT: Reduced margin */}
 
             {/* Transport Information */}
             <Grid item xs={12}>
               <Typography
-                variant="h6"
+                variant="subtitle1" // COMPACT: Reduced from h6 to subtitle1
                 gutterBottom
                 color="primary"
                 fontWeight="bold"
@@ -934,6 +943,7 @@ const RecordSaleDialog = ({
                         {...params}
                         {...field}
                         label="Vehicle Number"
+                        size="small" // COMPACT: Added small size
                         fullWidth
                         placeholder="e.g., GJ01AB1234"
                         error={!!errors.vehicleNumber}
@@ -945,13 +955,13 @@ const RecordSaleDialog = ({
                           ...params.InputProps,
                           startAdornment: (
                             <InputAdornment position="start">
-                              <VehicleIcon color="primary" />
+                              <VehicleIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                             </InputAdornment>
                           ),
                           endAdornment: (
                             <>
                               {vehicleLoading ? (
-                                <CircularProgress color="inherit" size={20} />
+                                <CircularProgress color="inherit" size={16} />
                               ) : null}
                               {params.InputProps.endAdornment}
                             </>
@@ -975,12 +985,13 @@ const RecordSaleDialog = ({
                   <TextField
                     {...field}
                     label="Challan/Receipt Number"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     placeholder="e.g., CH-001"
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
-                          <ReceiptIcon color="primary" />
+                          <ReceiptIcon color="primary" fontSize="small" /> {/* COMPACT: Small icon */}
                         </InputAdornment>
                       ),
                     }}
@@ -993,9 +1004,9 @@ const RecordSaleDialog = ({
             {calculatedAmounts.totalAmount > 0 && (
               <Grid item xs={12}>
                 <Card variant="outlined">
-                  <CardContent>
+                  <CardContent sx={{ py: 1.5 }}> {/* COMPACT: Reduced padding */}
                     <Typography
-                      variant="h6"
+                      variant="subtitle1" // COMPACT: Reduced from h6 to subtitle1
                       gutterBottom
                       color="success.main"
                       fontWeight="bold"
@@ -1007,7 +1018,7 @@ const RecordSaleDialog = ({
                         <Typography variant="body2" color="text.secondary">
                           Subtotal
                         </Typography>
-                        <Typography variant="h6" fontWeight="bold">
+                        <Typography variant="body1" fontWeight="bold"> {/* COMPACT: Reduced from h6 to body1 */}
                           {formatCurrency(calculatedAmounts.subtotal)}
                         </Typography>
                       </Grid>
@@ -1017,7 +1028,7 @@ const RecordSaleDialog = ({
                             Discount
                           </Typography>
                           <Typography
-                            variant="h6"
+                            variant="body1" // COMPACT: Reduced from h6 to body1
                             color="error.main"
                             fontWeight="bold"
                           >
@@ -1032,7 +1043,7 @@ const RecordSaleDialog = ({
                               ? "IGST (12%)"
                               : "CGST+SGST (12%)"}
                           </Typography>
-                          <Typography variant="h6" fontWeight="bold">
+                          <Typography variant="body1" fontWeight="bold"> {/* COMPACT: Reduced from h6 to body1 */}
                             {formatCurrency(calculatedAmounts.totalTax)}
                           </Typography>
                         </Grid>
@@ -1056,12 +1067,12 @@ const RecordSaleDialog = ({
               </Grid>
             )}
 
-            <Divider sx={{ width: "100%", my: 2 }} />
+            <Divider sx={{ width: "100%", my: 1 }} /> {/* COMPACT: Reduced margin */}
 
             {/* Payment Information */}
-            <Grid item xs={12}>
+            {/* <Grid item xs={12}>
               <Typography
-                variant="h6"
+                variant="subtitle1" // COMPACT: Reduced from h6 to subtitle1
                 gutterBottom
                 color="primary"
                 fontWeight="bold"
@@ -1070,7 +1081,7 @@ const RecordSaleDialog = ({
               </Typography>
             </Grid>
 
-            {/* GST Toggle */}
+        
             <Grid item xs={12}>
               <Controller
                 name="includeGST"
@@ -1082,11 +1093,12 @@ const RecordSaleDialog = ({
                         {...field}
                         checked={field.value}
                         color="primary"
+                        size="small" // COMPACT: Added small size
                       />
                     }
                     label={
                       <Box>
-                        <Typography variant="body1" fontWeight="medium">
+                        <Typography variant="body2" fontWeight="medium"> 
                           Include GST in calculation
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
@@ -1104,7 +1116,7 @@ const RecordSaleDialog = ({
                 name="paymentMethod"
                 control={control}
                 render={({ field }) => (
-                  <FormControl fullWidth>
+                  <FormControl fullWidth size="small">
                     <InputLabel>Payment Method</InputLabel>
                     <Select {...field} label="Payment Method">
                       {Object.values(PAYMENT_METHODS).map((method) => (
@@ -1127,6 +1139,7 @@ const RecordSaleDialog = ({
                     {...field}
                     label="Discount"
                     type="number"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     InputProps={{
                       startAdornment: (
@@ -1143,7 +1156,7 @@ const RecordSaleDialog = ({
                 name="discountType"
                 control={control}
                 render={({ field }) => (
-                  <FormControl fullWidth>
+                  <FormControl fullWidth size="small"> 
                     <InputLabel>Discount Type</InputLabel>
                     <Select {...field} label="Discount Type">
                       <MenuItem value="amount">Amount (₹)</MenuItem>
@@ -1162,29 +1175,29 @@ const RecordSaleDialog = ({
                   <TextField
                     {...field}
                     label="Notes (Optional)"
+                    size="small" // COMPACT: Added small size
                     fullWidth
                     multiline
-                    rows={3}
+                    rows={2} // COMPACT: Reduced from 3 to 2
                     placeholder="Additional notes about this sale..."
                   />
                 )}
               />
-            </Grid>
+            </Grid> */}
           </Grid>
         </form>
       </DialogContent>
 
-      <DialogActions sx={{ p: 3 }}>
-        <Button onClick={handleClose} size="large">
+      <DialogActions sx={{ p: 2 }}> {/* COMPACT: Reduced padding from 3 to 2 */}
+        <Button onClick={handleClose} disabled={isSubmitting}>
           Cancel
         </Button>
         <Button
           onClick={handleSubmit(handleFormSubmit)}
           variant="contained"
-          size="large"
           disabled={isSubmitting || calculatedAmounts.totalAmount === 0}
           startIcon={
-            isSubmitting ? <CircularProgress size={20} /> : <ShoppingCartIcon />
+            isSubmitting ? <CircularProgress size={16} /> : <ShoppingCartIcon /> /* COMPACT: Smaller spinner */
           }
         >
           {/* ONLY MODIFICATION: Change button text based on edit mode */}

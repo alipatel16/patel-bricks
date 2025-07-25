@@ -1,4 +1,4 @@
-// services/salesService.js - Updated to support GST toggle and maintain backward compatibility
+// services/salesService.js - Updated to support GST toggle and maintain backward compatibility with FIXED edit functionality
 import { dbUtils } from "./firebase";
 import { customerService } from "./customerService";
 import {
@@ -97,7 +97,7 @@ export const salesService = {
    * SALES OPERATIONS
    */
 
-  // Record new sale with enhanced features including GST toggle
+  // FIXED: Record new sale with enhanced features including proper edit mode handling
   recordSale: async ({
     date,
     quantity,
@@ -118,8 +118,13 @@ export const salesService = {
     paymentMethod = "cash",
     notes = "",
     hsnCode = HSN_CODES.FLY_ASH_BRICKS,
-    includeGST = false, // New GST toggle parameter
-    calculatedAmounts = null, // Pre-calculated amounts from form
+    includeGST = false,
+    calculatedAmounts = null,
+    // EDIT MODE parameters
+    isEdit = false,
+    originalSaleId = null,
+    preserveInvoiceNumber = null,
+    originalQuantity = null, // CRITICAL: Original quantity for stock adjustment
   }) => {
     try {
       // Validate required parameters
@@ -130,29 +135,18 @@ export const salesService = {
         };
       }
 
-      // Check brick availability
-      const capacityResult = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
-      if (!capacityResult.success) {
-        return {
-          success: false,
-          error: "Could not verify brick availability",
-        };
-      }
-
-      const currentStock = capacityResult.data?.total_stock || 0;
-      if (currentStock < quantity) {
-        return {
-          success: false,
-          error: `Insufficient stock. Required: ${quantity.toLocaleString()} bricks, Available: ${currentStock.toLocaleString()} bricks`,
-          data: capacityResult.data,
-        };
-      }
-
       const currentDate = date || dbUtils.dateString();
       const timestamp = dbUtils.timestamp();
 
-      // Generate invoice number
-      const invoiceNumber = await generateInvoiceNumber(currentDate);
+      // FIXED: Proper invoice number handling
+      let invoiceNumber;
+      if (isEdit && preserveInvoiceNumber) {
+        invoiceNumber = preserveInvoiceNumber;
+        
+      } else {
+        invoiceNumber = await generateInvoiceNumber(currentDate);
+        
+      }
 
       // Calculate amounts
       const { subtotal, discountAmount, taxableAmount } = calculateSaleAmount(
@@ -182,9 +176,72 @@ export const salesService = {
 
       const totalAmount = taxableAmount + gstCalculation.totalTax;
 
-      // Update stock
-      const newStock = currentStock - quantity;
+      // CRITICAL FIX: Proper stock handling for edit mode
+      let stockUpdates = {};
       
+      if (isEdit) {
+        // EDIT MODE: Calculate stock adjustment based on quantity difference
+        
+        
+        if (originalQuantity && originalQuantity !== quantity) {
+          // Get current stock
+          const capacityResult = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
+          if (!capacityResult.success) {
+            return {
+              success: false,
+              error: "Could not verify brick availability for edit",
+            };
+          }
+
+          const currentStock = capacityResult.data?.total_stock || 0;
+          const quantityDifference = quantity - originalQuantity;
+          
+          // If new quantity > original quantity, we need to deduct more from stock
+          // If new quantity < original quantity, we need to add back to stock
+          const newStock = currentStock - quantityDifference;
+
+          
+          
+          // Validate stock availability for increased quantities
+          if (quantityDifference > 0 && currentStock < quantityDifference) {
+            return {
+              success: false,
+              error: `Insufficient stock for quantity increase. Required additional: ${quantityDifference.toLocaleString()}, Available: ${currentStock.toLocaleString()}`,
+            };
+          }
+
+          stockUpdates = {
+            [`${DB_PATHS.INVENTORY.BRICKS}/total_stock`]: newStock,
+            [`${DB_PATHS.INVENTORY.BRICKS}/last_updated`]: timestamp,
+          };
+        }
+      } else {
+        // NEW SALE: Standard stock validation and deduction
+        const capacityResult = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
+        if (!capacityResult.success) {
+          return {
+            success: false,
+            error: "Could not verify brick availability",
+          };
+        }
+
+        const currentStock = capacityResult.data?.total_stock || 0;
+        if (currentStock < quantity) {
+          return {
+            success: false,
+            error: `Insufficient stock. Required: ${quantity.toLocaleString()} bricks, Available: ${currentStock.toLocaleString()} bricks`,
+            data: capacityResult.data,
+          };
+        }
+
+        const newStock = currentStock - quantity;
+        
+        stockUpdates = {
+          [`${DB_PATHS.INVENTORY.BRICKS}/total_stock`]: newStock,
+          [`${DB_PATHS.INVENTORY.BRICKS}/last_updated`]: timestamp,
+        };
+      }
+
       // Load current bank details
       let bankDetails = DEFAULT_BANK_DETAILS;
       try {
@@ -218,11 +275,11 @@ export const salesService = {
         customer_state_code: customerStateCode,
         customer_gstin: customerGSTIN,
 
-        // Location details (new)
+        // Location details
         location_name: locationName,
         location_id: locationId,
 
-        // Transport details (new)
+        // Transport details
         vehicle_number: vehicleNumber,
         challan_number: challanNumber,
 
@@ -232,9 +289,9 @@ export const salesService = {
         discount_type: discountType,
         taxable_amount: taxableAmount,
 
-        // GST details - IMPORTANT: Store the GST toggle flag
+        // GST details - Store the GST toggle flag
         include_gst: includeGST,
-        gst_included: includeGST, // Alternative field name for compatibility
+        gst_included: includeGST,
         is_inter_state: isInterState,
         cgst_rate: gstCalculation.cgstRate,
         sgst_rate: gstCalculation.sgstRate,
@@ -256,61 +313,99 @@ export const salesService = {
         // Status
         status: "completed",
         created_by: "system",
+        
+        // EDIT MODE: Add edit metadata
+        ...(isEdit && {
+          last_edited: timestamp,
+          edit_history: originalSaleId,
+          original_quantity: originalQuantity, // Keep track for audit
+        }),
       };
 
       // Prepare batch updates
       const updates = {};
 
-      // 1. Add to sales transactions
+      // 1. Add/Update sales transaction - CRITICAL FIX: Use same invoice number for edits
       updates[`${DB_PATHS.SALES}/transactions/${invoiceNumber}`] = saleEntry;
 
-      // 2. Update daily sales summary
-      const dailyPath = `${DB_PATHS.SALES}/daily/${currentDate}`;
-      const existingDailyResult = await dbUtils.readData(dailyPath);
-      const existingDaily = (existingDailyResult.success && existingDailyResult.data) ? existingDailyResult.data : {};
-      
-      updates[dailyPath] = {
-        date: currentDate,
-        total_sales: (existingDaily.total_sales || 0) + 1,
-        total_quantity: (existingDaily.total_quantity || 0) + quantity,
-        total_revenue: (existingDaily.total_revenue || 0) + totalAmount,
-        last_updated: timestamp,
-      };
+      // 2. Update daily sales summary (skip for edits to avoid double counting)
+      if (!isEdit) {
+        const dailyPath = `${DB_PATHS.SALES}/daily/${currentDate}`;
+        const existingDailyResult = await dbUtils.readData(dailyPath);
+        const existingDaily = (existingDailyResult.success && existingDailyResult.data) ? existingDailyResult.data : {};
+        
+        updates[dailyPath] = {
+          date: currentDate,
+          total_sales: (existingDaily.total_sales || 0) + 1,
+          total_quantity: (existingDaily.total_quantity || 0) + quantity,
+          total_revenue: (existingDaily.total_revenue || 0) + totalAmount,
+          last_updated: timestamp,
+        };
 
-      // 3. Update monthly sales summary
-      const monthlyPath = `${DB_PATHS.SALES}/monthly/${currentDate.substring(0, 7)}`;
-      const existingMonthlyResult = await dbUtils.readData(monthlyPath);
-      const existingMonthly = (existingMonthlyResult.success && existingMonthlyResult.data) ? existingMonthlyResult.data : {};
-      
-      updates[monthlyPath] = {
-        month: currentDate.substring(0, 7),
-        total_sales: (existingMonthly.total_sales || 0) + 1,
-        total_quantity: (existingMonthly.total_quantity || 0) + quantity,
-        total_revenue: (existingMonthly.total_revenue || 0) + totalAmount,
-        last_updated: timestamp,
-      };
+        // 3. Update monthly sales summary
+        const monthlyPath = `${DB_PATHS.SALES}/monthly/${currentDate.substring(0, 7)}`;
+        const existingMonthlyResult = await dbUtils.readData(monthlyPath);
+        const existingMonthly = (existingMonthlyResult.success && existingMonthlyResult.data) ? existingMonthlyResult.data : {};
+        
+        updates[monthlyPath] = {
+          month: currentDate.substring(0, 7),
+          total_sales: (existingMonthly.total_sales || 0) + 1,
+          total_quantity: (existingMonthly.total_quantity || 0) + quantity,
+          total_revenue: (existingMonthly.total_revenue || 0) + totalAmount,
+          last_updated: timestamp,
+        };
+      }
 
-      // 4. Update brick inventory
-      updates[`${DB_PATHS.INVENTORY.BRICKS}/total_stock`] = newStock;
-      updates[`${DB_PATHS.INVENTORY.BRICKS}/last_updated`] = timestamp;
+      // 4. Apply stock updates (for both new sales and edits with quantity changes)
+      if (Object.keys(stockUpdates).length > 0) {
+        Object.assign(updates, stockUpdates);
+        
+        // 5. Add to inventory history 
+        const capacityResult = await dbUtils.readData(DB_PATHS.INVENTORY.BRICKS);
+        const currentStock = capacityResult.data?.total_stock || 0;
+        
+        let inventoryHistoryEntry;
+        
+        if (isEdit) {
+          // Edit mode: Record the adjustment
+          const quantityDifference = quantity - (originalQuantity || 0);
+          inventoryHistoryEntry = {
+            type: "sale_edit",
+            quantity: -quantityDifference, // Negative for deduction, positive for return
+            reference: invoiceNumber,
+            customer: customerName,
+            location: locationName,
+            vehicle: vehicleNumber,
+            challan: challanNumber,
+            date: currentDate,
+            timestamp,
+            stock_before: currentStock + quantityDifference, // What it was before this adjustment
+            stock_after: currentStock,
+            original_quantity: originalQuantity,
+            new_quantity: quantity,
+            notes: `Sale edited - quantity changed from ${originalQuantity} to ${quantity}`,
+          };
+        } else {
+          // New sale: Record the deduction
+          inventoryHistoryEntry = {
+            type: "sale",
+            quantity: -quantity,
+            reference: invoiceNumber,
+            customer: customerName,
+            location: locationName,
+            vehicle: vehicleNumber,
+            challan: challanNumber,
+            date: currentDate,
+            timestamp,
+            stock_before: currentStock + quantity, // What it was before deduction
+            stock_after: currentStock,
+          };
+        }
+        
+        updates[`${DB_PATHS.INVENTORY.BRICKS}/history/${invoiceNumber}_${timestamp}`] = inventoryHistoryEntry;
+      }
 
-      // 5. Add to inventory history
-      const inventoryHistoryEntry = {
-        type: "sale",
-        quantity: -quantity,
-        reference: invoiceNumber,
-        customer: customerName,
-        location: locationName,
-        vehicle: vehicleNumber,
-        challan: challanNumber,
-        date: currentDate,
-        timestamp,
-        stock_before: currentStock,
-        stock_after: newStock,
-      };
-      updates[`${DB_PATHS.INVENTORY.BRICKS}/history/${invoiceNumber}`] = inventoryHistoryEntry;
-
-      // 6. Update or create customer record
+      // 6. Update or create customer record (for both new and edit)
       try {
         // Check if customer exists
         const existingCustomerResult = await customerService.getCustomerById(customerPhone);
@@ -320,11 +415,12 @@ export const salesService = {
           const existingCustomer = existingCustomerResult.data;
           const updatedCustomer = {
             ...existingCustomer,
-            name: customerName, // Update name in case it changed
+            name: customerName,
             email: customerEmail,
             last_purchase: currentDate,
-            total_purchases: (existingCustomer.total_purchases || 0) + 1,
-            total_amount: (existingCustomer.total_amount || 0) + totalAmount,
+            // Only increment totals for new sales, not edits
+            total_purchases: isEdit ? existingCustomer.total_purchases : (existingCustomer.total_purchases || 0) + 1,
+            total_amount: isEdit ? existingCustomer.total_amount : (existingCustomer.total_amount || 0) + totalAmount,
             updated_date: currentDate,
             updated_timestamp: timestamp,
           };
@@ -349,8 +445,8 @@ export const salesService = {
           }
 
           updates[`${DB_PATHS.CUSTOMERS}/${customerPhone}`] = updatedCustomer;
-        } else {
-          // Create new customer
+        } else if (!isEdit) {
+          // Create new customer only for new sales, not edits
           const newCustomer = {
             name: customerName,
             phone: customerPhone,
@@ -393,7 +489,9 @@ export const salesService = {
             ...saleEntry,
             id: invoiceNumber,
           },
-          message: `Sale recorded successfully. Invoice: ${invoiceNumber}`,
+          message: isEdit 
+            ? `Sale updated successfully. Invoice: ${invoiceNumber}` 
+            : `Sale recorded successfully. Invoice: ${invoiceNumber}`,
         };
       }
 

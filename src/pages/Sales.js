@@ -84,8 +84,8 @@ function Sales() {
   const [dialogOpen, setDialogOpen] = useState(false);
   
   // FIXED: Proper edit state management
-  const [editingData, setEditingData] = useState(null); // NEW: Add editingData state
-  const [isEditMode, setIsEditMode] = useState(false); // NEW: Add edit mode state
+  const [editingData, setEditingData] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   
   const [refreshing, setRefreshing] = useState(false);
 
@@ -131,7 +131,7 @@ function Sales() {
     try {
       await loadSalesData();
     } catch (error) {
-      console.error("Error refreshing sales data:", error);
+      
       toast.error("Failed to refresh sales data");
     } finally {
       setRefreshing(false);
@@ -174,7 +174,7 @@ function Sales() {
 
   // FIXED: Proper edit sale handler
   const handleEditSale = (editData) => {
-    console.log("Editing sale:", editData);
+    
     
     // Set edit mode and data
     setEditingData(editData);
@@ -211,10 +211,10 @@ function Sales() {
     setDialogOpen(true);
   };
 
-  // Enhanced form submission
+  // FIXED: Enhanced form submission with proper edit handling
   const onSubmit = async (data) => {
     try {
-      // Skip stock validation for edit mode (assuming we're not changing quantity significantly)
+      // Skip stock validation for edit mode (will be handled by recordSale function)
       if (!isEditMode) {
         // Validate brick availability for new sales
         const capacity = validateSaleCapacity(
@@ -249,12 +249,6 @@ function Sales() {
 
       // Prepare enhanced sale data
       const enhancedSaleData = {
-        // Add edit information if in edit mode
-        ...(isEditMode && editingData?.originalSale && {
-          isEdit: true,
-          originalSaleId: editingData.originalSale.id || editingData.originalSale.invoice_number,
-        }),
-
         // Date (already in YYYY-MM-DD format)
         date: data.saleDate,
 
@@ -291,7 +285,17 @@ function Sales() {
         
         // Add calculated amounts for reference
         calculatedAmounts: calculatedAmounts,
+
+        // CRITICAL FIX: Proper edit mode data passing
+        ...(isEditMode && editingData?.originalSale && {
+          isEdit: true,
+          originalSaleId: editingData.originalSale.id || editingData.originalSale.invoice_number,
+          preserveInvoiceNumber: editingData.originalSale.invoice_number, // CRITICAL FIX
+          originalQuantity: parseInt(editingData.originalSale.quantity), // CRITICAL FIX for stock adjustment
+        }),
       };
+
+      
 
       const result = await recordSale(enhancedSaleData);
 
@@ -308,14 +312,14 @@ function Sales() {
             await inventoryActions.loadInventoryData();
           }
         } catch (inventoryError) {
-          console.error("Error reloading inventory:", inventoryError);
+          
           // Continue anyway - sale was successful
         }
 
         handleCloseDialog();
       }
     } catch (error) {
-      console.error("Error recording/updating sale:", error);
+      
       toast.error(isEditMode ? "Failed to update sale" : "Failed to record sale");
     }
   };
@@ -711,7 +715,7 @@ function Sales() {
         calculatedAmounts={calculatedAmounts}
         setCalculatedAmounts={setCalculatedAmounts}
         searchCustomers={searchCustomers}
-        // NEW: Pass edit-related props
+        // FIXED: Pass edit-related props
         editingData={editingData}
         isEditMode={isEditMode}
       />

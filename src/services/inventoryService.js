@@ -22,7 +22,7 @@ export const inventoryService = {
         data: result.data || { total_stock: 0, last_updated: Date.now() },
       };
     } catch (error) {
-      console.error("Error getting brick inventory:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -112,7 +112,7 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      console.error("Error updating brick stock:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -195,7 +195,7 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      console.error("Error setting brick stock:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -226,7 +226,7 @@ export const inventoryService = {
       try {
         callback(updateEvent);
       } catch (error) {
-        console.error("Error in inventory listener:", error);
+        
       }
     });
   },
@@ -283,7 +283,7 @@ export const inventoryService = {
         },
       };
     } catch (error) {
-      console.error("Error getting cement inventory:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -356,7 +356,7 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      console.error("Error updating cement stock:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -415,7 +415,7 @@ export const inventoryService = {
 
       return purchaseResult;
     } catch (error) {
-      console.error("Error purchasing cement:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -449,7 +449,7 @@ export const inventoryService = {
         data: purchases,
       };
     } catch (error) {
-      console.error("Error getting cement purchase history:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -487,7 +487,7 @@ export const inventoryService = {
         data: purchases,
       };
     } catch (error) {
-      console.error("Error getting cement purchases by date range:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -544,7 +544,7 @@ export const inventoryService = {
 
       return { success: false, error: "Failed to load inventory status" };
     } catch (error) {
-      console.error("Error getting inventory status:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -554,7 +554,7 @@ export const inventoryService = {
     try {
       return dbUtils.listenToData(DB_PATHS.INVENTORY.BRICKS, callback);
     } catch (error) {
-      console.error("Error listening to brick inventory:", error);
+      
       return () => {}; // Return empty cleanup function
     }
   },
@@ -564,7 +564,7 @@ export const inventoryService = {
     try {
       return dbUtils.listenToData(DB_PATHS.INVENTORY.CEMENT, callback);
     } catch (error) {
-      console.error("Error listening to cement inventory:", error);
+      
       return () => {}; // Return empty cleanup function
     }
   },
@@ -581,7 +581,7 @@ export const inventoryService = {
           .getInventoryStatus()
           .then(callback)
           .catch((error) => {
-            console.error("Error getting inventory status:", error);
+            
             callback({ success: false, error: error.message });
           });
       });
@@ -593,7 +593,7 @@ export const inventoryService = {
             .getInventoryStatus()
             .then(callback)
             .catch((error) => {
-              console.error("Error getting inventory status:", error);
+              
               callback({ success: false, error: error.message });
             });
         }
@@ -609,12 +609,12 @@ export const inventoryService = {
               unsubscribe();
             }
           } catch (error) {
-            console.error("Error unsubscribing from inventory listener:", error);
+            
           }
         });
       };
     } catch (error) {
-      console.error("Error setting up inventory status listener:", error);
+      
       return () => {}; // Return empty cleanup function
     }
   },
@@ -624,7 +624,7 @@ export const inventoryService = {
    */
   getInventoryAdjustments: async () => {
     try {
-      console.log("Getting inventory adjustments...");
+      
 
       // Get adjustments from both history and transactions paths
       const [historyResult, transactionsResult] = await Promise.all([
@@ -682,14 +682,14 @@ export const inventoryService = {
       // Sort by timestamp (oldest first) for accurate calculation
       adjustments.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-      console.log(`Found ${adjustments.length} inventory adjustments`);
+      
 
       return {
         success: true,
         data: adjustments,
       };
     } catch (error) {
-      console.error("Error getting inventory adjustments:", error);
+      
       return {
         success: false,
         error: error.message,
@@ -744,7 +744,7 @@ export const inventoryService = {
         data: sortedTransactions,
       };
     } catch (error) {
-      console.error("Error getting inventory history:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -775,7 +775,7 @@ export const inventoryService = {
         },
       };
     } catch (error) {
-      console.error("Error force refreshing inventory:", error);
+      
       return { success: false, error: error.message };
     }
   },
@@ -804,7 +804,7 @@ export const inventoryService = {
 
       return status;
     } catch (error) {
-      console.error("Error force syncing inventory:", error);
+      
       return { success: false, error: error.message };
     }
   },
