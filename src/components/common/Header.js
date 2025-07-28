@@ -29,9 +29,6 @@ import { useApp, useNotifications } from '../../context/AppContext';
 import { useInventory } from '../../context/InventoryContext';
 import { useAuth } from '../../context/AuthContext'; // ADD THIS LINE
 
-// Import constants
-import { APP_NAME } from '../../utils/constants';
-
 function Header({ isConnected = true }) {
   const navigate = useNavigate();
   const { currentPage } = useApp();
@@ -109,6 +106,7 @@ function Header({ isConnected = true }) {
       production: 'Production',
       inventory: 'Inventory',
       sales: 'Sales',
+      customers : 'Customers',
       reports: 'Reports',
       settings: 'Settings',
     };
@@ -132,7 +130,7 @@ function Header({ isConnected = true }) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box>
             <Typography variant="h6" component="h1" sx={{ fontWeight: 600 }}>
-              {APP_NAME}
+              PATEL BRICKS MANAGEMENT
             </Typography>
             <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', lineHeight: 1 }}>
               {getPageTitle(currentPage)}

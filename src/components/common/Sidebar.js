@@ -32,7 +32,7 @@ import { useApp } from "../../context/AppContext";
 import { useInventory } from "../../context/InventoryContext";
 
 // Import constants
-import { APP_NAME, MENU_ITEMS } from "../../utils/constants";
+import { MENU_ITEMS } from "../../utils/constants";
 import { productionService } from "../../services/productionService";
 import { salesService } from "../../services/salesService";
 
@@ -239,7 +239,7 @@ function Sidebar({ open, onToggle }) {
             component="div"
             sx={{ fontWeight: 600, fontSize: "1.1rem" }}
           >
-            {APP_NAME.split(" ")[0]}
+            PATEL BRICKS
           </Typography>
         </Box>
 

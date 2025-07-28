@@ -436,7 +436,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
       </head>
       <body>
         <div class="header">
-          <div class="company-name">Your Company Name</div>
+          <div class="company-name">PATEL BRICKS</div>
           <div class="ledger-title">CUSTOMER LEDGER STATEMENT</div>
         </div>
 
