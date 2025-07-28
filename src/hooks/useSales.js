@@ -81,20 +81,25 @@ export const useSales = () => {
       const result = await salesService.recordSale(saleData);
       
       if (result.success) {
-        // Reload data to get updated statistics
-        await loadSalesData();
-        toast.success(result.message || 'Sale recorded successfully!');
+        // REMOVED: Don't automatically reload data here since Sales.js handles it
+        // This prevents double loading and ensures proper timing
+        // await loadSalesData(); // REMOVED
+        
+        // Only show success message for new sales (edit messages handled in Sales.js)
+        if (!saleData.isEdit) {
+          toast.success(result.message || 'Sale recorded successfully!');
+        }
         return result;
       } else {
         toast.error(result.error || 'Failed to record sale');
         return result;
       }
     } catch (error) {
-      
+      console.error('Error in recordSale:', error);
       toast.error('Failed to record sale');
       return { success: false, error: error.message };
     }
-  }, [loadSalesData]);
+  }, []);
 
   // Customer management functions
   const loadCustomers = useCallback(async () => {

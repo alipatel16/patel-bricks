@@ -529,50 +529,306 @@ export const productionService = {
    * UTILITY FUNCTIONS
    */
 
-  // Update production entry (for corrections)
-  updateProduction: async (date, updatedData) => {
+  // ENHANCED: Update production entry with inventory management
+  updateProduction: async (originalDate, updatedData) => {
     try {
-      const currentEntry = await productionService.getProductionByDate(date);
+      const {
+        date: newDate,
+        quantity: newQuantity,
+        cementUsed: newCementUsed,
+        shift,
+        notes = "",
+      } = updatedData;
+
+      // Get the current/original production entry
+      const currentEntry = await productionService.getProductionByDate(originalDate);
 
       if (!currentEntry.success || !currentEntry.data) {
         return { success: false, error: "Production entry not found" };
       }
 
-      const currentData = currentEntry.data;
-      const updates = {
-        ...currentData,
-        ...updatedData,
-        last_modified: dbUtils.timestamp(),
+      const originalData = currentEntry.data;
+      const originalQuantity = Number(originalData.quantity);
+      const originalCementUsed = Number(originalData.cement_used);
+      const originalMonth = originalDate.substring(0, 7); // YYYY-MM
+
+      // Validate new data
+      if (!newQuantity || newQuantity <= 0) {
+        return { success: false, error: "Invalid quantity provided" };
+      }
+
+      if (!newCementUsed || newCementUsed <= 0) {
+        return { success: false, error: "Invalid cement amount provided" };
+      }
+
+      // Validate date format if date is being changed
+      const targetDate = newDate || originalDate;
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(targetDate)) {
+        return { success: false, error: "Invalid date format. Use YYYY-MM-DD" };
+      }
+
+      // If date is changing, check if production already exists for the new date
+      if (newDate && newDate !== originalDate) {
+        const existingProduction = await dbUtils.readData(
+          `${DB_PATHS.PRODUCTION}/daily/${newDate}`
+        );
+        
+        if (existingProduction.data) {
+          return { 
+            success: false, 
+            error: `Production already recorded for ${newDate}. Please choose a different date.` 
+          };
+        }
+      }
+
+      const timestamp = dbUtils.timestamp();
+      const newMonth = targetDate.substring(0, 7); // YYYY-MM
+
+      // Calculate differences for inventory updates
+      const quantityDifference = Number(newQuantity) - originalQuantity;
+      const cementDifference = Number(newCementUsed) - originalCementUsed;
+
+      // Prepare updated production entry
+      const updatedProductionEntry = {
+        quantity: Number(newQuantity),
+        cement_used: Number(newCementUsed),
+        shift: shift || originalData.shift,
+        notes,
+        efficiency: calculateProductionEfficiency(
+          Number(newQuantity),
+          Number(newCementUsed)
+        ),
+        date: targetDate,
+        timestamp: originalData.timestamp, // Keep original timestamp
+        last_modified: timestamp,
       };
 
-      // Recalculate efficiency if quantity or cement changed
-      if (updatedData.quantity || updatedData.cement_used) {
-        updates.efficiency = calculateProductionEfficiency(
-          updates.quantity,
-          updates.cement_used
+      // Prepare batch updates
+      const updates = {};
+
+      // Handle date change scenario
+      if (newDate && newDate !== originalDate) {
+        // Delete from original date
+        updates[`${DB_PATHS.PRODUCTION}/daily/${originalDate}`] = null;
+        // Delete original cement usage
+        updates[`${DB_PATHS.CEMENT}/usage/daily/${originalDate}`] = null;
+      }
+
+      // Add/update production at target date
+      updates[`${DB_PATHS.PRODUCTION}/daily/${targetDate}`] = updatedProductionEntry;
+
+      // Update cement usage for target date
+      updates[`${DB_PATHS.CEMENT}/usage/daily/${targetDate}`] = {
+        bags_used: Number(newCementUsed),
+        bricks_produced: Number(newQuantity),
+        efficiency: calculateProductionEfficiency(Number(newQuantity), Number(newCementUsed)),
+        timestamp,
+      };
+
+      // Update monthly totals
+      // 1. If month changed, we need to update both months
+      if (originalMonth !== newMonth) {
+        // Remove from original month
+        const originalMonthlyResult = await dbUtils.readData(
+          `${DB_PATHS.PRODUCTION}/monthly/${originalMonth}`
+        );
+        
+        if (originalMonthlyResult.data) {
+          const originalMonthly = originalMonthlyResult.data;
+          const updatedOriginalMonthly = {
+            total_quantity: Math.max(0, (originalMonthly.total_quantity || 0) - originalQuantity),
+            total_cement_used: Math.max(0, (originalMonthly.total_cement_used || 0) - originalCementUsed),
+            days_count: Math.max(0, (originalMonthly.days_count || 0) - 1),
+            last_updated: timestamp,
+          };
+          
+          // Recalculate average efficiency for original month
+          updatedOriginalMonthly.average_efficiency = updatedOriginalMonthly.total_quantity > 0
+            ? calculateProductionEfficiency(updatedOriginalMonthly.total_quantity, updatedOriginalMonthly.total_cement_used)
+            : 0;
+
+          updates[`${DB_PATHS.PRODUCTION}/monthly/${originalMonth}`] = updatedOriginalMonthly;
+        }
+
+        // Add to new month
+        const newMonthlyResult = await dbUtils.readData(
+          `${DB_PATHS.PRODUCTION}/monthly/${newMonth}`
+        );
+        
+        const newMonthly = newMonthlyResult.data || {
+          total_quantity: 0,
+          total_cement_used: 0,
+          days_count: 0,
+          average_efficiency: 0,
+        };
+
+        const updatedNewMonthly = {
+          total_quantity: (newMonthly.total_quantity || 0) + Number(newQuantity),
+          total_cement_used: (newMonthly.total_cement_used || 0) + Number(newCementUsed),
+          days_count: (newMonthly.days_count || 0) + 1,
+          last_updated: timestamp,
+        };
+
+        // Recalculate average efficiency for new month
+        updatedNewMonthly.average_efficiency = calculateProductionEfficiency(
+          updatedNewMonthly.total_quantity,
+          updatedNewMonthly.total_cement_used
+        );
+
+        updates[`${DB_PATHS.PRODUCTION}/monthly/${newMonth}`] = updatedNewMonthly;
+      } else {
+        // Same month - just update the differences
+        const monthlyResult = await dbUtils.readData(
+          `${DB_PATHS.PRODUCTION}/monthly/${originalMonth}`
+        );
+        
+        if (monthlyResult.data) {
+          const monthly = monthlyResult.data;
+          const updatedMonthly = {
+            total_quantity: (monthly.total_quantity || 0) + quantityDifference,
+            total_cement_used: (monthly.total_cement_used || 0) + cementDifference,
+            days_count: monthly.days_count || 1, // Keep same day count
+            last_updated: timestamp,
+          };
+
+          // Recalculate average efficiency
+          updatedMonthly.average_efficiency = calculateProductionEfficiency(
+            updatedMonthly.total_quantity,
+            updatedMonthly.total_cement_used
+          );
+
+          updates[`${DB_PATHS.PRODUCTION}/monthly/${originalMonth}`] = updatedMonthly;
+        }
+      }
+
+      // Execute batch update
+      const batchResult = await dbUtils.batchUpdate(updates);
+
+      if (!batchResult.success) {
+        return { success: false, error: "Failed to update production data" };
+      }
+
+      // Update inventories based on differences
+      const inventoryUpdates = [];
+
+      if (quantityDifference !== 0) {
+        const brickOperation = quantityDifference > 0 ? "add" : "subtract";
+        const brickAmount = Math.abs(quantityDifference);
+        
+        inventoryUpdates.push(
+          inventoryService.updateBrickStock(
+            brickAmount,
+            brickOperation,
+            `Updated production: ${quantityDifference > 0 ? '+' : '-'}${brickAmount} bricks on ${targetDate}`
+          )
         );
       }
 
-      const result = await dbUtils.writeData(
-        `${DB_PATHS.PRODUCTION}/daily/${date}`,
-        updates
-      );
+      if (cementDifference !== 0) {
+        const cementOperation = cementDifference > 0 ? "subtract" : "add"; // Note: inverse logic for cement
+        const cementAmount = Math.abs(cementDifference);
+        
+        inventoryUpdates.push(
+          inventoryService.updateCementStock(
+            cementAmount,
+            cementOperation,
+            null,
+            `Updated production: ${cementDifference > 0 ? '+' : '-'}${cementAmount} bags used on ${targetDate}`
+          )
+        );
+      }
 
-      return result;
+      // Execute inventory updates if there are any
+      let inventoryResults = { bricks: { success: true }, cement: { success: true } };
+      if (inventoryUpdates.length > 0) {
+        const results = await Promise.all(inventoryUpdates);
+        inventoryResults = {
+          bricks: results[0] || { success: true },
+          cement: results[1] || { success: true },
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          production: updatedProductionEntry,
+          changes: {
+            quantityDifference,
+            cementDifference,
+            dateChanged: newDate && newDate !== originalDate,
+          },
+          inventory_updates: inventoryResults,
+        },
+      };
     } catch (error) {
       
       return { success: false, error: error.message };
     }
   },
 
-  // Delete production entry
+  // Enhanced Delete production entry with proper inventory reversal
   deleteProduction: async (date) => {
     try {
-      // Note: In a real app, you might want to reverse inventory changes
-      const result = await dbUtils.deleteData(
-        `${DB_PATHS.PRODUCTION}/daily/${date}`
+      // Get the production data before deleting to reverse inventory changes
+      const productionResult = await productionService.getProductionByDate(date);
+      
+      if (!productionResult.success || !productionResult.data) {
+        return { success: false, error: "Production entry not found" };
+      }
+
+      const productionData = productionResult.data;
+      const { quantity, cement_used } = productionData;
+      const month = date.substring(0, 7); // YYYY-MM
+
+      // Prepare batch updates for deletion
+      const updates = {};
+
+      // 1. Delete daily production
+      updates[`${DB_PATHS.PRODUCTION}/daily/${date}`] = null;
+
+      // 2. Delete cement usage for that date
+      updates[`${DB_PATHS.CEMENT}/usage/daily/${date}`] = null;
+
+      // 3. Update monthly totals
+      const monthlyResult = await dbUtils.readData(
+        `${DB_PATHS.PRODUCTION}/monthly/${month}`
       );
-      return result;
+      
+      if (monthlyResult.data) {
+        const monthly = monthlyResult.data;
+        const updatedMonthly = {
+          total_quantity: Math.max(0, (monthly.total_quantity || 0) - quantity),
+          total_cement_used: Math.max(0, (monthly.total_cement_used || 0) - cement_used),
+          days_count: Math.max(0, (monthly.days_count || 0) - 1),
+          last_updated: dbUtils.timestamp(),
+        };
+
+        // Recalculate average efficiency
+        updatedMonthly.average_efficiency = updatedMonthly.total_quantity > 0
+          ? calculateProductionEfficiency(updatedMonthly.total_quantity, updatedMonthly.total_cement_used)
+          : 0;
+
+        updates[`${DB_PATHS.PRODUCTION}/monthly/${month}`] = updatedMonthly;
+      }
+
+      // Execute batch delete
+      const batchResult = await dbUtils.batchUpdate(updates);
+
+      if (!batchResult.success) {
+        return { success: false, error: "Failed to delete production data" };
+      }
+
+      return {
+        success: true,
+        data: {
+          deletedProduction: productionData,
+          inventoryImpact: {
+            bricksToRemove: quantity,
+            cementToReturn: cement_used,
+          },
+        },
+      };
     } catch (error) {
       
       return { success: false, error: error.message };

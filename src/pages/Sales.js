@@ -211,7 +211,7 @@ function Sales() {
     setDialogOpen(true);
   };
 
-  // FIXED: Enhanced form submission with proper edit handling
+  // FIXED: Enhanced form submission with proper edit handling and data reload
   const onSubmit = async (data) => {
     try {
       // Skip stock validation for edit mode (will be handled by recordSale function)
@@ -295,13 +295,21 @@ function Sales() {
         }),
       };
 
-      
-
       const result = await recordSale(enhancedSaleData);
 
       if (result.success) {
-        // Show appropriate success message
-        toast.success(isEditMode ? "Sale updated successfully!" : "Sale recorded successfully!");
+        // Show appropriate success message (only for edits, since recordSale handles new sales)
+        if (isEditMode) {
+          toast.success("Sale updated successfully!");
+        }
+        
+        // CRITICAL FIX: Always reload sales data after any sale operation
+        try {
+          await loadSalesData();
+        } catch (salesError) {
+          console.error("Error reloading sales data:", salesError);
+          // Continue anyway - sale was successful
+        }
         
         // Try to reload inventory data if the function exists
         try {
@@ -312,14 +320,14 @@ function Sales() {
             await inventoryActions.loadInventoryData();
           }
         } catch (inventoryError) {
-          
+          console.error("Error reloading inventory data:", inventoryError);
           // Continue anyway - sale was successful
         }
 
         handleCloseDialog();
       }
     } catch (error) {
-      
+      console.error("Error submitting sale:", error);
       toast.error(isEditMode ? "Failed to update sale" : "Failed to record sale");
     }
   };
@@ -402,47 +410,30 @@ function Sales() {
       )}
 
       {/* Enhanced Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+      <Box sx={{ borderBottom: 1, borderColor: "divider"}}>
         <Tabs
           value={currentTab}
           onChange={handleTabChange}
-          variant={isMobile ? "scrollable" : "standard"}
-          scrollButtons="auto"
-          sx={{
-            "& .MuiTabs-indicator": {
-              height: 3,
-              borderRadius: 2,
-              background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-            },
-            "& .MuiTab-root": {
-              fontWeight: 600,
-              textTransform: "none",
-              minHeight: 64,
-              "&.Mui-selected": {
-                color: theme.palette.primary.main,
-              },
-            },
-          }}
         >
           <Tab
             label="Overview"
             icon={<TrendingUpIcon />}
-            iconPosition="start"
+            iconPosition="top"
           />
           <Tab
             label="Sales History"
             icon={<ReceiptIcon />}
-            iconPosition="start"
+            iconPosition="top"
           />
           <Tab
             label="Analytics"
             icon={<TrendingUpIcon />}
-            iconPosition="start"
+            iconPosition="top"
           />
           <Tab
-            label="Customer List"
+            label="Customer Report"
             icon={<PeopleIcon />}
-            iconPosition="start"
+            iconPosition="top"
           />
         </Tabs>
       </Box>
@@ -686,7 +677,7 @@ function Sales() {
         </Grid>
       </TabPanel>
 
-      {/* Customer List Tab */}
+      {/* Customer Report Tab */}
       <TabPanel value={currentTab} index={3}>
         <CustomerList
           sales={sales}

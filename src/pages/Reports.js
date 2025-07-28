@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
-  Grid,
   Card,
   CardContent,
   Typography,
+  Grid,
   Button,
   FormControl,
   InputLabel,
@@ -12,11 +12,9 @@ import {
   MenuItem,
   IconButton,
   Tooltip,
-  LinearProgress,
   Alert,
+  LinearProgress,
   Chip,
-  useTheme,
-  alpha,
   Table,
   TableBody,
   TableCell,
@@ -24,378 +22,134 @@ import {
   TableHead,
   TableRow,
   Paper,
+  alpha,
+  Skeleton,
+  Fade,
+  useTheme,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
-  AttachMoney as MoneyIcon,
-  Inventory as InventoryIcon,
-  Factory as FactoryIcon,
-  ShoppingCart as ShoppingCartIcon,
-  People as PeopleIcon,
+  TrendingDown as TrendingDownIcon,
   Refresh as RefreshIcon,
   Download as DownloadIcon,
+  Assessment as AssessmentIcon,
+  Factory as FactoryIcon,
+  ShoppingCart as SalesIcon,
+  Inventory as InventoryIcon,
+  AttachMoney as RevenueIcon,
 } from '@mui/icons-material';
 import {
+  LineChart,
   Line,
-  AreaChart,
-  Area,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
-  ComposedChart,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
 
 // Import services
+import { reportsService } from '../services/reportsService';
 import { productionService } from '../services/productionService';
 import { salesService } from '../services/salesService';
 
-// Import utilities
-import { formatCurrency, formatQuantity } from '../utils/calculations';
-
-const Reports = () => {
+// Memoized MetricCard component
+const MetricCard = React.memo(({ title, value, subtitle, icon, trend, color = 'primary', loading = false }) => {
   const theme = useTheme();
   
-  // State management
-  const [reportData, setReportData] = useState({
-    summary: {
-      totalProduction: 0,
-      totalSales: 0,
-      totalRevenue: 0,
-      totalCustomers: 0,
-      currentStock: 0,
-      profitMargin: 0,
-    },
-    dailyTrends: [],
-    monthlyTrends: [],
-    productionVsSales: [],
-    customerAnalysis: [],
-    revenueBreakdown: [],
-    loading: false,
-    error: null,
-  });
+  if (loading) {
+    return (
+      <Card sx={{ height: 120, display: 'flex', alignItems: 'center' }}>
+        <CardContent sx={{ width: '100%' }}>
+          <Skeleton variant="text" width="60%" height={20} />
+          <Skeleton variant="text" width="80%" height={32} sx={{ my: 1 }} />
+          <Skeleton variant="text" width="40%" height={16} />
+        </CardContent>
+      </Card>
+    );
+  }
 
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [refreshing, setRefreshing] = useState(false);
+  return (
+    <Fade in timeout={300}>
+      <Card 
+        sx={{ 
+          height: 120,
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: theme.shadows[4],
+          }
+        }}
+      >
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography color="textSecondary" variant="overline" sx={{ fontWeight: 600 }}>
+                {title}
+              </Typography>
+              <Typography variant="h5" component="div" sx={{ fontWeight: 700, my: 0.5 }}>
+                {value}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="textSecondary">
+                  {subtitle}
+                </Typography>
+                {trend && (
+                  <Chip
+                    icon={trend.direction === 'up' ? <TrendingUpIcon /> : <TrendingDownIcon />}
+                    label={trend.value}
+                    size="small"
+                    color={trend.direction === 'up' ? 'success' : 'error'}
+                    sx={{ height: 20, fontSize: '0.75rem' }}
+                  />
+                )}
+              </Box>
+            </Box>
+            <Box
+              sx={{
+                p: 1,
+                borderRadius: 2,
+                backgroundColor: alpha(theme.palette[color].main, 0.1),
+                color: theme.palette[color].main,
+              }}
+            >
+              {icon}
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
+    </Fade>
+  );
+});
 
-  // Chart colors
-  const COLORS = {
-    primary: theme.palette.primary.main,
-    secondary: theme.palette.secondary.main,
-    success: theme.palette.success.main,
-    warning: theme.palette.warning.main,
-    error: theme.palette.error.main,
-    info: theme.palette.info.main,
-  };
+// Enhanced Performance Chart component with dual axis
+const PerformanceChart = React.memo(({ data, loading }) => {
+  const theme = useTheme();
+  
+  if (loading) {
+    return (
+      <Card sx={{ borderRadius: 2 }}>
+        <CardContent>
+          <Skeleton variant="text" width="40%" height={24} sx={{ mb: 2 }} />
+          <Skeleton variant="rectangular" width="100%" height={350} sx={{ borderRadius: 1 }} />
+        </CardContent>
+      </Card>
+    );
+  }
 
-  const CHART_COLORS = [
-    COLORS.primary,
-    COLORS.success,
-    COLORS.warning,
-    COLORS.info,
-    COLORS.secondary,
-    COLORS.error,
-  ];
-
-  useEffect(() => {
-    loadReportData();
-  }, [selectedPeriod]);
-
-  // Load all report data
-  const loadReportData = async () => {
-    try {
-      setReportData(prev => ({ ...prev, loading: true, error: null }));
-
-      // Fetch data from available sources
-      const [productionStats, salesStats, productionHistory, salesHistory] = await Promise.all([
-        productionService.getProductionStats(selectedPeriod),
-        salesService.getSalesStats(selectedPeriod),
-        productionService.getProductionHistory(1000), // Get all production data
-        salesService.getAllSales(), // Get all sales data
-      ]);
-
-      // Calculate current stock (Production - Sales)
-      const totalProduction = productionHistory.success && productionHistory.data
-        ? productionHistory.data.reduce((sum, prod) => sum + (parseInt(prod.quantity) || 0), 0)
-        : 0;
-      
-      const totalSalesQty = salesHistory.success && salesHistory.data
-        ? salesHistory.data.reduce((sum, sale) => sum + (parseInt(sale.quantity) || 0), 0)
-        : 0;
-      
-      const currentStock = totalProduction - totalSalesQty;
-
-      // Calculate unique customers from sales data
-      const uniqueCustomers = salesHistory.success && salesHistory.data
-        ? new Set(salesHistory.data.map(sale => sale.customer_phone || sale.customer_name)).size
-        : 0;
-
-      // Process daily trends for the last 30 days
-      const dailyTrends = await generateDailyTrends();
-      
-      // Process monthly trends for the last 12 months
-      const monthlyTrends = await generateMonthlyTrends();
-      
-      // Generate production vs sales data
-      const productionVsSales = await generateProductionVsSalesData();
-      
-      // Generate customer analysis
-      const customerAnalysis = await generateCustomerAnalysis();
-      
-      // Generate revenue breakdown
-      const revenueBreakdown = await generateRevenueBreakdown();
-
-      // Calculate summary metrics
-      const summary = {
-        totalProduction: (productionStats.success && productionStats.data?.total_quantity) 
-          ? productionStats.data.total_quantity 
-          : totalProduction,
-        totalSales: (salesStats.success && salesStats.data?.total_quantity) 
-          ? salesStats.data.total_quantity 
-          : totalSalesQty,
-        totalRevenue: (salesStats.success && salesStats.data?.total_revenue) 
-          ? salesStats.data.total_revenue 
-          : 0,
-        totalCustomers: uniqueCustomers,
-        currentStock: currentStock,
-        profitMargin: (salesStats.success && salesStats.data?.total_revenue) 
-          ? (salesStats.data.total_revenue * 0.3) 
-          : 0, // Estimated 30% margin
-      };
-
-      setReportData({
-        summary,
-        dailyTrends,
-        monthlyTrends,
-        productionVsSales,
-        customerAnalysis,
-        revenueBreakdown,
-        loading: false,
-        error: null,
-      });
-
-    } catch (error) {
-      
-      setReportData(prev => ({
-        ...prev,
-        loading: false,
-        error: 'Failed to load report data',
-      }));
-    }
-  };
-
-  // Handle refresh
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await loadReportData();
-    } catch (error) {
-      
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  // Generate daily trends data
-  const generateDailyTrends = async () => {
-    try {
-      // Try to get actual daily data from services
-      const trends = [];
-      const today = new Date();
-      
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        
-        // Try to get actual production data for this date
-        const productionResult = await productionService.getProductionByDate(dateStr);
-        const salesResult = await salesService.getDailySales(dateStr);
-        
-        trends.push({
-          date: dateStr,
-          shortDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          production: (productionResult.success && productionResult.data?.quantity) 
-            ? productionResult.data.quantity 
-            : Math.floor(Math.random() * 3000) + 1000,
-          sales: (salesResult.success && salesResult.data?.total_quantity) 
-            ? salesResult.data.total_quantity 
-            : Math.floor(Math.random() * 2500) + 800,
-          revenue: (salesResult.success && salesResult.data?.total_revenue) 
-            ? salesResult.data.total_revenue 
-            : Math.floor(Math.random() * 25000) + 8000,
-        });
-      }
-      
-      return trends;
-    } catch (error) {
-      
-      // Fallback to sample data
-      const trends = [];
-      const today = new Date();
-      
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        
-        trends.push({
-          date: date.toISOString().split('T')[0],
-          shortDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          production: Math.floor(Math.random() * 3000) + 1000,
-          sales: Math.floor(Math.random() * 2500) + 800,
-          revenue: Math.floor(Math.random() * 25000) + 8000,
-        });
-      }
-      
-      return trends;
-    }
-  };
-
-  // Generate monthly trends data
-  const generateMonthlyTrends = async () => {
-    try {
-      const trends = [];
-      const today = new Date();
-      
-      for (let i = 11; i >= 0; i--) {
-        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const monthStr = date.toISOString().substring(0, 7); // YYYY-MM format
-        
-        // Try to get actual monthly stats
-        const productionStats = await productionService.getProductionStats('month', monthStr);
-        const salesStats = await salesService.getSalesStats('month', monthStr);
-        
-        trends.push({
-          month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-          production: (productionStats.success && productionStats.data?.total_quantity) 
-            ? productionStats.data.total_quantity 
-            : Math.floor(Math.random() * 80000) + 40000,
-          sales: (salesStats.success && salesStats.data?.total_quantity) 
-            ? salesStats.data.total_quantity 
-            : Math.floor(Math.random() * 70000) + 35000,
-          revenue: (salesStats.success && salesStats.data?.total_revenue) 
-            ? salesStats.data.total_revenue 
-            : Math.floor(Math.random() * 700000) + 350000,
-          customers: (salesStats.success && salesStats.data?.unique_customers) 
-            ? salesStats.data.unique_customers 
-            : Math.floor(Math.random() * 40) + 15,
-        });
-      }
-      
-      return trends;
-    } catch (error) {
-      
-      // Fallback to sample data
-      const trends = [];
-      const today = new Date();
-      
-      for (let i = 11; i >= 0; i--) {
-        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        
-        trends.push({
-          month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-          production: Math.floor(Math.random() * 80000) + 40000,
-          sales: Math.floor(Math.random() * 70000) + 35000,
-          revenue: Math.floor(Math.random() * 700000) + 350000,
-          customers: Math.floor(Math.random() * 40) + 15,
-        });
-      }
-      
-      return trends;
-    }
-  };
-
-  // Generate production vs sales comparison
-  const generateProductionVsSalesData = async () => {
-    try {
-      const data = [];
-      const today = new Date();
-      
-      // Get last 4 weeks of data
-      for (let week = 3; week >= 0; week--) {
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - (week * 7) - 6);
-        const weekEnd = new Date(today);
-        weekEnd.setDate(today.getDate() - (week * 7));
-        
-        // Try to get actual data for this week
-        const weeklyProduction = await productionService.getProductionStats('week', weekStart.toISOString().split('T')[0]);
-        const weeklySales = await salesService.getSalesStats('week', weekStart.toISOString().split('T')[0]);
-        
-        const production = (weeklyProduction.success && weeklyProduction.data?.total_quantity) 
-          ? weeklyProduction.data.total_quantity 
-          : Math.floor(Math.random() * 15000) + 10000;
-        
-        const sales = (weeklySales.success && weeklySales.data?.total_quantity) 
-          ? weeklySales.data.total_quantity 
-          : Math.floor(Math.random() * 12000) + 8000;
-        
-        data.push({
-          period: `Week ${4 - week}`,
-          production,
-          sales,
-          efficiency: sales > 0 ? Math.min(Math.round((sales / production) * 100), 100) : 0,
-        });
-      }
-      
-      return data;
-    } catch (error) {
-      
-      // Fallback to sample data
-      const data = [];
-      const categories = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-      
-      categories.forEach(week => {
-        const production = Math.floor(Math.random() * 15000) + 10000;
-        const sales = Math.floor(Math.random() * 12000) + 8000;
-        
-        data.push({
-          period: week,
-          production,
-          sales,
-          efficiency: Math.min(Math.round((sales / production) * 100), 100),
-        });
-      });
-      
-      return data;
-    }
-  };
-
-  // Generate customer analysis data
-  const generateCustomerAnalysis = async () => {
-    return [
-      { segment: 'New Customers', value: 25, color: COLORS.primary },
-      { segment: 'Returning Customers', value: 45, color: COLORS.success },
-      { segment: 'VIP Customers', value: 20, color: COLORS.warning },
-      { segment: 'Inactive Customers', value: 10, color: COLORS.error },
-    ];
-  };
-
-  // Generate revenue breakdown data
-  const generateRevenueBreakdown = async () => {
-    return [
-      { category: 'Direct Sales', amount: 450000, percentage: 60, color: COLORS.primary },
-      { category: 'Bulk Orders', amount: 225000, percentage: 30, color: COLORS.success },
-      { category: 'Contracts', amount: 75000, percentage: 10, color: COLORS.info },
-    ];
-  };
-
-  // Handle export
-  const handleExport = () => {
-    // Implement export functionality
-    
-  };
-
-  // Custom tooltip for charts
+  // Custom tooltip for the chart
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+      const productionData = payload.find(p => p.dataKey === 'production');
+      const salesData = payload.find(p => p.dataKey === 'sales');
+      const efficiencyData = payload.find(p => p.dataKey === 'efficiency');
+      
       return (
         <Box
           sx={{
@@ -403,22 +157,29 @@ const Reports = () => {
             p: 2,
             border: 1,
             borderColor: 'divider',
-            borderRadius: 1,
-            boxShadow: 2,
+            borderRadius: 2,
+            boxShadow: theme.shadows[8],
+            minWidth: 200,
           }}
         >
-          <Typography variant="subtitle2">{label}</Typography>
-          {payload.map((entry, index) => (
-            <Typography
-              key={index}
-              variant="body2"
-              sx={{ color: entry.color }}
-            >
-              {entry.name}: {typeof entry.value === 'number' && entry.value > 1000 
-                ? formatCurrency(entry.value) 
-                : entry.value}
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+            {label}
+          </Typography>
+          {productionData && (
+            <Typography variant="body2" sx={{ color: '#1976d2', mb: 0.5 }}>
+              🏭 Production: {formatNumber(productionData.value)} bricks
             </Typography>
-          ))}
+          )}
+          {salesData && (
+            <Typography variant="body2" sx={{ color: '#388e3c', mb: 0.5 }}>
+              🛒 Sales: {formatNumber(salesData.value)} bricks
+            </Typography>
+          )}
+          {efficiencyData && (
+            <Typography variant="body2" sx={{ color: '#f57c00' }}>
+              ⚡ Efficiency: {efficiencyData.value}%
+            </Typography>
+          )}
         </Box>
       );
     }
@@ -426,20 +187,367 @@ const Reports = () => {
   };
 
   return (
-    <Box>
-      {/* Header - Consistent with other pages */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-            Business Reports
+    <Card sx={{ borderRadius: 2, height: '100%' }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Daily Performance Analytics
           </Typography>
-          <Typography variant="body1" color="textSecondary">
-            Comprehensive analytics and insights for your brick production business.
-          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 12, height: 2, bgcolor: '#1976d2', borderRadius: 1 }} />
+              <Typography variant="caption">Production</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 12, height: 2, bgcolor: '#388e3c', borderRadius: 1 }} />
+              <Typography variant="caption">Sales</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 12, height: 2, bgcolor: '#f57c00', borderRadius: 1 }} />
+              <Typography variant="caption">Efficiency</Typography>
+            </Box>
+          </Box>
+        </Box>
+        
+        <ResponsiveContainer width="100%" height={350}>
+          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.3)} />
+            <XAxis 
+              dataKey="date" 
+              stroke={theme.palette.text.secondary}
+              fontSize={12}
+              tickLine={false}
+            />
+            <YAxis 
+              yAxisId="left"
+              stroke={theme.palette.text.secondary}
+              fontSize={12}
+              tickLine={false}
+            />
+            <YAxis 
+              yAxisId="right" 
+              orientation="right"
+              stroke={theme.palette.text.secondary}
+              fontSize={12}
+              tickLine={false}
+              domain={[0, 100]}
+            />
+            <RechartsTooltip content={<CustomTooltip />} />
+            
+            {/* Production Line */}
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="production"
+              stroke="#1976d2"
+              strokeWidth={3}
+              dot={{ r: 5, fill: '#1976d2', strokeWidth: 2, stroke: '#fff' }}
+              activeDot={{ r: 7, fill: '#1976d2' }}
+              name="Production (Bricks)"
+            />
+            
+            {/* Sales Line */}
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="sales"
+              stroke="#388e3c"
+              strokeWidth={3}
+              dot={{ r: 5, fill: '#388e3c', strokeWidth: 2, stroke: '#fff' }}
+              activeDot={{ r: 7, fill: '#388e3c' }}
+              name="Sales (Bricks)"
+            />
+            
+            {/* Efficiency Line */}
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="efficiency"
+              stroke="#f57c00"
+              strokeWidth={2}
+              strokeDasharray="5 5"
+              dot={{ r: 4, fill: '#f57c00', strokeWidth: 2, stroke: '#fff' }}
+              activeDot={{ r: 6, fill: '#f57c00' }}
+              name="Efficiency (%)"
+            />
+          </LineChart>
+        </ResponsiveContainer>
+        
+        {/* Chart Summary */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-around', 
+          mt: 2, 
+          pt: 2, 
+          borderTop: 1, 
+          borderColor: 'divider' 
+        }}>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" color="textSecondary">Avg Production</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {formatNumber(data.reduce((sum, d) => sum + d.production, 0) / data.length || 0)}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" color="textSecondary">Avg Sales</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {formatNumber(data.reduce((sum, d) => sum + d.sales, 0) / data.length || 0)}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="caption" color="textSecondary">Avg Efficiency</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {(data.reduce((sum, d) => sum + d.efficiency, 0) / data.length || 0).toFixed(1)}%
+            </Typography>
+          </Box>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+});
+
+// Custom hook for reports data with caching and optimization
+const useReportsData = (selectedPeriod) => {
+  const [reportData, setReportData] = useState({
+    summary: {
+      totalProduction: 0,
+      totalSales: 0,
+      totalRevenue: 0,
+      currentStock: 0,
+    },
+    dailyTrends: [],
+    revenueBreakdown: [],
+    loading: true,
+    error: null,
+  });
+
+  const [cache, setCache] = useState(new Map());
+
+  const fetchReportsData = useCallback(async (period) => {
+    // Check cache first
+    const cacheKey = `reports_${period}`;
+    if (cache.has(cacheKey)) {
+      const cachedData = cache.get(cacheKey);
+      if (Date.now() - cachedData.timestamp < 5 * 60 * 1000) { // 5 minutes cache
+        setReportData({ ...cachedData.data, loading: false });
+        return;
+      }
+    }
+
+    setReportData(prev => ({ ...prev, loading: true, error: null }));
+
+    try {
+      // Parallel API calls for better performance
+      const [productionStats, salesStats, inventoryData] = await Promise.all([
+        productionService.getProductionStats(period),
+        salesService.getSalesStats(period),
+        // Add inventory service call if available
+        Promise.resolve({ success: true, data: { currentStock: 0 } })
+      ]);
+
+      // Generate optimized daily trends (last 30 days max)
+      const dailyTrends = await generateOptimizedDailyTrends(period);
+
+      const summary = {
+        totalProduction: productionStats.success ? productionStats.data.total_quantity || 0 : 0,
+        totalSales: salesStats.success ? salesStats.data.total_quantity || 0 : 0,
+        totalRevenue: salesStats.success ? salesStats.data.total_revenue || 0 : 0,
+        currentStock: inventoryData.success ? inventoryData.data.currentStock || 0 : 0,
+      };
+
+      const newData = {
+        summary,
+        dailyTrends,
+        revenueBreakdown: generateRevenueBreakdown(salesStats.data),
+        loading: false,
+        error: null,
+      };
+
+      // Cache the result
+      setCache(prev => new Map(prev.set(cacheKey, {
+        data: newData,
+        timestamp: Date.now()
+      })));
+
+      setReportData(newData);
+
+    } catch (error) {
+      console.error('Failed to load reports data:', error);
+      setReportData(prev => ({
+        ...prev,
+        loading: false,
+        error: 'Failed to load report data. Please try again.',
+      }));
+    }
+  }, [cache]);
+
+  useEffect(() => {
+    fetchReportsData(selectedPeriod);
+  }, [selectedPeriod, fetchReportsData]);
+
+  return { reportData, refetch: () => fetchReportsData(selectedPeriod) };
+};
+
+// Optimized data generation functions - fetch real data from services
+const generateOptimizedDailyTrends = async (period) => {
+  const days = period === 'week' ? 7 : period === 'month' ? 30 : 30;
+  const trends = [];
+  const today = new Date();
+
+  try {
+    // Fetch real data for each day
+    const promises = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      promises.push(
+        Promise.all([
+          productionService.getProductionByDate(dateStr),
+          salesService.getDailySales(dateStr),
+          dateStr
+        ])
+      );
+    }
+
+    const results = await Promise.all(promises);
+    
+    results.forEach(([productionResult, salesResult, dateStr]) => {
+      const date = new Date(dateStr);
+      
+      trends.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: dateStr,
+        production: (productionResult.success && productionResult.data?.quantity) 
+          ? productionResult.data.quantity 
+          : 0,
+        sales: (salesResult.success && salesResult.data?.total_quantity) 
+          ? salesResult.data.total_quantity 
+          : 0,
+        revenue: (salesResult.success && salesResult.data?.total_revenue) 
+          ? salesResult.data.total_revenue 
+          : 0,
+        efficiency: (productionResult.success && productionResult.data?.efficiency) 
+          ? parseFloat(productionResult.data.efficiency) 
+          : 0,
+        cementUsed: (productionResult.success && productionResult.data?.cement_used) 
+          ? productionResult.data.cement_used 
+          : 0,
+      });
+    });
+
+    return trends;
+  } catch (error) {
+    console.error('Failed to load real daily trends data:', error);
+    
+    // Fallback to empty data structure
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      
+      trends.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: date.toISOString().split('T')[0],
+        production: 0,
+        sales: 0,
+        revenue: 0,
+        efficiency: 0,
+        cementUsed: 0,
+      });
+    }
+    
+    return trends;
+  }
+};
+
+const generateRevenueBreakdown = (data) => {
+  return [
+    { category: 'Retail Sales', amount: 125000, percentage: 65 },
+    { category: 'Wholesale', amount: 50000, percentage: 26 },
+    { category: 'Direct Orders', amount: 17500, percentage: 9 },
+  ];
+};
+
+// Utility functions
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+};
+
+const formatNumber = (value) => {
+  return new Intl.NumberFormat('en-US').format(value);
+};
+
+// Main Reports component
+const Reports = () => {
+  const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [refreshing, setRefreshing] = useState(false);
+  const theme = useTheme();
+
+  // Use optimized hook
+  const { reportData, refetch } = useReportsData(selectedPeriod);
+
+  // Memoized calculations
+  const trends = useMemo(() => ({
+    production: { direction: 'up', value: '+15%' },
+    sales: { direction: 'up', value: '+8%' },
+    revenue: { direction: 'up', value: '+12%' },
+    stock: { direction: 'down', value: '-5%' },
+  }), []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleExport = useCallback(() => {
+    // Implement export functionality
+    console.log('Exporting reports...');
+  }, []);
+
+  return (
+    <Box sx={{ p: { xs: 2, md: 3 }, minHeight: '100vh', backgroundColor: '#f8fafc' }}>
+      {/* Header */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 4,
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: 2
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: 2,
+              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+              color: theme.palette.primary.main,
+            }}
+          >
+            <AssessmentIcon fontSize="large" />
+          </Box>
+          <Box>
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: '#1a202c' }}>
+              Business Reports
+            </Typography>
+            <Typography variant="body1" color="textSecondary">
+              Comprehensive analytics and performance insights
+            </Typography>
+          </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <FormControl size="small" sx={{ minWidth: 120 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>Period</InputLabel>
             <Select
               value={selectedPeriod}
@@ -453,13 +561,20 @@ const Reports = () => {
             </Select>
           </FormControl>
           
-          <Tooltip title="Refresh reports">
+          <Tooltip title="Refresh data">
             <IconButton
               onClick={handleRefresh}
-              disabled={refreshing}
+              disabled={refreshing || reportData.loading}
               color="primary"
+              sx={{ ml: 1 }}
             >
-              <RefreshIcon />
+              <RefreshIcon sx={{ 
+                animation: refreshing ? 'spin 1s linear infinite' : 'none',
+                '@keyframes spin': {
+                  '0%': { transform: 'rotate(0deg)' },
+                  '100%': { transform: 'rotate(360deg)' },
+                }
+              }} />
             </IconButton>
           </Tooltip>
 
@@ -467,7 +582,8 @@ const Reports = () => {
             variant="outlined"
             startIcon={<DownloadIcon />}
             onClick={handleExport}
-            sx={{ borderRadius: 2 }}
+            sx={{ borderRadius: 2, fontWeight: 600 }}
+            disabled={reportData.loading}
           >
             Export
           </Button>
@@ -476,539 +592,135 @@ const Reports = () => {
 
       {/* Loading indicator */}
       {(reportData.loading || refreshing) && (
-        <LinearProgress sx={{ mb: 2 }} />
+        <LinearProgress sx={{ mb: 3, borderRadius: 1 }} />
       )}
 
       {/* Error alert */}
       {reportData.error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
           {reportData.error}
         </Alert>
       )}
 
-      {/* Summary Stats Cards - Consistent Design */}
+      {/* Summary Metrics */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Total Production */}
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  height: "100px",
-                }}
-              >
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Total Production
-                  </Typography>
-                  <Typography variant="h5" component="div">
-                    {formatQuantity(reportData.summary.totalProduction)}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Bricks produced
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    p: 1,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                    color: theme.palette.primary.main,
-                  }}
-                >
-                  <FactoryIcon />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Total Production"
+            value={formatNumber(reportData.summary.totalProduction)}
+            subtitle="Bricks produced"
+            icon={<FactoryIcon />}
+            trend={trends.production}
+            color="primary"
+            loading={reportData.loading}
+          />
         </Grid>
-
-        {/* Total Sales */}
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  height: "100px",
-                }}
-              >
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Total Sales
-                  </Typography>
-                  <Typography variant="h5" component="div">
-                    {formatQuantity(reportData.summary.totalSales)}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Bricks sold
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    p: 1,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.success.main, 0.1),
-                    color: theme.palette.success.main,
-                  }}
-                >
-                  <ShoppingCartIcon />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Total Sales"
+            value={formatNumber(reportData.summary.totalSales)}
+            subtitle="Bricks sold"
+            icon={<SalesIcon />}
+            trend={trends.sales}
+            color="success"
+            loading={reportData.loading}
+          />
         </Grid>
-
-        {/* Total Revenue */}
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  height: "100px",
-                }}
-              >
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Total Revenue
-                  </Typography>
-                  <Typography variant="h5" component="div">
-                    {formatCurrency(reportData.summary.totalRevenue)}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Revenue earned
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    p: 1,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.warning.main, 0.1),
-                    color: theme.palette.warning.main,
-                  }}
-                >
-                  <MoneyIcon />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Total Revenue"
+            value={formatCurrency(reportData.summary.totalRevenue)}
+            subtitle="Sales revenue"
+            icon={<RevenueIcon />}
+            trend={trends.revenue}
+            color="warning"
+            loading={reportData.loading}
+          />
         </Grid>
-
-        {/* Current Stock */}
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  height: "100px",
-                }}
-              >
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Current Stock
-                  </Typography>
-                  <Typography variant="h5" component="div">
-                    {formatQuantity(reportData.summary.currentStock)}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Bricks available
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    p: 1,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.info.main, 0.1),
-                    color: theme.palette.info.main,
-                  }}
-                >
-                  <InventoryIcon />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Total Customers */}
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  height: "100px",
-                }}
-              >
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Total Customers
-                  </Typography>
-                  <Typography variant="h5" component="div">
-                    {reportData.summary.totalCustomers}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Active customers
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    p: 1,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.secondary.main, 0.1),
-                    color: theme.palette.secondary.main,
-                  }}
-                >
-                  <PeopleIcon />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Profit Margin */}
-        <Grid item xs={12} sm={6} md={4}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  height: "100px",
-                }}
-              >
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Estimated Profit
-                  </Typography>
-                  <Typography variant="h5" component="div">
-                    {formatCurrency(reportData.summary.profitMargin)}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Monthly profit
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    p: 1,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.success.main, 0.1),
-                    color: theme.palette.success.main,
-                  }}
-                >
-                  <TrendingUpIcon />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Current Stock"
+            value={formatNumber(reportData.summary.currentStock)}
+            subtitle="Bricks in stock"
+            icon={<InventoryIcon />}
+            trend={trends.stock}
+            color="info"
+            loading={reportData.loading}
+          />
         </Grid>
       </Grid>
 
       {/* Charts Section */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Daily Trends Chart */}
-        <Grid item xs={12} lg={8}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom fontWeight="bold">
-                Daily Performance Trends (Last 30 Days)
-              </Typography>
-              <Box sx={{ height: 350, mt: 2 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={reportData.dailyTrends}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.grey[400], 0.3)} />
-                    <XAxis 
-                      dataKey="shortDate" 
-                      tick={{ fontSize: 12 }}
-                      stroke={theme.palette.text.secondary}
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 12 }}
-                      stroke={theme.palette.text.secondary}
-                    />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Legend />
-                    <Bar dataKey="production" fill={COLORS.primary} name="Production" />
-                    <Bar dataKey="sales" fill={COLORS.success} name="Sales" />
-                    <Line 
-                      type="monotone" 
-                      dataKey="revenue" 
-                      stroke={COLORS.warning} 
-                      strokeWidth={3}
-                      name="Revenue (₹)"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Customer Segmentation */}
-        <Grid item xs={12} lg={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom fontWeight="bold">
-                Customer Segmentation
-              </Typography>
-              <Box sx={{ height: 350, mt: 2 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={reportData.customerAnalysis}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      dataKey="value"
-                      label={({ segment, value }) => `${segment}: ${value}%`}
-                      labelLine={false}
-                    >
-                      {reportData.customerAnalysis.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip 
-                      formatter={(value) => [`${value}%`, 'Percentage']}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Monthly Trends */}
         <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom fontWeight="bold">
-                Monthly Business Trends (Last 12 Months)
-              </Typography>
-              <Box sx={{ height: 400, mt: 2 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={reportData.monthlyTrends}>
-                    <defs>
-                      <linearGradient id="productionGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1}/>
-                      </linearGradient>
-                      <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor={COLORS.success} stopOpacity={0.1}/>
-                      </linearGradient>
-                      <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.warning} stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor={COLORS.warning} stopOpacity={0.1}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.grey[400], 0.3)} />
-                    <XAxis 
-                      dataKey="month" 
-                      tick={{ fontSize: 12 }}
-                      stroke={theme.palette.text.secondary}
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 12 }}
-                      stroke={theme.palette.text.secondary}
-                    />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="production"
-                      stackId="1"
-                      stroke={COLORS.primary}
-                      fill="url(#productionGradient)"
-                      name="Production"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="sales"
-                      stackId="1"
-                      stroke={COLORS.success}
-                      fill="url(#salesGradient)"
-                      name="Sales"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Production vs Sales Efficiency */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom fontWeight="bold">
-                Weekly Production vs Sales
-              </Typography>
-              <Box sx={{ height: 300, mt: 2 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={reportData.productionVsSales}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.grey[400], 0.3)} />
-                    <XAxis 
-                      dataKey="period" 
-                      tick={{ fontSize: 12 }}
-                      stroke={theme.palette.text.secondary}
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 12 }}
-                      stroke={theme.palette.text.secondary}
-                    />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                    <Legend />
-                    <Bar dataKey="production" fill={COLORS.primary} name="Production" />
-                    <Bar dataKey="sales" fill={COLORS.success} name="Sales" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Revenue Breakdown */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom fontWeight="bold">
-                Revenue Breakdown
-              </Typography>
-              <Box sx={{ mt: 2 }}>
-                {reportData.revenueBreakdown.map((item, index) => (
-                  <Box key={index} sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2" fontWeight="medium">
-                        {item.category}
-                      </Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        {formatCurrency(item.amount)} ({item.percentage}%)
-                      </Typography>
-                    </Box>
-                    <Box
-                      sx={{
-                        width: '100%',
-                        height: 8,
-                        backgroundColor: alpha(item.color, 0.1),
-                        borderRadius: 1,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          width: `${item.percentage}%`,
-                          height: '100%',
-                          backgroundColor: item.color,
-                          transition: 'width 1s ease-in-out',
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            </CardContent>
-          </Card>
+          <PerformanceChart data={reportData.dailyTrends} loading={reportData.loading} />
         </Grid>
       </Grid>
 
       {/* Performance Summary Table */}
-      <Card>
+      <Card sx={{ borderRadius: 2 }}>
         <CardContent>
-          <Typography variant="h6" gutterBottom fontWeight="bold">
-            Performance Summary
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+            Revenue Breakdown
           </Typography>
-          <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "bold" }}>Metric</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Current Period</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Previous Period</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Change</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: "bold" }}>Trend</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow hover>
-                  <TableCell>Total Production</TableCell>
-                  <TableCell align="right">{formatQuantity(reportData.summary.totalProduction)}</TableCell>
-                  <TableCell align="right">{formatQuantity(reportData.summary.totalProduction * 0.85)}</TableCell>
-                  <TableCell align="right">
-                    <Chip 
-                      label="+15%" 
-                      size="small" 
-                      color="success" 
-                      icon={<TrendingUpIcon />}
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <TrendingUpIcon color="success" />
-                  </TableCell>
-                </TableRow>
-                <TableRow hover>
-                  <TableCell>Total Sales</TableCell>
-                  <TableCell align="right">{formatQuantity(reportData.summary.totalSales)}</TableCell>
-                  <TableCell align="right">{formatQuantity(reportData.summary.totalSales * 0.92)}</TableCell>
-                  <TableCell align="right">
-                    <Chip 
-                      label="+8%" 
-                      size="small" 
-                      color="success" 
-                      icon={<TrendingUpIcon />}
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <TrendingUpIcon color="success" />
-                  </TableCell>
-                </TableRow>
-                <TableRow hover>
-                  <TableCell>Revenue</TableCell>
-                  <TableCell align="right">{formatCurrency(reportData.summary.totalRevenue)}</TableCell>
-                  <TableCell align="right">{formatCurrency(reportData.summary.totalRevenue * 0.88)}</TableCell>
-                  <TableCell align="right">
-                    <Chip 
-                      label="+12%" 
-                      size="small" 
-                      color="success" 
-                      icon={<TrendingUpIcon />}
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <TrendingUpIcon color="success" />
-                  </TableCell>
-                </TableRow>
-                <TableRow hover>
-                  <TableCell>Customer Count</TableCell>
-                  <TableCell align="right">{reportData.summary.totalCustomers}</TableCell>
-                  <TableCell align="right">{Math.floor(reportData.summary.totalCustomers * 0.95)}</TableCell>
-                  <TableCell align="right">
-                    <Chip 
-                      label="+5%" 
-                      size="small" 
-                      color="success" 
-                      icon={<TrendingUpIcon />}
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <TrendingUpIcon color="success" />
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
+          {reportData.loading ? (
+            <Box>
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} variant="rectangular" height={50} sx={{ mb: 1 }} />
+              ))}
+            </Box>
+          ) : (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: alpha(theme.palette.primary.main, 0.05) }}>
+                    <TableCell sx={{ fontWeight: 700 }}>Category</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Amount</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Percentage</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>Progress</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {reportData.revenueBreakdown.map((item, index) => (
+                    <TableRow key={index} hover>
+                      <TableCell sx={{ fontWeight: 500 }}>{item.category}</TableCell>
+                      <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
+                      <TableCell align="right">
+                        <Chip 
+                          label={`${item.percentage}%`}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Box sx={{ width: '100%', maxWidth: 100 }}>
+                          <Box
+                            sx={{
+                              width: '100%',
+                              height: 8,
+                              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              borderRadius: 1,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: `${item.percentage}%`,
+                                height: '100%',
+                                backgroundColor: theme.palette.primary.main,
+                                transition: 'width 1s ease-in-out',
+                              }}
+                            />
+                          </Box>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </CardContent>
       </Card>
     </Box>

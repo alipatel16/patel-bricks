@@ -93,11 +93,6 @@ const InvoiceGenerator = ({
           const currentNumber =
             result.data.gstInvoiceNumbering.currentNumber || 1;
           setNextGstInvoiceNumber(`${prefix}-${currentNumber}`);
-
-          console.log(
-            "GST Invoice config loaded:",
-            result.data.gstInvoiceNumbering
-          );
         } else {
           // Use default config if not found
           const defaultConfig = {

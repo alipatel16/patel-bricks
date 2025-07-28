@@ -39,6 +39,7 @@ import {
   History as HistoryIcon,
   TrendingUp as TrendingUpIcon,
   Edit as EditIcon,
+  Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
   LocalShipping as TruckIcon,
@@ -52,6 +53,7 @@ import { useInventory } from "../context/InventoryContext";
 
 // Import services
 import { productionService } from "../services/productionService";
+import { inventoryService } from "../services/inventoryService";
 
 // Import utilities
 import {
@@ -77,6 +79,11 @@ function Production() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduction, setEditingProduction] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // New state for delete confirmation dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [productionToDelete, setProductionToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // New state for auto-calculation toggle
   const [autoCalculateCement, setAutoCalculateCement] = useState(false);
@@ -233,9 +240,14 @@ function Production() {
         return;
       }
 
-      if (cementUsed > cement.total_bags) {
+      // For updates, we need to check available cement + current production's cement
+      const availableCement = editingProduction 
+        ? cement.total_bags + editingProduction.cement_used // Add back current production's cement
+        : cement.total_bags;
+
+      if (cementUsed > availableCement) {
         
-        const errorMessage = `Insufficient cement. Required: ${cementUsed} bags, Available: ${cement.total_bags} bags`;
+        const errorMessage = `Insufficient cement. Required: ${cementUsed} bags, Available: ${availableCement} bags`;
         alert(errorMessage);
         appActions.showNotification(errorMessage, "error");
         return;
@@ -252,13 +264,32 @@ function Production() {
 
       
 
-      const result = await productionService.addProduction(productionData);
+      let result;
+      
+      // Check if we're editing or adding new production
+      if (editingProduction) {
+        // UPDATE existing production
+        result = await productionService.updateProduction(editingProduction.date, productionData);
+        
+        if (result.success) {
+          appActions.showNotification(
+            "Production updated successfully",
+            "success"
+          );
+        }
+      } else {
+        // ADD new production
+        result = await productionService.addProduction(productionData);
+        
+        if (result.success) {
+          appActions.showNotification(
+            "Production recorded successfully",
+            "success"
+          );
+        }
+      }
 
       if (result.success) {
-        appActions.showNotification(
-          "Production recorded successfully",
-          "success"
-        );
         reset({
           date: new Date().toISOString().split('T')[0], // Reset to today
           quantity: "",
@@ -268,20 +299,21 @@ function Production() {
           cementUsed: "",
         });
         setDialogOpen(false);
+        setEditingProduction(null); // Clear editing state
         loadProductionData();
         inventoryActions.refreshInventory();
       } else {
         
-        alert("Error: " + (result.error || "Failed to record production"));
+        alert("Error: " + (result.error || "Failed to save production"));
         appActions.showNotification(
-          result.error || "Failed to record production",
+          result.error || "Failed to save production",
           "error"
         );
       }
     } catch (error) {
       
-      alert("Error: Failed to record production");
-      appActions.showNotification("Failed to record production", "error");
+      alert("Error: Failed to save production");
+      appActions.showNotification("Failed to save production", "error");
     }
   };
 
@@ -294,6 +326,81 @@ function Production() {
     setValue("shift", production.shift);
     setValue("notes", production.notes || "");
     setDialogOpen(true);
+  };
+
+  // NEW: Handle delete production
+  const handleDeleteProduction = (production) => {
+    setProductionToDelete(production);
+    setDeleteDialogOpen(true);
+  };
+
+  // NEW: Confirm delete production
+  const confirmDeleteProduction = async () => {
+    if (!productionToDelete) return;
+
+    setDeleting(true);
+    try {
+      // First, get the production data to understand inventory impact
+      const { date, quantity, cement_used } = productionToDelete;
+
+      // Delete the production record
+      const deleteResult = await productionService.deleteProduction(date);
+
+      if (deleteResult.success) {
+        // Reverse the inventory changes:
+        // 1. Subtract bricks from stock (since we're removing production)
+        // 2. Add cement back to stock (since we're returning unused cement)
+        
+        const [brickUpdateResult, cementUpdateResult] = await Promise.all([
+          inventoryService.updateBrickStock(
+            quantity,
+            "subtract", // Remove bricks that were produced
+            `Deleted production: ${quantity} bricks on ${date}`
+          ),
+          inventoryService.updateCementStock(
+            cement_used,
+            "add", // Add cement back to stock
+            null,
+            `Returned cement from deleted production on ${date}`
+          )
+        ]);
+
+        if (brickUpdateResult.success && cementUpdateResult.success) {
+          appActions.showNotification(
+            `Production deleted successfully. ${quantity} bricks removed from stock, ${cement_used} bags returned to cement inventory.`,
+            "success"
+          );
+        } else {
+          appActions.showNotification(
+            "Production deleted but inventory update failed. Please check inventory manually.",
+            "warning"
+          );
+        }
+
+        // Reload data and refresh inventory
+        loadProductionData();
+        inventoryActions.refreshInventory();
+        
+      } else {
+        appActions.showNotification(
+          deleteResult.error || "Failed to delete production",
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error('Error deleting production:', error);
+      appActions.showNotification("Failed to delete production", "error");
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+      setProductionToDelete(null);
+    }
+  };
+
+  // NEW: Cancel delete
+  const cancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setProductionToDelete(null);
   };
 
   // Handle dialog close
@@ -621,14 +728,30 @@ function Production() {
                       </TableCell>
                       <TableCell>{production.notes || "-"}</TableCell>
                       <TableCell align="center">
-                        <Tooltip title="Edit production">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleEditProduction(production)}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent : 'center' }}>
+                          <Tooltip title="Edit production">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditProduction(production)}
+                            >
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete production">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteProduction(production)}
+                              sx={{ 
+                                color: 'error.main',
+                                '&:hover': {
+                                  backgroundColor: alpha(theme.palette.error.main, 0.1)
+                                }
+                              }}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))
@@ -691,7 +814,7 @@ function Production() {
       >
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogTitle>
-            {editingProduction ? "Edit Production" : "Record Production"}
+            {editingProduction ? "Update Production" : "Record Production"}
           </DialogTitle>
 
           <DialogContent>
@@ -807,10 +930,85 @@ function Production() {
               disabled={isSubmitting}
               startIcon={isSubmitting ? null : <CheckCircleIcon />}
             >
-              {isSubmitting ? "Recording..." : "Record Production"}
+              {isSubmitting 
+                ? (editingProduction ? "Updating..." : "Recording...") 
+                : (editingProduction ? "Update Production" : "Record Production")
+              }
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* NEW: Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDelete}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: 'error.main' }}>
+          Delete Production Record
+        </DialogTitle>
+        <DialogContent>
+          {productionToDelete && (
+            <Box>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Are you sure you want to delete this production record?
+              </Typography>
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  This action will:
+                </Typography>
+                <Typography variant="body2" component="div">
+                  • Remove <strong>{productionToDelete.quantity.toLocaleString()} bricks</strong> from stock
+                </Typography>
+                <Typography variant="body2" component="div">
+                  • Return <strong>{productionToDelete.cement_used} bags</strong> to cement inventory
+                </Typography>
+                <Typography variant="body2" component="div" sx={{ mt: 1 }}>
+                  This action cannot be undone.
+                </Typography>
+              </Alert>
+              <Box sx={{ 
+                p: 2, 
+                backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                borderRadius: 1,
+                border: 1,
+                borderColor: alpha(theme.palette.primary.main, 0.2)
+              }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Production Details:
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Date:</strong> {formatDate(productionToDelete.date)}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Quantity:</strong> {productionToDelete.quantity.toLocaleString()} bricks
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Cement Used:</strong> {productionToDelete.cement_used} bags
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Shift:</strong> {PRODUCTION_SHIFTS[productionToDelete.shift]?.label || productionToDelete.shift}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={cancelDelete} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDeleteProduction}
+            variant="contained"
+            color="error"
+            disabled={deleting}
+            startIcon={deleting ? null : <DeleteIcon />}
+          >
+            {deleting ? "Deleting..." : "Delete Production"}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
