@@ -492,6 +492,106 @@ export const inventoryService = {
     }
   },
 
+  // NEW: Update cement purchase record
+  updateCementPurchase: async (purchaseId, updateData) => {
+    try {
+      const { date, bags, cost_per_bag, total_cost, supplier, notes } = updateData;
+
+      // Get current purchase data to find original date
+      const currentPurchaseResult = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases/${purchaseId}`);
+      
+      if (!currentPurchaseResult.success || !currentPurchaseResult.data) {
+        return { success: false, error: "Purchase record not found" };
+      }
+
+      const currentPurchase = currentPurchaseResult.data;
+      const originalDate = currentPurchase.date || dbUtils.dateString();
+
+      // Prepare updated purchase data
+      const updatedPurchaseData = {
+        ...currentPurchase,
+        date,
+        bags,
+        cost_per_bag,
+        total_cost,
+        supplier,
+        notes,
+        last_modified: dbUtils.timestamp(),
+      };
+
+      const updates = {};
+
+      // Update in legacy purchases path
+      updates[`${DB_PATHS.CEMENT}/purchases/${purchaseId}`] = updatedPurchaseData;
+
+      // Handle date-wise storage
+      if (date !== originalDate) {
+        // If date changed, move from old date to new date
+        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${originalDate}/${purchaseId}`] = null; // Remove from old date
+        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${date}/${purchaseId}`] = updatedPurchaseData; // Add to new date
+      } else {
+        // Same date, just update
+        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${date}/${purchaseId}`] = updatedPurchaseData;
+      }
+
+      const result = await dbUtils.batchUpdate(updates);
+
+      if (result.success) {
+        return {
+          success: true,
+          data: updatedPurchaseData,
+          message: "Purchase updated successfully",
+        };
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error updating cement purchase:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // NEW: Delete cement purchase record
+  deleteCementPurchase: async (purchaseId) => {
+    try {
+      // Get current purchase data to find the date
+      const currentPurchaseResult = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases/${purchaseId}`);
+      
+      if (!currentPurchaseResult.success || !currentPurchaseResult.data) {
+        return { success: false, error: "Purchase record not found" };
+      }
+
+      const currentPurchase = currentPurchaseResult.data;
+      const purchaseDate = currentPurchase.date || dbUtils.dateString();
+
+      const updates = {};
+
+      // Delete from legacy purchases path
+      updates[`${DB_PATHS.CEMENT}/purchases/${purchaseId}`] = null;
+
+      // Delete from date-wise purchases path
+      updates[`${DB_PATHS.CEMENT}/purchases_by_date/${purchaseDate}/${purchaseId}`] = null;
+
+      const result = await dbUtils.batchUpdate(updates);
+
+      if (result.success) {
+        return {
+          success: true,
+          data: {
+            deleted_purchase: currentPurchase,
+            purchase_id: purchaseId,
+          },
+          message: "Purchase deleted successfully",
+        };
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error deleting cement purchase:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
   /**
    * UTILITY FUNCTIONS
    */

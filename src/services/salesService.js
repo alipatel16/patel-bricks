@@ -199,8 +199,6 @@ export const salesService = {
           // If new quantity > original quantity, we need to deduct more from stock
           // If new quantity < original quantity, we need to add back to stock
           const newStock = currentStock - quantityDifference;
-
-          
           
           // Validate stock availability for increased quantities
           if (quantityDifference > 0 && currentStock < quantityDifference) {
@@ -250,7 +248,7 @@ export const salesService = {
           bankDetails = bankResult.data;
         }
       } catch (error) {
-        
+        console.error("Error loading bank details:", error);
       }
 
       // Prepare enhanced sale entry
@@ -328,8 +326,132 @@ export const salesService = {
       // 1. Add/Update sales transaction - CRITICAL FIX: Use same invoice number for edits
       updates[`${DB_PATHS.SALES}/transactions/${invoiceNumber}`] = saleEntry;
 
-      // 2. Update daily sales summary (skip for edits to avoid double counting)
-      if (!isEdit) {
+      // 2. CRITICAL FIX: Proper daily sales handling for edits
+      if (isEdit && originalSaleId) {
+        // Get the original sale to see if date changed
+        const originalSaleResult = await dbUtils.readData(`${DB_PATHS.SALES}/transactions/${originalSaleId}`);
+        
+        if (originalSaleResult.success && originalSaleResult.data) {
+          const originalSale = originalSaleResult.data;
+          const originalDate = originalSale.date;
+          const originalQuantity = parseInt(originalSale.quantity || 0);
+          const originalAmount = parseFloat(originalSale.total_amount || 0);
+          
+          // If date changed, update both old and new date summaries
+          if (originalDate !== currentDate) {
+            
+            // 1. REMOVE from original date's daily sales
+            const originalDailyPath = `${DB_PATHS.SALES}/daily/${originalDate}`;
+            const originalDailyResult = await dbUtils.readData(originalDailyPath);
+            
+            if (originalDailyResult.success && originalDailyResult.data) {
+              const originalDaily = originalDailyResult.data;
+              updates[originalDailyPath] = {
+                date: originalDate,
+                total_sales: Math.max(0, (originalDaily.total_sales || 0) - 1),
+                total_quantity: Math.max(0, (originalDaily.total_quantity || 0) - originalQuantity),
+                total_revenue: Math.max(0, (originalDaily.total_revenue || 0) - originalAmount),
+                last_updated: timestamp,
+              };
+            }
+            
+            // 2. ADD to new date's daily sales
+            const newDailyPath = `${DB_PATHS.SALES}/daily/${currentDate}`;
+            const newDailyResult = await dbUtils.readData(newDailyPath);
+            const newDaily = (newDailyResult.success && newDailyResult.data) ? newDailyResult.data : {};
+            
+            updates[newDailyPath] = {
+              date: currentDate,
+              total_sales: (newDaily.total_sales || 0) + 1,
+              total_quantity: (newDaily.total_quantity || 0) + quantity,
+              total_revenue: (newDaily.total_revenue || 0) + totalAmount,
+              last_updated: timestamp,
+            };
+            
+            // 3. Update monthly summaries for both months if they're different
+            const originalMonth = originalDate.substring(0, 7);
+            const currentMonth = currentDate.substring(0, 7);
+            
+            if (originalMonth !== currentMonth) {
+              // Remove from original month
+              const originalMonthlyPath = `${DB_PATHS.SALES}/monthly/${originalMonth}`;
+              const originalMonthlyResult = await dbUtils.readData(originalMonthlyPath);
+              
+              if (originalMonthlyResult.success && originalMonthlyResult.data) {
+                const originalMonthly = originalMonthlyResult.data;
+                updates[originalMonthlyPath] = {
+                  month: originalMonth,
+                  total_sales: Math.max(0, (originalMonthly.total_sales || 0) - 1),
+                  total_quantity: Math.max(0, (originalMonthly.total_quantity || 0) - originalQuantity),
+                  total_revenue: Math.max(0, (originalMonthly.total_revenue || 0) - originalAmount),
+                  last_updated: timestamp,
+                };
+              }
+              
+              // Add to new month
+              const newMonthlyPath = `${DB_PATHS.SALES}/monthly/${currentMonth}`;
+              const newMonthlyResult = await dbUtils.readData(newMonthlyPath);
+              const newMonthly = (newMonthlyResult.success && newMonthlyResult.data) ? newMonthlyResult.data : {};
+              
+              updates[newMonthlyPath] = {
+                month: currentMonth,
+                total_sales: (newMonthly.total_sales || 0) + 1,
+                total_quantity: (newMonthly.total_quantity || 0) + quantity,
+                total_revenue: (newMonthly.total_revenue || 0) + totalAmount,
+                last_updated: timestamp,
+              };
+            } else {
+              // Same month - just update the difference
+              const monthlyPath = `${DB_PATHS.SALES}/monthly/${currentMonth}`;
+              const monthlyResult = await dbUtils.readData(monthlyPath);
+              const monthly = (monthlyResult.success && monthlyResult.data) ? monthlyResult.data : {};
+              
+              const quantityDifference = quantity - originalQuantity;
+              const amountDifference = totalAmount - originalAmount;
+              
+              updates[monthlyPath] = {
+                month: currentMonth,
+                total_sales: monthly.total_sales || 0, // No change in transaction count for same month
+                total_quantity: (monthly.total_quantity || 0) + quantityDifference,
+                total_revenue: (monthly.total_revenue || 0) + amountDifference,
+                last_updated: timestamp,
+              };
+            }
+          } else {
+            // Same date - just update the existing daily sales with the difference
+            const quantityDifference = quantity - originalQuantity;
+            const amountDifference = totalAmount - originalAmount;
+            
+            if (quantityDifference !== 0 || amountDifference !== 0) {
+              const dailyPath = `${DB_PATHS.SALES}/daily/${currentDate}`;
+              const dailyResult = await dbUtils.readData(dailyPath);
+              const daily = (dailyResult.success && dailyResult.data) ? dailyResult.data : {};
+              
+              updates[dailyPath] = {
+                date: currentDate,
+                total_sales: daily.total_sales || 0, // No change in transaction count
+                total_quantity: (daily.total_quantity || 0) + quantityDifference,
+                total_revenue: (daily.total_revenue || 0) + amountDifference,
+                last_updated: timestamp,
+              };
+              
+              // Update monthly summary with the difference
+              const monthlyPath = `${DB_PATHS.SALES}/monthly/${currentDate.substring(0, 7)}`;
+              const monthlyResult = await dbUtils.readData(monthlyPath);
+              const monthly = (monthlyResult.success && monthlyResult.data) ? monthlyResult.data : {};
+              
+              updates[monthlyPath] = {
+                month: currentDate.substring(0, 7),
+                total_sales: monthly.total_sales || 0, // No change in transaction count
+                total_quantity: (monthly.total_quantity || 0) + quantityDifference,
+                total_revenue: (monthly.total_revenue || 0) + amountDifference,
+                last_updated: timestamp,
+              };
+            }
+          }
+        }
+      } else {
+        // NEW SALE: Standard daily and monthly updates (existing logic)
         const dailyPath = `${DB_PATHS.SALES}/daily/${currentDate}`;
         const existingDailyResult = await dbUtils.readData(dailyPath);
         const existingDaily = (existingDailyResult.success && existingDailyResult.data) ? existingDailyResult.data : {};
@@ -342,7 +464,7 @@ export const salesService = {
           last_updated: timestamp,
         };
 
-        // 3. Update monthly sales summary
+        // Update monthly sales summary
         const monthlyPath = `${DB_PATHS.SALES}/monthly/${currentDate.substring(0, 7)}`;
         const existingMonthlyResult = await dbUtils.readData(monthlyPath);
         const existingMonthly = (existingMonthlyResult.success && existingMonthlyResult.data) ? existingMonthlyResult.data : {};
@@ -475,7 +597,7 @@ export const salesService = {
           updates[`${DB_PATHS.CUSTOMERS}/${customerPhone}`] = newCustomer;
         }
       } catch (customerError) {
-        
+        console.error("Customer update error:", customerError);
         // Continue with sale even if customer update fails
       }
 
@@ -500,7 +622,7 @@ export const salesService = {
         error: "Failed to save sale data",
       };
     } catch (error) {
-      
+      console.error("Error in recordSale:", error);
       return {
         success: false,
         error: error.message,
