@@ -22,14 +22,14 @@ export const useSales = () => {
   const { isConnected, listenToData } = useFirebase();
 
   // Load sales data with enhanced features
-  const loadSalesData = useCallback(async (limit = 50, filters = {}) => {
+  const loadSalesData = useCallback(async (limit = null, filters = {}) => {
     try {
       setSales(prev => ({ ...prev, loading: true, error: null }));
 
       const today = new Date().toISOString().split('T')[0];
 
       const [historyResult, todayResult, monthlyResult, statsResult, customersResult] = await Promise.all([
-        salesService.getSalesHistory(limit, filters),
+        salesService.getSalesHistory(null, filters),
         salesService.getDailySales(today),
         salesService.getMonthlySalesSummary ? salesService.getMonthlySalesSummary(today.substring(0, 7)) : salesService.getSalesStats('month'),
         salesService.getSalesStats('month'),

@@ -631,7 +631,7 @@ export const salesService = {
   },
 
   // Get sales history with enhanced filtering
-  getSalesHistory: async (limit = 50, filters = {}) => {
+  getSalesHistory: async (limit = null, filters = {}) => {
     try {
       const result = await dbUtils.readData(`${DB_PATHS.SALES}/transactions`);
 
