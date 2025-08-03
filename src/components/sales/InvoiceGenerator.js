@@ -1,4 +1,4 @@
-// components/sales/InvoiceGenerator.js - Updated with GST Invoice Numbering and GSTIN functionality
+// components/sales/InvoiceGenerator.js - Updated with GST Invoice Numbering and GSTIN functionality + All Sites Support
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
@@ -209,7 +209,7 @@ const InvoiceGenerator = ({
     }
   }, [customer, salesHistory]);
 
-  // Calculate customer sales data
+  // Calculate customer sales data - UPDATED to support "All Sites"
   const customerSalesData = useMemo(() => {
     if (
       !customer ||
@@ -225,7 +225,8 @@ const InvoiceGenerator = ({
       (sale) =>
         sale.customer_name === customer.name &&
         sale.customer_phone === customer.phone &&
-        sale.location_name === formData.selectedSite &&
+        // UPDATED: Handle "All Sites" selection
+        (formData.selectedSite === "all" || sale.location_name === formData.selectedSite) &&
         sale.date >= formData.fromDate &&
         sale.date <= formData.toDate
     );
@@ -327,7 +328,7 @@ const InvoiceGenerator = ({
     }
   };
 
-  // Generate invoice
+  // Generate invoice - UPDATED to handle "All Sites"
   const handleGenerateInvoice = () => {
     if (!validateForm()) return;
 
@@ -335,12 +336,13 @@ const InvoiceGenerator = ({
     const nonGstBricks = parseInt(formData.nonGstBricks || 0);
     const actualRate = customerSalesData.averageRate;
 
-    // Enhanced customer data with GSTIN
+    // Enhanced customer data with GSTIN - UPDATED to handle "All Sites"
     const enhancedCustomerData = {
       name: customer.name,
       phone: customer.phone,
       email: customer.email,
-      address: formData.selectedSite,
+      // UPDATED: Handle "All Sites" in address
+      address: formData.selectedSite === "all" ? "All Sites" : formData.selectedSite,
       gstin: customerGSTIN || "", // Include GSTIN from fetched data
     };
 
@@ -350,7 +352,8 @@ const InvoiceGenerator = ({
         from: formData.fromDate,
         to: formData.toDate,
       },
-      selectedSite: formData.selectedSite,
+      // UPDATED: Handle "All Sites" in selectedSite
+      selectedSite: formData.selectedSite === "all" ? "All Sites" : formData.selectedSite,
       gstBricks,
       nonGstBricks,
       actualRate,
@@ -575,16 +578,6 @@ const InvoiceGenerator = ({
                     customer
                   </Typography>
                 )}
-                {/* NEW: Show GST invoice number */}
-                {/* {generatedInvoiceData.gstInvoiceNumber && (
-                  <Typography
-                    variant="body2"
-                    sx={{ mt: 1, fontWeight: "bold", color: "error.main" }}
-                  >
-                    📋 GST Invoice Number:{" "}
-                    {generatedInvoiceData.gstInvoiceNumber}
-                  </Typography>
-                )} */}
               </Alert>
 
               <Grid container spacing={3}>
@@ -615,21 +608,6 @@ const InvoiceGenerator = ({
                         <strong>Customer GSTIN:</strong>{" "}
                         {customerGSTIN || "Not available"}
                       </Typography>
-                      {/* NEW: Show GST invoice number */}
-                      {/* {generatedInvoiceData.gstInvoiceNumber && (
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            mt: 1,
-                            fontWeight: "bold",
-                            color: "error.main",
-                          }}
-                        >
-                          <NumberIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                          <strong>Invoice Number:</strong>{" "}
-                          {generatedInvoiceData.gstInvoiceNumber}
-                        </Typography>
-                      )} */}
                       <Box sx={{ mt: 2 }}>
                         <Button
                           variant="contained"
@@ -865,20 +843,6 @@ const InvoiceGenerator = ({
                 )}
               </Typography>
             </Alert>
-
-            {/* NEW: GST Invoice Number Preview */}
-            {/* {nextGstInvoiceNumber && !loadingInvoiceConfig && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                <Typography variant="body2">
-                  <NumberIcon
-                    sx={{ fontSize: 16, mr: 0.5, verticalAlign: "middle" }}
-                  />
-                  <strong>Next GST Invoice Number:</strong>{" "}
-                  {nextGstInvoiceNumber}
-                  {loadingInvoiceConfig && " (Loading...)"}
-                </Typography>
-              </Alert>
-            )} */}
           </Grid>
 
           <Grid item xs={12} md={6}>
@@ -917,6 +881,8 @@ const InvoiceGenerator = ({
                 }
                 label="Select Site/Location"
               >
+                {/* ADDED: All Sites option */}
+                <MenuItem value="all">All Sites</MenuItem>
                 {customerSites.map((site) => (
                   <MenuItem key={site} value={site}>
                     {site}
@@ -948,6 +914,12 @@ const InvoiceGenerator = ({
                       sx={{ fontWeight: "bold" }}
                     >
                       Customer Purchase Summary
+                      {/* ADDED: Show site selection info */}
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: "normal" }}>
+                        {formData.selectedSite === "all" 
+                          ? `Across all sites (${customerSites.length} sites)` 
+                          : `Site: ${formData.selectedSite}`}
+                      </Typography>
                     </Typography>
                     <Grid container spacing={2}>
                       <Grid item xs={4}>
@@ -1048,12 +1020,6 @@ const InvoiceGenerator = ({
                           - Customer GSTIN: {customerGSTIN}
                         </span>
                       )}
-                      {/* {nextGstInvoiceNumber && (
-                        <span style={{ fontSize: "11px", display: "block" }}>
-                          {" "}
-                          - Invoice Number: {nextGstInvoiceNumber}
-                        </span>
-                      )} */}
                     </Typography>
                   )}
                   {(parseInt(formData.nonGstBricks) || 0) > 0 && (
