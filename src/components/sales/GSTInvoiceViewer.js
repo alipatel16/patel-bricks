@@ -1,6 +1,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogActions,
   Box,
   Typography,
   Table,
@@ -9,7 +10,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Button,
 } from '@mui/material';
+import {
+  Download as DownloadIcon,
+  Close as CloseIcon,
+} from '@mui/icons-material';
 
 // Import constants and utilities
 import { DEFAULT_BANK_DETAILS } from '../../utils/constants';
@@ -26,6 +32,7 @@ const GSTInvoiceViewer = ({
   pricePerBrick,
   isGSTInvoice
 }) => {
+
   // Handle both existing usage (saleData) and new usage (direct props)
   let actualSaleData = saleData;
   
@@ -248,6 +255,10 @@ const GSTInvoiceViewer = ({
     "All Taxes and Commission will be charged extra."
   ];
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <Dialog 
       open={open} 
@@ -266,6 +277,7 @@ const GSTInvoiceViewer = ({
     >
       <DialogContent>
         <Box 
+          id="invoice-print-content" // Added ID for print targeting
           sx={{ 
             p: 2, 
             fontFamily: 'Arial, sans-serif',
@@ -607,6 +619,40 @@ const GSTInvoiceViewer = ({
           </Box>
         </Box>
       </DialogContent>
+      
+      {/* NEW: Dialog Actions with Download Button */}
+      <DialogActions 
+        sx={{ 
+          p: 2, 
+          borderTop: '1px solid #e0e0e0',
+          '@media print': {
+            display: 'none !important' // Hide buttons when printing (including Cmd+P)
+          }
+        }}
+      >
+        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', width: '100%' }}>
+          <Button
+            onClick={onClose}
+            variant="outlined"
+            startIcon={<CloseIcon />}
+          >
+            Close
+          </Button>
+          <Button
+            onClick={handlePrint}
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            sx={{ 
+              backgroundColor: '#1976d2',
+              '&:hover': {
+                backgroundColor: '#1565c0'
+              }
+            }}
+          >
+            Download PDF
+          </Button>
+        </Box>
+      </DialogActions>
     </Dialog>
   );
 };
