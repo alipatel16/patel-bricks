@@ -125,6 +125,26 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
     };
   }, [filteredSales]);
 
+  // NEW: Calculate site-wise totals
+  const siteWiseTotals = useMemo(() => {
+    const siteData = {};
+    
+    filteredSales.forEach(sale => {
+      const siteName = sale.location_name || 'Unknown Site';
+      const quantity = parseInt(sale.quantity || 0);
+      
+      if (!siteData[siteName]) {
+        siteData[siteName] = 0;
+      }
+      siteData[siteName] += quantity;
+    });
+    
+    return Object.entries(siteData).map(([site, quantity]) => ({
+      site,
+      quantity
+    })).sort((a, b) => a.site.localeCompare(b.site));
+  }, [filteredSales]);
+
   const handleClose = () => {
     setFormData({
       fromDate: '',
@@ -257,17 +277,23 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
               background-color: #f5f5f5;
             }
             
-            .sr-no-col { width: 8%; }
-            .date-col { width: 12%; }
-            .vehicle-col { width: 15%; }
-            .doc-col { width: 12%; }
-            .quantity-col { width: 15%; }
-            .rate-col { width: 12%; }
-            .amount-col { width: 15%; }
+            .sr-no-col { width: 6%; }
+            .date-col { width: 10%; }
+            .vehicle-col { width: 12%; }
+            .doc-col { width: 10%; }
+            .site-col { width: 12%; }
+            .quantity-col { width: 12%; }
+            .rate-col { width: 10%; }
+            .amount-col { width: 12%; }
             
             @media print { 
               body { margin: 0; padding: 10mm; }
               .statement-container { padding: 0; }
+              .no-print { display: none !important; }
+              .print-button { display: none !important; }
+              button { display: none !important; }
+              .MuiButton-root { display: none !important; }
+              .MuiIconButton-root { display: none !important; }
             }
           </style>
         </head>
@@ -340,16 +366,17 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
               <ReceiptIcon color="primary" />
               Customer Statement - {selectedCustomer?.name}
             </Box>
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1 }} className="no-print">
               <Button
                 variant="outlined"
                 startIcon={<PrintIcon />}
                 onClick={handlePrint}
                 size="small"
+                className="print-button"
               >
                 Print
               </Button>
-              <IconButton onClick={handleClose} size="small">
+              <IconButton onClick={handleClose} size="small" className="no-print">
                 <CloseIcon />
               </IconButton>
             </Box>
@@ -379,7 +406,7 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
                     NAME OF CUSTOMER : {selectedCustomer?.name?.toUpperCase()}
                   </Typography>
                   <Typography className="customer-address" variant="body1" sx={{ fontSize: '12px' }}>
-                    ADDRESS: {selectedCustomer?.phone}
+                    MOBILE: {selectedCustomer?.phone}
                     {formData.selectedSite && !formData.allSites && ` - ${formData.selectedSite.value}`}
                   </Typography>
                 </Box>
@@ -396,25 +423,29 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell className="sr-no-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '8%', p: 1 }}>
+                    <TableCell className="sr-no-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '6%', p: 1 }}>
                       SR NO
                     </TableCell>
-                    <TableCell className="date-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '12%' }}>
+                    <TableCell className="date-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '10%' }}>
                       DATE
                     </TableCell>
-                    <TableCell className="vehicle-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '15%' }}>
+                    <TableCell className="vehicle-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '12%' }}>
                       VEHICLE NO
                     </TableCell>
-                    <TableCell className="doc-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '12%' }}>
+                    <TableCell className="doc-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '10%' }}>
                       DOC NO
                     </TableCell>
-                    <TableCell className="quantity-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '15%' }}>
+                    {/* NEW: Site Name Column */}
+                    <TableCell className="site-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '12%' }}>
+                      SITE NAME
+                    </TableCell>
+                    <TableCell className="quantity-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '12%' }}>
                       QUANTITY
                     </TableCell>
-                    <TableCell className="rate-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '12%' }}>
+                    <TableCell className="rate-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '10%' }}>
                       RATE
                     </TableCell>
-                    <TableCell className="amount-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '15%' }}>
+                    <TableCell className="amount-col" sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', width: '12%' }}>
                       AMOUNT
                     </TableCell>
                   </TableRow>
@@ -434,6 +465,10 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
                       </TableCell>
                       <TableCell sx={{ border: '1px solid black', textAlign: 'center', fontSize: '11px' }}>
                         {sale.challan_number || sale.id || ''}
+                      </TableCell>
+                      {/* NEW: Site Name Cell */}
+                      <TableCell sx={{ border: '1px solid black', textAlign: 'center', fontSize: '11px' }}>
+                        {sale.location_name || ''}
                       </TableCell>
                       <TableCell sx={{ border: '1px solid black', textAlign: 'center', fontSize: '11px' }}>
                         {sale.quantity}
@@ -455,10 +490,10 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
                       </TableCell>
                       <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
                       <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
-                      
                       <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', bgcolor: '#f5f5f5', fontSize: '11px' }}>
                         TOTAL
                       </TableCell>
+                      <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
                       <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', bgcolor: '#f5f5f5', fontSize: '11px' }}>
                         {totals.quantity}
                       </TableCell>
@@ -469,16 +504,42 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
                     </TableRow>
                   )}
 
+                  {/* NEW: Site-wise breakdown rows inside table */}
+                  {filteredSales.length > 0 && siteWiseTotals.length > 1 && (
+                    <>
+                      {/* Site breakdown header row */}
+                      
+                      {/* Site breakdown data rows */}
+                      {siteWiseTotals.map((siteTotal, index) => (
+                        <TableRow key={`site-${index}`}>
+                          <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
+                          <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
+                          <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
+                          <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', bgcolor: '#f5f5f5', fontSize: '11px' }}>
+                            {siteTotal.site}
+                          </TableCell>
+                          <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
+                          <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', textAlign: 'center', bgcolor: '#f5f5f5', fontSize: '11px' }}>
+                            {siteTotal.quantity}
+                          </TableCell>
+                          <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
+                          <TableCell sx={{ border: '1px solid black', fontSize: '11px' }}></TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  )}
+
                   {/* Empty rows to fill the page */}
                   {Array.from({ 
-                    length: Math.max(0, 25 - filteredSales.length - (filteredSales.length > 0 ? 1 : 0)) 
+                    length: Math.max(0, 25 - filteredSales.length - (filteredSales.length > 0 ? 1 : 0) - (siteWiseTotals.length > 1 ? siteWiseTotals.length + 1 : 0)) 
                   }).map((_, index) => {
-                    const rowNumber = filteredSales.length + (filteredSales.length > 0 ? 2 : 1) + index;
+                    const rowNumber = filteredSales.length + (filteredSales.length > 0 ? 2 : 1) + (siteWiseTotals.length > 1 ? siteWiseTotals.length + 1 : 0) + index;
                     return (
                       <TableRow key={`empty-${index}`}>
                         <TableCell sx={{ border: '1px solid black', textAlign: 'center', height: 25, p: 1, fontSize: '11px' }}>
                           {rowNumber}
                         </TableCell>
+                        <TableCell sx={{ border: '1px solid black', height: 25, fontSize: '11px' }}></TableCell>
                         <TableCell sx={{ border: '1px solid black', height: 25, fontSize: '11px' }}></TableCell>
                         <TableCell sx={{ border: '1px solid black', height: 25, fontSize: '11px' }}></TableCell>
                         <TableCell sx={{ border: '1px solid black', height: 25, fontSize: '11px' }}></TableCell>
@@ -494,7 +555,7 @@ const StatementGenerator = ({ open, onClose, customer, salesHistory }) => {
           </Box>
         </DialogContent>
 
-        <DialogActions>
+        <DialogActions className="no-print">
           <Button onClick={() => setShowStatement(false)}>
             Back to Form
           </Button>

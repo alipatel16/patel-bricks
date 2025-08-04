@@ -102,7 +102,12 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
             invoice.customerName === customer.name && 
             invoice.customerPhone === customer.phone
           )
-          .sort((a, b) => new Date(a.createdDate) - new Date(b.createdDate));
+          // FIXED: Sort by custom invoice date instead of creation date
+          .sort((a, b) => {
+            const dateA = a.invoiceData?.invoiceDate || a.createdDate;
+            const dateB = b.invoiceData?.invoiceDate || b.createdDate;
+            return new Date(dateA) - new Date(dateB);
+          });
 
         setGeneratedInvoices(customerInvoices);
       } else {
@@ -139,12 +144,20 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
     let filteredPayments = customerPayments;
 
     if (watchedValues.dateFrom) {
-      filteredInvoices = filteredInvoices.filter(invoice => invoice.createdDate >= watchedValues.dateFrom);
+      // FIXED: Use custom invoice date for filtering instead of creation date
+      filteredInvoices = filteredInvoices.filter(invoice => {
+        const invoiceDate = invoice.invoiceData?.invoiceDate || invoice.createdDate;
+        return invoiceDate >= watchedValues.dateFrom;
+      });
       filteredPayments = filteredPayments.filter(payment => payment.date >= watchedValues.dateFrom);
     }
 
     if (watchedValues.dateTo) {
-      filteredInvoices = filteredInvoices.filter(invoice => invoice.createdDate <= watchedValues.dateTo);
+      // FIXED: Use custom invoice date for filtering instead of creation date
+      filteredInvoices = filteredInvoices.filter(invoice => {
+        const invoiceDate = invoice.invoiceData?.invoiceDate || invoice.createdDate;
+        return invoiceDate <= watchedValues.dateTo;
+      });
       filteredPayments = filteredPayments.filter(payment => payment.date <= watchedValues.dateTo);
     }
 
@@ -156,10 +169,13 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
       const invoiceData = invoice.invoiceData;
       if (!invoiceData) return;
 
+      // FIXED: Use custom invoice date instead of creation date
+      const actualInvoiceDate = invoiceData.invoiceDate || invoice.createdDate;
+
       // Add GST invoice entry if exists
       if (invoice.gstBricks > 0) {
         ledgerEntries.push({
-          date: invoice.createdDate,
+          date: actualInvoiceDate, // FIXED: Using custom invoice date
           particulars: `GST Invoice - ${formatQuantity(invoice.gstBricks)} bricks @ ${formatCurrency(invoiceData.actualRate)} each (with 12% GST)`,
           invoiceNumber: `${invoice.id}_GST`,
           debit: invoiceData.gstAmount || 0,
@@ -172,7 +188,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
       // Add Non-GST invoice entry if exists
       if (invoice.nonGstBricks > 0) {
         ledgerEntries.push({
-          date: invoice.createdDate,
+          date: actualInvoiceDate, // FIXED: Using custom invoice date
           particulars: `Non-GST Invoice - ${formatQuantity(invoice.nonGstBricks)} bricks @ ${formatCurrency(invoiceData.actualRate)} each (without GST)`,
           invoiceNumber: `${invoice.id}_NonGST`,
           debit: invoiceData.nonGstAmount || 0,

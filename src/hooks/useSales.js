@@ -257,7 +257,7 @@ export const useSales = () => {
   // Filter sales with enhanced criteria
   const filterSales = useCallback(async (filters) => {
     try {
-      const result = await salesService.getSalesHistory(100, filters);
+      const result = await salesService.getSalesHistory(null, filters);
       
       if (result.success) {
         setSales(prev => ({
@@ -277,7 +277,7 @@ export const useSales = () => {
   const getCustomerAnalytics = useCallback(async (customerId) => {
     try {
       // Get all sales for this customer
-      const allSalesResult = await salesService.getSalesHistory(1000);
+      const allSalesResult = await salesService.getSalesHistory(null);
       
       if (!allSalesResult.success) {
         return { success: false, error: 'Failed to load sales data' };
@@ -322,7 +322,7 @@ export const useSales = () => {
           
           setSales(prev => ({
             ...prev,
-            history: salesArray.slice(0, 50) // Keep last 50 for performance
+            history: salesArray
           }));
         }
       });

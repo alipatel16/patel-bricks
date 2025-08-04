@@ -421,7 +421,7 @@ export const inventoryService = {
   },
 
   // NEW: Get cement purchase history
-  getCementPurchaseHistory: async (limit = 100) => {
+  getCementPurchaseHistory: async (limit = null) => {
     try {
       const result = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases`);
 
@@ -799,7 +799,7 @@ export const inventoryService = {
   },
 
   // Get inventory history/transactions
-  getInventoryHistory: async (type = "all", limit = 50) => {
+  getInventoryHistory: async (type = "all", limit = null) => {
     try {
       const paths = [];
 

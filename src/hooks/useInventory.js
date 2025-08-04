@@ -86,7 +86,7 @@ export function useInventory() {
   }, []);
 
   // Load inventory history
-  const loadInventoryHistory = useCallback(async (type = 'all', limit = 50) => {
+  const loadInventoryHistory = useCallback(async (type = 'all', limit = null) => {
     try {
       setInventory(prev => ({
         ...prev,

@@ -213,7 +213,7 @@ export const productionService = {
 
   // Get production history
   getProductionHistory: async (
-    limit = 30,
+    limit = null,
     startDate = null,
     endDate = null
   ) => {

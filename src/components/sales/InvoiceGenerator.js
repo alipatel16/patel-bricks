@@ -1,4 +1,4 @@
-// components/sales/InvoiceGenerator.js - Updated with GST Invoice Numbering and GSTIN functionality + All Sites Support
+// components/sales/InvoiceGenerator.js - Updated with GST Invoice Numbering and GSTIN functionality + All Sites Support + Date Selection + Disable Non-GST Option
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
@@ -20,6 +20,8 @@ import {
   Chip,
   IconButton,
   CircularProgress,
+  FormControlLabel,
+  Checkbox,
 } from "@mui/material";
 import {
   Receipt as ReceiptIcon,
@@ -28,6 +30,8 @@ import {
   Save as SaveIcon,
   Close as CloseIcon,
   Numbers as NumberIcon,
+  CalendarToday as CalendarIcon,
+  Block as BlockIcon,
 } from "@mui/icons-material";
 import toast from "react-hot-toast";
 import { formatCurrency, formatQuantity } from "../../utils/calculations";
@@ -52,7 +56,12 @@ const InvoiceGenerator = ({
     selectedSite: "",
     gstBricks: "",
     nonGstBricks: "",
+    // NEW: Invoice date field
+    invoiceDate: new Date().toISOString().split('T')[0], // Default to today
   });
+
+  // NEW: State for disabling non-GST invoice generation
+  const [disableNonGST, setDisableNonGST] = useState(false);
 
   const [showInvoice, setShowInvoice] = useState(false);
   const [generatedInvoiceData, setGeneratedInvoiceData] = useState(null);
@@ -104,10 +113,8 @@ const InvoiceGenerator = ({
           setNextGstInvoiceNumber(
             `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
           );
-          
         }
       } catch (error) {
-        
         // Fallback to default
         const defaultConfig = {
           prefix: "GST-INV",
@@ -142,13 +149,10 @@ const InvoiceGenerator = ({
 
         if (result.success && result.data && result.data.gstin) {
           setCustomerGSTIN(result.data.gstin);
-          
         } else {
           setCustomerGSTIN("");
-          
         }
       } catch (error) {
-        
         setCustomerGSTIN("");
       } finally {
         setLoadingGSTIN(false);
@@ -161,8 +165,6 @@ const InvoiceGenerator = ({
   // FIXED: Load existing invoice data if in edit mode but ALWAYS show form first
   useEffect(() => {
     if (isEditMode && editingInvoice && open) {
-      
-
       // Pre-populate form data
       setFormData({
         fromDate: editingInvoice.fromDate || "",
@@ -170,6 +172,8 @@ const InvoiceGenerator = ({
         selectedSite: editingInvoice.selectedSite || "",
         gstBricks: editingInvoice.gstBricks?.toString() || "",
         nonGstBricks: editingInvoice.nonGstBricks?.toString() || "",
+        // NEW: Load existing invoice date or default to today
+        invoiceDate: editingInvoice.invoiceData?.invoiceDate || new Date().toISOString().split('T')[0],
       });
       setSavedInvoiceId(editingInvoice.id);
 
@@ -184,10 +188,14 @@ const InvoiceGenerator = ({
         selectedSite: "",
         gstBricks: "",
         nonGstBricks: "",
+        // NEW: Default to today's date for new invoices
+        invoiceDate: new Date().toISOString().split('T')[0],
       });
       setShowInvoice(false);
       setGeneratedInvoiceData(null);
       setSavedInvoiceId(null);
+      // NEW: Reset disable non-GST option
+      setDisableNonGST(false);
     }
   }, [isEditMode, editingInvoice, open]);
 
@@ -262,6 +270,8 @@ const InvoiceGenerator = ({
     if (!formData.fromDate) errors.fromDate = "From date is required";
     if (!formData.toDate) errors.toDate = "To date is required";
     if (!formData.selectedSite) errors.selectedSite = "Please select a site";
+    // NEW: Validate invoice date
+    if (!formData.invoiceDate) errors.invoiceDate = "Invoice date is required";
 
     if (
       formData.fromDate &&
@@ -297,16 +307,26 @@ const InvoiceGenerator = ({
     }
   };
 
+  // UPDATED: Modified to handle disable non-GST option
   const handleBrickQuantityChange = (field, value) => {
     const totalCustomerBricks = customerSalesData.totalBricks;
 
     if (value === "") {
-      const otherField = field === "gstBricks" ? "nonGstBricks" : "gstBricks";
-      setFormData((prev) => ({
-        ...prev,
-        [field]: "",
-        [otherField]: "",
-      }));
+      // NEW: If disableNonGST is true, don't auto-clear non-GST field
+      if (disableNonGST && field === "gstBricks") {
+        setFormData((prev) => ({
+          ...prev,
+          [field]: "",
+          // Don't auto-clear nonGstBricks when disableNonGST is true
+        }));
+      } else {
+        const otherField = field === "gstBricks" ? "nonGstBricks" : "gstBricks";
+        setFormData((prev) => ({
+          ...prev,
+          [field]: "",
+          [otherField]: "",
+        }));
+      }
       return;
     }
 
@@ -314,21 +334,50 @@ const InvoiceGenerator = ({
     if (isNaN(numValue) || numValue < 0) return;
 
     if (totalCustomerBricks > 0) {
-      const otherField = field === "gstBricks" ? "nonGstBricks" : "gstBricks";
-      const currentValue = parseInt(value || 0);
-      const remaining = totalCustomerBricks - currentValue;
+      // NEW: Check if non-GST is disabled
+      if (disableNonGST && field === "gstBricks") {
+        // Only update GST bricks, don't auto-calculate non-GST
+        setFormData((prev) => ({
+          ...prev,
+          [field]: value,
+          // Keep nonGstBricks as is or set to 0 if empty
+          nonGstBricks: prev.nonGstBricks || "0",
+        }));
+      } else if (disableNonGST && field === "nonGstBricks") {
+        // If non-GST is disabled, don't allow changes to nonGstBricks
+        return;
+      } else {
+        // Original logic for when non-GST is enabled
+        const otherField = field === "gstBricks" ? "nonGstBricks" : "gstBricks";
+        const currentValue = parseInt(value || 0);
+        const remaining = totalCustomerBricks - currentValue;
 
-      setFormData((prev) => ({
-        ...prev,
-        [field]: value,
-        [otherField]: remaining >= 0 ? remaining.toString() : "0",
-      }));
+        setFormData((prev) => ({
+          ...prev,
+          [field]: value,
+          [otherField]: remaining >= 0 ? remaining.toString() : "0",
+        }));
+      }
     } else {
       setFormData((prev) => ({ ...prev, [field]: value }));
     }
   };
 
-  // Generate invoice - UPDATED to handle "All Sites"
+  // NEW: Handle disable non-GST toggle
+  const handleDisableNonGSTChange = (event) => {
+    const isDisabled = event.target.checked;
+    setDisableNonGST(isDisabled);
+
+    if (isDisabled) {
+      // When disabling non-GST, clear the non-GST bricks field
+      setFormData((prev) => ({
+        ...prev,
+        nonGstBricks: "0",
+      }));
+    }
+  };
+
+  // Generate invoice - UPDATED to handle "All Sites" and custom invoice date
   const handleGenerateInvoice = () => {
     if (!validateForm()) return;
 
@@ -366,6 +415,8 @@ const InvoiceGenerator = ({
       customerGSTIN: customerGSTIN || "",
       // NEW: Include GST invoice number only if GST bricks > 0
       gstInvoiceNumber: gstBricks > 0 ? nextGstInvoiceNumber : null,
+      // NEW: Include custom invoice date
+      invoiceDate: formData.invoiceDate,
     };
 
     setGeneratedInvoiceData(invoiceData);
@@ -395,10 +446,9 @@ const InvoiceGenerator = ({
           "settings/invoice_config",
           updatedInvoiceConfig
         );
-        
       }
     } catch (error) {
-      
+      console.error("Error incrementing GST invoice number:", error);
     }
   };
 
@@ -432,6 +482,8 @@ const InvoiceGenerator = ({
         selectedSite: formData.selectedSite,
         gstBricks: parseInt(formData.gstBricks || 0),
         nonGstBricks: parseInt(formData.nonGstBricks || 0),
+        // NEW: Save custom invoice date
+        invoiceDate: formData.invoiceDate,
 
         // NEW: Include GST invoice number only if GST bricks were generated
         gstInvoiceNumber: generatedInvoiceData.gstInvoiceNumber || null,
@@ -470,7 +522,7 @@ const InvoiceGenerator = ({
         throw new Error(result.error || "Failed to save invoice");
       }
     } catch (error) {
-      
+      console.error("Error saving invoice:", error);
       toast.error("Failed to save invoice");
     } finally {
       setIsSaving(false);
@@ -486,6 +538,7 @@ const InvoiceGenerator = ({
         selectedSite: "",
         gstBricks: "",
         nonGstBricks: "",
+        invoiceDate: new Date().toISOString().split('T')[0], // Reset to today
       });
       setShowInvoice(false);
       setGeneratedInvoiceData(null);
@@ -493,6 +546,7 @@ const InvoiceGenerator = ({
       setSavedInvoiceId(null);
       setCustomerGSTIN(""); // Reset GSTIN
       setNextGstInvoiceNumber(""); // Reset invoice number
+      setDisableNonGST(false); // NEW: Reset disable non-GST option
       onClose();
     }
   };
@@ -843,9 +897,72 @@ const InvoiceGenerator = ({
                 )}
               </Typography>
             </Alert>
+
+            {/* NEW: Disable Non-GST Invoice Option */}
+            <Card variant="outlined" sx={{ mb: 2, bgcolor: "background.default" }}>
+              <CardContent>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+                      Invoice Generation Options
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Control how invoices are generated based on brick quantities
+                    </Typography>
+                  </Box>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={disableNonGST}
+                        onChange={handleDisableNonGSTChange}
+                        color="error"
+                        icon={<BlockIcon />}
+                        checkedIcon={<BlockIcon />}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+                          Generate GST Invoice Only
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Disable automatic non-GST invoice calculation
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </Box>
+                {disableNonGST && (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="body2">
+                      <strong>GST Only Mode:</strong> Only GST invoices will be generated. 
+                      Non-GST brick field is disabled. Specify the exact number of bricks 
+                      for the GST invoice.
+                    </Typography>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          {/* NEW: Invoice Date Field */}
+          <Grid item xs={12} md={4}>
+            <TextField
+              label="Invoice Date"
+              type="date"
+              fullWidth
+              value={formData.invoiceDate}
+              onChange={(e) => handleInputChange("invoiceDate", e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              error={!!validationErrors.invoiceDate}
+              helperText={validationErrors.invoiceDate || "Date to be shown on the invoice"}
+              InputProps={{
+                startAdornment: <CalendarIcon sx={{ mr: 1, color: 'action.active' }} />
+              }}
+            />
+          </Grid>
+
+          <Grid item xs={12} md={4}>
             <TextField
               label="From Date"
               type="date"
@@ -854,11 +971,11 @@ const InvoiceGenerator = ({
               onChange={(e) => handleInputChange("fromDate", e.target.value)}
               InputLabelProps={{ shrink: true }}
               error={!!validationErrors.fromDate}
-              helperText={validationErrors.fromDate}
+              helperText={validationErrors.fromDate || "Sales period start date"}
             />
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <TextField
               label="To Date"
               type="date"
@@ -867,7 +984,7 @@ const InvoiceGenerator = ({
               onChange={(e) => handleInputChange("toDate", e.target.value)}
               InputLabelProps={{ shrink: true }}
               error={!!validationErrors.toDate}
-              helperText={validationErrors.toDate}
+              helperText={validationErrors.toDate || "Sales period end date"}
             />
           </Grid>
 
@@ -982,7 +1099,24 @@ const InvoiceGenerator = ({
                   }
                   inputProps={{ min: 0, max: customerSalesData.totalBricks }}
                   helperText="Bricks for Non-GST invoice (no tax, no GSTIN or invoice number required)"
+                  // NEW: Disable field when disableNonGST is true
+                  disabled={disableNonGST}
+                  sx={{
+                    // NEW: Visual indication when disabled
+                    ...(disableNonGST && {
+                      '& .MuiInputBase-root': {
+                        backgroundColor: 'action.disabledBackground',
+                      }
+                    })
+                  }}
                 />
+                {/* NEW: Show disabled state information */}
+                {disableNonGST && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                    <BlockIcon sx={{ fontSize: 12, mr: 0.5 }} />
+                    Non-GST invoice generation is disabled
+                  </Typography>
+                )}
               </Grid>
 
               {validationErrors.bricks && (
@@ -1022,7 +1156,8 @@ const InvoiceGenerator = ({
                       )}
                     </Typography>
                   )}
-                  {(parseInt(formData.nonGstBricks) || 0) > 0 && (
+                  {/* NEW: Show non-GST amount only if not disabled */}
+                  {!disableNonGST && (parseInt(formData.nonGstBricks) || 0) > 0 && (
                     <Typography
                       variant="body2"
                       color="success.main"
@@ -1034,6 +1169,17 @@ const InvoiceGenerator = ({
                           customerSalesData.averageRate
                       )}{" "}
                       (without GST)
+                    </Typography>
+                  )}
+                  {/* NEW: Show message when non-GST is disabled */}
+                  {disableNonGST && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontStyle: "italic", mt: 1 }}
+                    >
+                      <BlockIcon sx={{ fontSize: 14, mr: 0.5 }} />
+                      Non-GST invoice generation is disabled. Only GST invoice will be generated.
                     </Typography>
                   )}
                 </Box>
@@ -1052,6 +1198,7 @@ const InvoiceGenerator = ({
             !formData.fromDate ||
             !formData.toDate ||
             !formData.selectedSite ||
+            !formData.invoiceDate ||
             Object.keys(validationErrors).length > 0
           }
         >

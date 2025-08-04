@@ -20,7 +20,7 @@ export function useProduction() {
   const { isConnected, listenToData, stopListening } = useFirebase();
 
   // Load production data
-  const loadProductionData = useCallback(async (period = 30) => {
+  const loadProductionData = useCallback(async (period = null) => {
     try {
       setProduction(prev => ({ ...prev, loading: true, error: null }));
 

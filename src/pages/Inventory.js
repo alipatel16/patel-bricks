@@ -57,6 +57,9 @@ import { productionService } from '../services/productionService';
 import { salesService } from '../services/salesService';
 import { inventoryService } from '../services/inventoryService';
 
+import CementPurchaseHistory from '../components/inventory/CementPurchaseHistory';
+import TransactionHistory from '../components/inventory/TransactionHistory';
+
 function TabPanel({ children, value, index, ...other }) {
   return (
     <div
@@ -879,187 +882,12 @@ function Inventory() {
 
         {/* Transaction History Tab */}
         <TabPanel value={currentTab} index={2}>
-          <TableContainer component={Paper} variant="outlined">
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Type</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Category</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Quantity</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Amount</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Notes</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {history.transactions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                      <Typography color="textSecondary">
-                        No transaction history available
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  history.transactions.map((transaction) => (
-                    <TableRow key={transaction.id} hover>
-                      <TableCell>
-                        {formatDate(transaction.timestamp)}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={transaction.type}
-                          size="small"
-                          color={transaction.type === 'brick' ? 'primary' : 'warning'}
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={transaction.category}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        {transaction.quantity || transaction.bags || '-'}
-                      </TableCell>
-                      <TableCell align="right">
-                        {transaction.total_cost ? `₹${transaction.total_cost}` : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {transaction.notes || '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <TransactionHistory />
         </TabPanel>
 
         {/* ENHANCED: Cement Purchase History Tab with Edit/Delete Actions */}
         <TabPanel value={currentTab} index={3}>
-          {purchaseHistoryLoading && <LinearProgress sx={{ mb: 2 }} />}
-
-          <TableContainer component={Paper} variant="outlined">
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "bold" }}>Purchase Date</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Bags</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Cost per Bag</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>Total Cost</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Supplier</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Notes</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: "bold" }}>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {cementPurchaseHistory.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                      <Typography color="textSecondary">
-                        No cement purchase history available
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  cementPurchaseHistory.map((purchase, index) => (
-                    <TableRow key={purchase.id || index} hover>
-                      <TableCell>
-                        {formatPurchaseDate(purchase.date || purchase.timestamp)}
-                      </TableCell>
-                      <TableCell align="right">
-                        {purchase.bags.toLocaleString()}
-                      </TableCell>
-                      <TableCell align="right">
-                        ₹{purchase.cost_per_bag}
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                        ₹{purchase.total_cost.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        {purchase.supplier || 'Unknown Supplier'}
-                      </TableCell>
-                      <TableCell>
-                        {purchase.notes || '-'}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent : 'center' }}>
-                          <Tooltip title="Edit purchase">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEditPurchase(purchase)}
-                            >
-                              <EditIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete purchase">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleDeletePurchase(purchase)}
-                              sx={{ 
-                                color: 'error.main',
-                                '&:hover': {
-                                  backgroundColor: alpha(theme.palette.error.main, 0.1)
-                                }
-                              }}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-          {/* Purchase Summary */}
-          {cementPurchaseHistory.length > 0 && (
-            <Card sx={{ mt: 3 }} variant="outlined">
-              <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                  Purchase Summary
-                </Typography>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={4}>
-                    <Box>
-                      <Typography variant="body2" color="textSecondary">
-                        Total Purchases
-                      </Typography>
-                      <Typography variant="h6" color="primary">
-                        {cementPurchaseHistory.length}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <Box>
-                      <Typography variant="body2" color="textSecondary">
-                        Total Bags Purchased
-                      </Typography>
-                      <Typography variant="h6" color="warning.main">
-                        {cementPurchaseHistory.reduce((sum, p) => sum + (p.bags || 0), 0).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <Box>
-                      <Typography variant="body2" color="textSecondary">
-                        Total Amount Spent
-                      </Typography>
-                      <Typography variant="h6" color="success.main" sx={{ fontWeight: 600 }}>
-                        ₹{cementPurchaseHistory.reduce((sum, p) => sum + (p.total_cost || 0), 0).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          )}
+          <CementPurchaseHistory />
         </TabPanel>
       </Card>
 

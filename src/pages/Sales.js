@@ -25,6 +25,7 @@ import {
   People as PeopleIcon,
   TrendingUp as TrendingUpIcon,
   AccountBalance as RevenueIcon,
+  Description as InvoiceIcon,
 } from "@mui/icons-material";
 import toast from "react-hot-toast";
 
@@ -36,6 +37,7 @@ import { useSales } from "../hooks/useSales";
 import SalesHistory from "../components/sales/SalesHistory";
 import CustomerList from "../components/sales/CustomerList";
 import RecordSaleDialog from "../components/sales/RecordSaleDialog";
+import InvoiceReports from "../components/sales/InvoiceReports";
 
 // Import components
 import GSTInvoiceViewer from "../components/sales/GSTInvoiceViewer";
@@ -108,6 +110,7 @@ function Sales() {
     customerName: "",
     locationName: "",
     vehicleNumber: "",
+    invoiceType: "", // Added for invoice reports filtering
   });
 
   // Calculate real-time totals
@@ -435,6 +438,11 @@ function Sales() {
             icon={<PeopleIcon />}
             iconPosition="top"
           />
+          <Tab
+            label="Invoice Reports"
+            icon={<InvoiceIcon />}
+            iconPosition="top"
+          />
         </Tabs>
       </Box>
 
@@ -683,6 +691,15 @@ function Sales() {
           sales={sales}
           searchFilters={searchFilters}
           setSearchFilters={setSearchFilters}
+        />
+      </TabPanel>
+
+      {/* Invoice Reports Tab - NOW USING SEPARATE COMPONENT */}
+      <TabPanel value={currentTab} index={4}>
+        <InvoiceReports
+          searchFilters={searchFilters}
+          setSearchFilters={setSearchFilters}
+          onViewInvoice={handleViewInvoice}
         />
       </TabPanel>
 

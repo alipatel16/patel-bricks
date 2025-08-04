@@ -35,6 +35,16 @@ const GSTInvoiceViewer = ({
     const actualState = customerData.actualState || customerData.customer_state || 'GUJARAT';
     const actualStateCode = customerData.actualStateCode || customerData.customer_state_code || '24';
     
+    // FIXED: Proper invoice number logic for both GST and Non-GST invoices
+    let invoiceNumber = '';
+    if (isGSTInvoice) {
+      // For GST invoices, use saved GST invoice number or fall back to actualInvoiceNumber
+      invoiceNumber = invoiceData?.gstInvoiceNumber || invoiceData?.actualInvoiceNumber || `GST-${Date.now().toString().slice(-6)}`;
+    } else {
+      // For Non-GST invoices, no invoice number should be displayed
+      invoiceNumber = '';
+    }
+    
     actualSaleData = {
       customer_name: customerData.name,
       customer_phone: customerData.phone,
@@ -46,8 +56,9 @@ const GSTInvoiceViewer = ({
       quantity: brickQuantity,
       price_per_brick: pricePerBrick || 2.5,
       discount_amount: 0,
-      date: new Date().toISOString().split('T')[0],
-      invoice_number: invoiceData?.actualInvoiceNumber || `${isGSTInvoice ? 'GST' : 'NGST'}-${Date.now().toString().slice(-6)}`,
+      // FIXED: Use custom date from invoiceData if provided, otherwise use today's date
+      date: invoiceData?.invoiceDate || new Date().toISOString().split('T')[0],
+      invoice_number: invoiceNumber, // Use the corrected invoice number logic
       includeGST: isGSTInvoice || false,
       include_gst: isGSTInvoice || false,
       gst_included: isGSTInvoice || false
@@ -258,32 +269,50 @@ const GSTInvoiceViewer = ({
           sx={{ 
             p: 2, 
             fontFamily: 'Arial, sans-serif',
-            fontSize: '12px',
-            lineHeight: 1.2,
+            fontSize: '14px', // Increased from 12px
+            lineHeight: 1.3, // Increased from 1.2
             border: '2px solid black',
             backgroundColor: 'white',
-            minHeight: '800px'
+            minHeight: '800px',
+            position: 'relative' // Added for absolute positioning of logo
           }}
         >
+          {/* Logo at very left corner */}
+          <Box sx={{ position: 'absolute', top: 45, left: 20, zIndex: 1 }}>
+            <img 
+              src="/assets/patel-bricks-logo.png" // Replace with your actual logo path
+              alt="Patel Bricks Logo"
+              style={{
+                width: '140px',
+                height: '140px',
+                objectFit: 'contain'
+              }}
+              onError={(e) => {
+                // Hide logo if it fails to load
+                e.target.style.display = 'none';
+              }}
+            />
+          </Box>
+
           {/* Header */}
           <Box sx={{ textAlign: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '14px' }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '16px' }}> {/* Increased from 14px */}
               {isGSTIncluded ? 'TAX INVOICE' : 'INVOICE'}
             </Typography>
           </Box>
 
-          {/* Company Header */}
+          {/* Company Header - Logo moved out, now centered */}
           <Box sx={{ textAlign: 'center', mb: 2, border: '1px solid black', p: 1 }}>
-            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: '24px', mb: 1 }}>
+            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: '28px', mb: 1 }}> {/* Increased from 24px */}
               PATEL BRICKS
             </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '12px', mb: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '14px', mb: 1 }}> {/* Increased from 12px */}
               MANUFACTURER OF FLY ASH BRICKS
             </Typography>
-            <Typography variant="body2" sx={{ fontSize: '11px' }}>
+            <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
               BEHIND PATEL PETROLEUM,MANDAL ROAD,@BHOJVA,VIRAMGAM-382150
             </Typography>
-            <Typography variant="body2" sx={{ fontSize: '11px' }}>
+            <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
               Mo:98980321392,8000001819 E-mail: patelbricks1819@gmail.com
             </Typography>
           </Box>
@@ -291,24 +320,27 @@ const GSTInvoiceViewer = ({
           {/* Invoice Details Row */}
           <Box sx={{ display: 'flex', border: '1px solid black', borderTop: '1px solid black' }}>
             <Box sx={{ flex: 1, p: 1, borderRight: '1px solid black' }}>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>PATEL BRICKS GST NO:</strong> 24BLLPP8863R1ZX
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>Tax is Payable On Reverse Charge:</strong> NO
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                <strong>Invoice Number:</strong> {actualSaleData.invoice_number || 'B18'}
-              </Typography>
+              {/* Only show invoice number for GST invoices */}
+              {isGSTInvoice && actualSaleData.invoice_number && (
+                <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
+                  <strong>Invoice Number:</strong> {actualSaleData.invoice_number}
+                </Typography>
+              )}
             </Box>
             <Box sx={{ flex: 1, p: 1 }}>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>Transportation Mode:</strong> BY ROAD
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>Invoice Date:</strong> {formatDate(actualSaleData.date)}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>State Code:</strong> 24
               </Typography>
             </Box>
@@ -317,42 +349,42 @@ const GSTInvoiceViewer = ({
           {/* Customer Details */}
           <Box sx={{ display: 'flex', border: '1px solid black', borderTop: 'none' }}>
             <Box sx={{ flex: 1, p: 1, borderRight: '1px solid black' }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 1 }}> {/* Increased from 11px */}
                 Details of Receiver
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>Name:</strong> {actualSaleData.customer_name}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>Address:</strong> {actualSaleData.customer_address}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>State:</strong> {actualSaleData.customer_state}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>State Code:</strong> {actualSaleData.customer_state_code || '24'}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>GSTIN Number:</strong> {actualSaleData.customer_gstin || '-'}
               </Typography>
             </Box>
             <Box sx={{ flex: 1, p: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 1 }}> {/* Increased from 11px */}
                 Billed To
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>Name:</strong> {actualSaleData.customer_name}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>Address:</strong> {actualSaleData.customer_address}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>State:</strong> {actualSaleData.customer_state}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>State Code:</strong> {actualSaleData.customer_state_code || '24'}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 <strong>GSTIN Number:</strong> {actualSaleData.customer_gstin || '-'}
               </Typography>
             </Box>
@@ -363,62 +395,62 @@ const GSTInvoiceViewer = ({
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '6%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '6%' }}> {/* Increased from 11px */}
                     Sr. No
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '20%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '20%' }}> {/* Increased from 11px */}
                     Description of Goods
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '8%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '8%' }}> {/* Increased from 11px */}
                     HSN Code (GST)
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '8%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '8%' }}> {/* Increased from 11px */}
                     Quantity
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '8%', borderRight: '2px solid black' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '8%', borderRight: '2px solid black' }}> {/* Increased from 11px */}
                     Rate
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '12%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '12%' }}> {/* Increased from 11px */}
                     Taxable Value IN Rs.
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '12%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '12%' }}> {/* Increased from 11px */}
                     SGST 6 %
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '12%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '12%' }}> {/* Increased from 11px */}
                     CGST 6 %
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '11px', p: 0.5, textAlign: 'center', width: '14%' }}>
+                  <TableCell sx={{ border: '1px solid black', fontWeight: 'bold', fontSize: '13px', p: 0.5, textAlign: 'center', width: '14%' }}> {/* Increased from 11px */}
                     IGST
                   </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 <TableRow>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     1
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5 }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5 }}> {/* Increased from 11px */}
                     FLY ASH BRICKS
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     6815
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {actualSaleData.quantity.toLocaleString()}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center', borderRight: '2px solid black' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center', borderRight: '2px solid black' }}> {/* Increased from 11px */}
                     {actualSaleData.price_per_brick.toFixed(2)}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {taxableAmount.toFixed(2)}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {sgstAmount.toFixed(2)}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {cgstAmount.toFixed(2)}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {igstAmount > 0 ? igstAmount.toFixed(2) : "-"}
                   </TableCell>
                 </TableRow>
@@ -438,25 +470,25 @@ const GSTInvoiceViewer = ({
                 ))}
                 {/* Totals Row */}
                 <TableRow>
-                  <TableCell colSpan={3} sx={{ border: '1px solid black', fontSize: '11px', p: 0.5 }}>
+                  <TableCell colSpan={3} sx={{ border: '1px solid black', fontSize: '13px', p: 0.5 }}> {/* Increased from 11px */}
                     &nbsp;
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {actualSaleData.quantity.toLocaleString()}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, borderRight: '2px solid black' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, borderRight: '2px solid black' }}> {/* Increased from 11px */}
                     &nbsp;
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {taxableAmount.toFixed(2)}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {sgstAmount.toFixed(2)}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {cgstAmount.toFixed(2)}
                   </TableCell>
-                  <TableCell sx={{ border: '1px solid black', fontSize: '11px', p: 0.5, textAlign: 'center' }}>
+                  <TableCell sx={{ border: '1px solid black', fontSize: '13px', p: 0.5, textAlign: 'center' }}> {/* Increased from 11px */}
                     {igstAmount > 0 ? igstAmount.toFixed(2) : "0"}
                   </TableCell>
                 </TableRow>
@@ -467,31 +499,31 @@ const GSTInvoiceViewer = ({
           {/* Totals Section */}
           <Box sx={{ display: 'flex', border: '1px solid black', borderTop: 'none' }}>
             <Box sx={{ flex: 1, p: 1, borderRight: '1px solid black' }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 1 }}> {/* Increased from 11px */}
                 Invoice Value in Words
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 {numberToWords(totalAmount)}
               </Typography>
             </Box>
             <Box sx={{ flex: 1, p: 1 }}>
               <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                   <strong>Total Amount Before Tax:</strong> {taxableAmount.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                   <strong>Add SGST:</strong> {sgstAmount.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                   <strong>Add CGST:</strong> {cgstAmount.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                   <strong>Add IGST:</strong> {igstAmount.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" sx={{ fontSize: '11px', fontWeight: 'bold' }}>
+                <Typography variant="body2" sx={{ fontSize: '13px', fontWeight: 'bold' }}> {/* Increased from 11px */}
                   <strong>Total Tax Amount:</strong> {totalTax.toFixed(2)}
                 </Typography>
-                <Typography variant="body2" sx={{ fontSize: '13px', fontWeight: 'bold', mt: 1, pt: 1, borderTop: '1px solid black' }}>
+                <Typography variant="body2" sx={{ fontSize: '15px', fontWeight: 'bold', mt: 1, pt: 1, borderTop: '1px solid black' }}> {/* Increased from 13px */}
                   <strong>Invoice Total:</strong> {totalAmount.toFixed(2)}
                 </Typography>
               </Box>
@@ -502,36 +534,36 @@ const GSTInvoiceViewer = ({
           <Box sx={{ display: 'flex', border: '1px solid black', borderTop: 'none', minHeight: '120px' }}>
             {/* Bank Details */}
             <Box sx={{ flex: 1, p: 1, borderRight: '1px solid black' }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 1 }}> {/* Increased from 11px */}
                 Amount of Tax Subject To Reverse Charge
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontSize: '13px', mb: 1 }}> {/* Increased from 11px */}
                 NO
               </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1, mt: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 1, mt: 2 }}> {/* Increased from 11px */}
                 Bank Details
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 {bankDetails.bankName}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 {bankDetails.accountNumber}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 {bankDetails.ifscCode}
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '11px' }}>
+              <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                 {bankDetails.branch}
               </Typography>
             </Box>
 
             {/* Terms & Conditions */}
             <Box sx={{ flex: 1, p: 1, borderRight: '1px solid black' }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 1 }}> {/* Increased from 11px */}
                 Terms & Conditions For Sale
               </Typography>
               {INVOICE_TERMS.map((term, index) => (
-                <Typography key={index} variant="body2" sx={{ fontSize: '10px', mb: 0.5 }}>
+                <Typography key={index} variant="body2" sx={{ fontSize: '12px', mb: 0.5 }}> {/* Increased from 10px */}
                   {index + 1}.{term}
                 </Typography>
               ))}
@@ -539,17 +571,35 @@ const GSTInvoiceViewer = ({
 
             {/* Company Seal & Signature */}
             <Box sx={{ flex: 1, p: 1, textAlign: 'center' }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 0 }}> {/* Increased from 11px */}
                 Company Seal
               </Typography>
-              <Box sx={{ height: 40, mb: 2 }}>
+              <Box sx={{ height: 40, mb: 0 }}>
                 {/* Space for company seal */}
               </Box>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '11px', mb: 1 }}>
+              
+              {/* NEW: Signature Image */}
+              <Box sx={{ mb: 1, display: 'flex', justifyContent: 'center' }}>
+                <img 
+                  src="/assets/signature.png" // Replace with your actual signature path
+                  alt="Authorized Signature"
+                  style={{
+                    maxWidth: '140px',
+                    maxHeight: '140px',
+                    objectFit: 'contain'
+                  }}
+                  onError={(e) => {
+                    // Hide signature if it fails to load
+                    e.target.style.display = 'none';
+                  }}
+                />
+              </Box>
+              
+              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '13px', mb: 1 }}> {/* Increased from 11px */}
                 FOR,PATEL BRICKS
               </Typography>
               <Box sx={{ mt: 3, pt: 1, borderTop: '1px solid black' }}>
-                <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
                   Authorised Signatory
                 </Typography>
               </Box>

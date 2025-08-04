@@ -511,7 +511,6 @@ const Reports = () => {
 
   const handleExport = useCallback(() => {
     // Implement export functionality
-    console.log('Exporting reports...');
   }, []);
 
   return (
