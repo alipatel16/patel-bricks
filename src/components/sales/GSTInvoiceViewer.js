@@ -315,7 +315,7 @@ const GSTInvoiceViewer = ({
 
           {/* Company Header - Logo moved out, now centered */}
           <Box sx={{ textAlign: 'center', mb: 2, border: '1px solid black', p: 1 }}>
-            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: '28px', mb: 1 }}> {/* Increased from 24px */}
+            <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: '30px', mb: 1 }}> {/* Increased from 24px */}
               PATEL BRICKS
             </Typography>
             <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '14px', mb: 1 }}> {/* Increased from 12px */}
@@ -325,7 +325,7 @@ const GSTInvoiceViewer = ({
               BEHIND PATEL PETROLEUM,MANDAL ROAD,@BHOJVA,VIRAMGAM-382150
             </Typography>
             <Typography variant="body2" sx={{ fontSize: '13px' }}> {/* Increased from 11px */}
-              Mo:98980321392,8000001819 E-mail: patelbricks1819@gmail.com
+              Mo:9898032192,8000001819 E-mail: patelbricks1819@gmail.com
             </Typography>
           </Box>
 
