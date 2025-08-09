@@ -1,4 +1,4 @@
-// components/sales/InvoiceGenerator.js - Updated with GST Invoice Numbering and GSTIN functionality + All Sites Support + Date Selection + Disable Non-GST Option
+// components/sales/InvoiceGenerator.js - FIXED: Preserve GST Invoice Number in Edit Mode
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
@@ -84,8 +84,11 @@ const InvoiceGenerator = ({
   const [gstInvoiceConfig, setGstInvoiceConfig] = useState(null);
   const [loadingInvoiceConfig, setLoadingInvoiceConfig] = useState(false);
   const [nextGstInvoiceNumber, setNextGstInvoiceNumber] = useState("");
+  
+  // FIXED: Add state to preserve original GST invoice number in edit mode
+  const [originalGstInvoiceNumber, setOriginalGstInvoiceNumber] = useState("");
 
-  // NEW: Fetch GST invoice configuration from settings
+  // FIXED: Modified to preserve existing GST invoice number in edit mode
   useEffect(() => {
     const fetchInvoiceConfig = async () => {
       if (!open) return;
@@ -97,11 +100,19 @@ const InvoiceGenerator = ({
         if (result.success && result.data && result.data.gstInvoiceNumbering) {
           setGstInvoiceConfig(result.data.gstInvoiceNumbering);
 
-          // Generate next GST invoice number
-          const prefix = result.data.gstInvoiceNumbering.prefix || "GST-INV";
-          const currentNumber =
-            result.data.gstInvoiceNumbering.currentNumber || 1;
-          setNextGstInvoiceNumber(`${prefix}-${currentNumber}`);
+          // FIXED: Check if we're in edit mode and have an existing GST invoice number
+          if (isEditMode && editingInvoice && editingInvoice.gstInvoiceNumber) {
+            // Preserve the original GST invoice number
+            setOriginalGstInvoiceNumber(editingInvoice.gstInvoiceNumber);
+            setNextGstInvoiceNumber(editingInvoice.gstInvoiceNumber);
+          } else {
+            // Generate next GST invoice number for new invoices
+            const prefix = result.data.gstInvoiceNumbering.prefix || "GST-INV";
+            const currentNumber =
+              result.data.gstInvoiceNumbering.currentNumber || 1;
+            setNextGstInvoiceNumber(`${prefix}-${currentNumber}`);
+            setOriginalGstInvoiceNumber(""); // Clear for new invoices
+          }
         } else {
           // Use default config if not found
           const defaultConfig = {
@@ -110,9 +121,17 @@ const InvoiceGenerator = ({
             autoIncrement: true,
           };
           setGstInvoiceConfig(defaultConfig);
-          setNextGstInvoiceNumber(
-            `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
-          );
+          
+          // FIXED: Same logic for default config
+          if (isEditMode && editingInvoice && editingInvoice.gstInvoiceNumber) {
+            setOriginalGstInvoiceNumber(editingInvoice.gstInvoiceNumber);
+            setNextGstInvoiceNumber(editingInvoice.gstInvoiceNumber);
+          } else {
+            setNextGstInvoiceNumber(
+              `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
+            );
+            setOriginalGstInvoiceNumber("");
+          }
         }
       } catch (error) {
         // Fallback to default
@@ -122,16 +141,24 @@ const InvoiceGenerator = ({
           autoIncrement: true,
         };
         setGstInvoiceConfig(defaultConfig);
-        setNextGstInvoiceNumber(
-          `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
-        );
+        
+        // FIXED: Same logic for error fallback
+        if (isEditMode && editingInvoice && editingInvoice.gstInvoiceNumber) {
+          setOriginalGstInvoiceNumber(editingInvoice.gstInvoiceNumber);
+          setNextGstInvoiceNumber(editingInvoice.gstInvoiceNumber);
+        } else {
+          setNextGstInvoiceNumber(
+            `${defaultConfig.prefix}-${defaultConfig.currentNumber}`
+          );
+          setOriginalGstInvoiceNumber("");
+        }
       } finally {
         setLoadingInvoiceConfig(false);
       }
     };
 
     fetchInvoiceConfig();
-  }, [open]);
+  }, [open, isEditMode, editingInvoice]); // FIXED: Added dependencies
 
   // Fetch customer GSTIN from Firebase
   useEffect(() => {
@@ -196,6 +223,8 @@ const InvoiceGenerator = ({
       setSavedInvoiceId(null);
       // NEW: Reset disable non-GST option
       setDisableNonGST(false);
+      // FIXED: Clear original GST invoice number for new invoices
+      setOriginalGstInvoiceNumber("");
     }
   }, [isEditMode, editingInvoice, open]);
 
@@ -377,7 +406,7 @@ const InvoiceGenerator = ({
     }
   };
 
-  // Generate invoice - UPDATED to handle "All Sites" and custom invoice date
+  // FIXED: Generate invoice - preserve GST invoice number in edit mode
   const handleGenerateInvoice = () => {
     if (!validateForm()) return;
 
@@ -394,6 +423,11 @@ const InvoiceGenerator = ({
       address: formData.selectedSite === "all" ? "All Sites" : formData.selectedSite,
       gstin: customerGSTIN || "", // Include GSTIN from fetched data
     };
+
+    // FIXED: Use original GST invoice number if in edit mode, otherwise use next number
+    const gstInvoiceNumberToUse = isEditMode && originalGstInvoiceNumber 
+      ? originalGstInvoiceNumber 
+      : nextGstInvoiceNumber;
 
     const invoiceData = {
       customerData: enhancedCustomerData,
@@ -413,8 +447,8 @@ const InvoiceGenerator = ({
       generatedOn: new Date().toISOString(),
       // Include customer GSTIN specifically for GST invoice processing
       customerGSTIN: customerGSTIN || "",
-      // NEW: Include GST invoice number only if GST bricks > 0
-      gstInvoiceNumber: gstBricks > 0 ? nextGstInvoiceNumber : null,
+      // FIXED: Use the correct GST invoice number
+      gstInvoiceNumber: gstBricks > 0 ? gstInvoiceNumberToUse : null,
       // NEW: Include custom invoice date
       invoiceDate: formData.invoiceDate,
     };
@@ -423,7 +457,7 @@ const InvoiceGenerator = ({
     setShowInvoice(true);
   };
 
-  // NEW: Auto-increment GST invoice number
+  // FIXED: Auto-increment GST invoice number - only for new invoices with GST bricks
   const incrementGstInvoiceNumber = async () => {
     if (!gstInvoiceConfig || !gstInvoiceConfig.autoIncrement) return;
 
@@ -452,7 +486,7 @@ const InvoiceGenerator = ({
     }
   };
 
-  // Save invoice to Firebase
+  // FIXED: Save invoice to Firebase - preserve GST invoice number logic
   const handleSaveInvoice = async () => {
     if (!generatedInvoiceData) {
       toast.error("Please generate invoice first");
@@ -485,7 +519,7 @@ const InvoiceGenerator = ({
         // NEW: Save custom invoice date
         invoiceDate: formData.invoiceDate,
 
-        // NEW: Include GST invoice number only if GST bricks were generated
+        // FIXED: Save the GST invoice number correctly
         gstInvoiceNumber: generatedInvoiceData.gstInvoiceNumber || null,
 
         // Generated invoice data
@@ -508,8 +542,13 @@ const InvoiceGenerator = ({
       if (result.success) {
         setSavedInvoiceId(invoiceId);
 
-        // NEW: Auto-increment GST invoice number only if this was a new GST invoice
-        if (!isEditMode && generatedInvoiceData.gstInvoiceNumber) {
+        // FIXED: Only increment GST invoice number for NEW invoices with GST bricks
+        // AND when the invoice didn't previously have a GST invoice number
+        const shouldIncrementNumber = !isEditMode && 
+          generatedInvoiceData.gstInvoiceNumber && 
+          !originalGstInvoiceNumber;
+          
+        if (shouldIncrementNumber) {
           await incrementGstInvoiceNumber();
         }
 
@@ -547,6 +586,8 @@ const InvoiceGenerator = ({
       setCustomerGSTIN(""); // Reset GSTIN
       setNextGstInvoiceNumber(""); // Reset invoice number
       setDisableNonGST(false); // NEW: Reset disable non-GST option
+      // FIXED: Reset original GST invoice number
+      setOriginalGstInvoiceNumber("");
       onClose();
     }
   };
