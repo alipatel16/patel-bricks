@@ -1,4 +1,4 @@
-// InvoiceReports.js - Fixed component with proper invoice viewing functionality
+// InvoiceReports.js - FIXED: Corrected total_amount calculation to display non-GST invoices
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -60,7 +60,7 @@ function InvoiceReports({
   const [nonGstInvoiceViewerOpen, setNonGstInvoiceViewerOpen] = useState(false);
   const [viewingInvoiceData, setViewingInvoiceData] = useState(null);
 
-  // Fetch invoice reports from Firebase with better error handling
+  // FIXED: Fetch invoice reports - create separate entries for GST and Non-GST components
   const fetchInvoiceReports = async () => {
     try {
       setLoading(true);
@@ -68,22 +68,45 @@ function InvoiceReports({
       const result = await dbUtils.readData(`${DB_PATHS.SALES}/invoices`);
       
       if (result.success && result.data) {
-        const invoices = Object.entries(result.data)
-          .map(([id, invoice]) => ({
-            ...invoice,
-            id,
-            // Map the data structure to match what we expect
-            invoice_number: invoice.gstInvoiceNumber || `INV-${id.substring(0, 8)}`,
-            date: invoice.createdDate,
-            customer_name: invoice.customerName,
-            total_amount: invoice.invoiceData?.gstData?.grandTotal || 
-                         invoice.invoiceData?.nonGstData?.grandTotal || 
-                         invoice.invoiceData?.totalAmount || 0,
-            invoice_type: (invoice.gstBricks && invoice.gstBricks > 0) ? "GST" : "NON_GST",
-          }))
-          .sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
+        const invoiceEntries = [];
 
-        setInvoiceReports(invoices);
+        Object.entries(result.data).forEach(([id, invoice]) => {
+          // Add GST invoice entry if exists
+          if (invoice.gstBricks && invoice.gstBricks > 0) {
+            invoiceEntries.push({
+              ...invoice,
+              id: `${id}_GST`,
+              originalId: id,
+              invoice_number: invoice.gstInvoiceNumber || `GST-${id.substring(0, 8)}`,
+              date: invoice.createdDate,
+              customer_name: invoice.customerName,
+              total_amount: invoice.invoiceData?.gstAmount || 0,
+              invoice_type: "GST",
+              bricks: invoice.gstBricks,
+              component: "gst"
+            });
+          }
+
+          // Add Non-GST invoice entry if exists
+          if (invoice.nonGstBricks && invoice.nonGstBricks > 0) {
+            invoiceEntries.push({
+              ...invoice,
+              id: `${id}_NONGST`,
+              originalId: id,
+              invoice_number: `NONGST-${id.substring(0, 8)}`,
+              date: invoice.createdDate,
+              customer_name: invoice.customerName,
+              total_amount: invoice.invoiceData?.nonGstAmount || 0,
+              invoice_type: "NON_GST",
+              bricks: invoice.nonGstBricks,
+              component: "nonGst"
+            });
+          }
+        });
+
+        // Sort by date
+        invoiceEntries.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
+        setInvoiceReports(invoiceEntries);
       } else {
         setInvoiceReports([]);
       }
@@ -135,14 +158,14 @@ function InvoiceReports({
   const endIndex = startIndex + itemsPerPage;
   const paginatedInvoices = filteredInvoices.slice(startIndex, endIndex);
 
-  // NEW: View invoice details handler (matching CustomerList pattern)
-  const handleViewInvoiceDetails = (invoice) => {
-    setSelectedInvoiceForView(invoice);
-    setViewingInvoiceData(invoice.invoiceData);
+  // FIXED: View invoice details handler - handle both GST and Non-GST components
+  const handleViewInvoiceDetails = (invoiceEntry) => {
+    setSelectedInvoiceForView(invoiceEntry);
+    setViewingInvoiceData(invoiceEntry.invoiceData);
     setInvoiceViewDialogOpen(true);
   };
 
-  // NEW: Direct invoice viewers (matching CustomerList pattern)
+  // FIXED: Direct invoice viewers - open the correct viewer based on component type
   const handleViewGSTInvoice = () => {
     if (viewingInvoiceData && selectedInvoiceForView) {
       setGstInvoiceViewerOpen(true);
@@ -166,31 +189,22 @@ function InvoiceReports({
     setViewingInvoiceData(null);
   };
 
-  // NEW: Enhanced print functionality using the invoice viewer's print capability
-  const handlePrintInvoice = (invoice) => {
-    // First, set up the invoice data for viewing
-    setSelectedInvoiceForView(invoice);
-    setViewingInvoiceData(invoice.invoiceData);
+  // FIXED: Enhanced print functionality - handle single component invoices
+  const handlePrintInvoice = (invoiceEntry) => {
+    // Set up the invoice data for viewing
+    setSelectedInvoiceForView(invoiceEntry);
+    setViewingInvoiceData(invoiceEntry.invoiceData);
     
-    // Determine which type of invoice to print based on available data
-    const hasGSTBricks = invoice.gstBricks && invoice.gstBricks > 0;
-    const hasNonGSTBricks = invoice.nonGstBricks && invoice.nonGstBricks > 0;
-    
-    if (hasGSTBricks && hasNonGSTBricks) {
-      // If both types exist, show dialog to let user choose
-      setInvoiceViewDialogOpen(true);
-      toast.info("This invoice has both GST and Non-GST components. Please select which one to print from the view dialog.");
-    } else if (hasGSTBricks) {
+    // Determine which type of invoice to print based on the component type
+    if (invoiceEntry.component === "gst") {
       // Print GST invoice directly
       setTimeout(() => {
         setGstInvoiceViewerOpen(true);
-        // The GSTInvoiceViewer component should handle the printing automatically
       }, 100);
-    } else if (hasNonGSTBricks) {
+    } else if (invoiceEntry.component === "nonGst") {
       // Print Non-GST invoice directly
       setTimeout(() => {
         setNonGstInvoiceViewerOpen(true);
-        // The GSTInvoiceViewer component should handle the printing automatically
       }, 100);
     } else {
       toast.error("No invoice data available for printing");
@@ -511,7 +525,7 @@ function InvoiceReports({
             <Box>
               <Alert severity="info" sx={{ mb: 3 }}>
                 <Typography variant="h6" gutterBottom>
-                  Invoice Summary for {selectedInvoiceForView.customerName}
+                  {selectedInvoiceForView.invoice_type} Invoice for {selectedInvoiceForView.customerName}
                 </Typography>
                 <Typography variant="body2">
                   Generated on {new Date(selectedInvoiceForView.createdDate).toLocaleDateString()} 
@@ -520,62 +534,31 @@ function InvoiceReports({
               </Alert>
 
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12}>
                   <Card variant="outlined">
                     <CardContent>
-                      <Typography variant="h6" gutterBottom color="error">
-                        GST Invoice Details
+                      <Typography variant="h6" gutterBottom color={selectedInvoiceForView.invoice_type === "GST" ? "error" : "success.main"}>
+                        {selectedInvoiceForView.invoice_type} Invoice Details
                       </Typography>
                       <Typography variant="body1">
-                        <strong>Bricks:</strong> {formatQuantity(selectedInvoiceForView.gstBricks)}
+                        <strong>Bricks:</strong> {formatQuantity(selectedInvoiceForView.bricks)}
                       </Typography>
                       <Typography variant="body1">
                         <strong>Rate:</strong> {formatCurrency(viewingInvoiceData.actualRate)} per brick
                       </Typography>
                       <Typography variant="body1">
-                        <strong>Amount (with 12% GST):</strong> {formatCurrency(viewingInvoiceData.gstAmount)}
+                        <strong>Amount:</strong> {formatCurrency(selectedInvoiceForView.total_amount)}
+                        {selectedInvoiceForView.invoice_type === "GST" ? " (with 12% GST)" : " (without GST)"}
                       </Typography>
                       <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
                         <Button
                           variant="contained"
-                          color="error"
+                          color={selectedInvoiceForView.invoice_type === "GST" ? "error" : "success"}
                           startIcon={<ViewIcon />}
-                          onClick={handleViewGSTInvoice}
-                          disabled={selectedInvoiceForView.gstBricks === 0}
+                          onClick={selectedInvoiceForView.invoice_type === "GST" ? handleViewGSTInvoice : handleViewNonGSTInvoice}
                           size="small"
                         >
-                          View
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <Card variant="outlined">
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom color="success.main">
-                        Non-GST Invoice Details
-                      </Typography>
-                      <Typography variant="body1">
-                        <strong>Bricks:</strong> {formatQuantity(selectedInvoiceForView.nonGstBricks)}
-                      </Typography>
-                      <Typography variant="body1">
-                        <strong>Rate:</strong> {formatCurrency(viewingInvoiceData.actualRate)} per brick
-                      </Typography>
-                      <Typography variant="body1">
-                        <strong>Amount (without GST):</strong> {formatCurrency(viewingInvoiceData.nonGstAmount)}
-                      </Typography>
-                      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-                        <Button
-                          variant="contained"
-                          color="success"
-                          startIcon={<ViewIcon />}
-                          onClick={handleViewNonGSTInvoice}
-                          disabled={selectedInvoiceForView.nonGstBricks === 0}
-                          size="small"
-                        >
-                          View
+                          View {selectedInvoiceForView.invoice_type} Invoice
                         </Button>
                       </Box>
                     </CardContent>
@@ -590,20 +573,20 @@ function InvoiceReports({
                       </Typography>
                       <Grid container spacing={2}>
                         <Grid item xs={6} md={3}>
-                          <Typography variant="body2" color="text.secondary">Total Bricks</Typography>
-                          <Typography variant="h6">{formatQuantity(viewingInvoiceData.totalBricks)}</Typography>
+                          <Typography variant="body2" color="text.secondary">Bricks</Typography>
+                          <Typography variant="h6">{formatQuantity(selectedInvoiceForView.bricks)}</Typography>
                         </Grid>
                         <Grid item xs={6} md={3}>
-                          <Typography variant="body2" color="text.secondary">GST Amount</Typography>
-                          <Typography variant="h6" color="error.main">{formatCurrency(viewingInvoiceData.gstAmount)}</Typography>
+                          <Typography variant="body2" color="text.secondary">Rate per Brick</Typography>
+                          <Typography variant="h6">{formatCurrency(viewingInvoiceData.actualRate)}</Typography>
                         </Grid>
                         <Grid item xs={6} md={3}>
-                          <Typography variant="body2" color="text.secondary">Non-GST Amount</Typography>
-                          <Typography variant="h6" color="success.main">{formatCurrency(viewingInvoiceData.nonGstAmount)}</Typography>
+                          <Typography variant="body2" color="text.secondary">Invoice Type</Typography>
+                          <Typography variant="h6">{selectedInvoiceForView.invoice_type}</Typography>
                         </Grid>
                         <Grid item xs={6} md={3}>
                           <Typography variant="body2" color="text.secondary">Total Amount</Typography>
-                          <Typography variant="h6" color="primary.main">{formatCurrency(viewingInvoiceData.totalAmount)}</Typography>
+                          <Typography variant="h6" color="primary.main">{formatCurrency(selectedInvoiceForView.total_amount)}</Typography>
                         </Grid>
                       </Grid>
                     </CardContent>
@@ -620,7 +603,7 @@ function InvoiceReports({
         </DialogActions>
       </Dialog>
 
-      {/* GST Invoice Viewers for direct viewing and printing (matching CustomerList pattern) */}
+      {/* FIXED: GST Invoice Viewers - use correct data for the specific component */}
       {viewingInvoiceData && selectedInvoiceForView && (
         <>
           <GSTInvoiceViewer
@@ -628,7 +611,7 @@ function InvoiceReports({
             onClose={handleCloseInvoiceViewers}
             customerData={viewingInvoiceData.customerData}
             invoiceData={viewingInvoiceData}
-            brickQuantity={selectedInvoiceForView.gstBricks}
+            brickQuantity={selectedInvoiceForView.component === "gst" ? selectedInvoiceForView.bricks : viewingInvoiceData.gstBricks}
             pricePerBrick={viewingInvoiceData.actualRate}
             isGSTInvoice={true}
           />
@@ -638,7 +621,7 @@ function InvoiceReports({
             onClose={handleCloseInvoiceViewers}
             customerData={viewingInvoiceData.customerData}
             invoiceData={viewingInvoiceData}
-            brickQuantity={selectedInvoiceForView.nonGstBricks}
+            brickQuantity={selectedInvoiceForView.component === "nonGst" ? selectedInvoiceForView.bricks : viewingInvoiceData.nonGstBricks}
             pricePerBrick={viewingInvoiceData.actualRate}
             isGSTInvoice={false}
           />
