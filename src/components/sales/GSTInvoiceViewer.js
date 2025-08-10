@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,12 +12,17 @@ import {
   TableHead,
   TableRow,
   Button,
+  CircularProgress,
 } from '@mui/material';
 import {
   Download as DownloadIcon,
   Close as CloseIcon,
-  Share as ShareIcon,
 } from '@mui/icons-material';
+
+// THIRD-PARTY LIBRARIES - Add these to your package.json:
+// npm install html2canvas jspdf
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // Import constants and utilities
 import { DEFAULT_BANK_DETAILS } from '../../utils/constants';
@@ -33,6 +39,9 @@ const GSTInvoiceViewer = ({
   pricePerBrick,
   isGSTInvoice
 }) => {
+
+  // NEW: State for PDF generation loading
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   // Handle both existing usage (saleData) and new usage (direct props)
   let actualSaleData = saleData;
@@ -256,7 +265,7 @@ const GSTInvoiceViewer = ({
     "All Taxes and Commission will be charged extra."
   ];
 
-  // FIXED: iOS-compatible print function
+  // NEW: Device detection function
   const detectDevice = () => {
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
     return {
@@ -267,151 +276,86 @@ const GSTInvoiceViewer = ({
     };
   };
 
-  const handleSecondPrint = () => {
-try {
-  if(!document.execCommand('print', false, null)) {
-    window.print()
-  }
-} catch {
-  window.print()
-}
-  }
-  
+  // NEW: PDF generation function for iOS devices only
+  const generatePDF = async () => {
+    try {
+      setIsGeneratingPDF(true);
+      
+      const element = document.getElementById('invoice-print-content');
+      if (!element) {
+        throw new Error('Invoice content not found');
+      }
 
+      // High-quality canvas options for better PDF output
+      const canvas = await html2canvas(element, {
+        scale: 2, // Higher resolution for iPad Pro
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+        scrollX: 0,
+        scrollY: 0,
+        letterRendering: true,
+        removeContainer: true,
+      });
+
+      // Create PDF with A4 dimensions
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      // Calculate dimensions to fit A4 page
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+
+      // Add the image to PDF
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, '', 'FAST');
+      heightLeft -= pageHeight;
+
+      // Add additional pages if content is longer than one page
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, '', 'FAST');
+        heightLeft -= pageHeight;
+      }
+
+      // Generate filename
+      const fileName = `Invoice_${actualSaleData.customer_name}_${actualSaleData.invoice_number || 'NoNumber'}_${formatDate(actualSaleData.date).replace(/\//g, '-')}.pdf`;
+
+      // Download the PDF
+      pdf.save(fileName);
+
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      alert('Failed to generate PDF. Please try again or contact support.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  // MODIFIED: Enhanced print function - PDF for iOS, window.print for desktop
   const handlePrint = () => {
     const device = detectDevice();
     
-    if (device.isIOS || device.isIPad) {
-      // iOS/iPad specific handling
-      handleIOSPrint();
+    if (device.isIOS || device.isIPad || device.isMobile) {
+      // For iOS devices, generate PDF
+      generatePDF();
     } else {
-      // Standard print for other devices
+      // For desktop and other devices, use standard window.print
       window.print();
     }
-  };
-
-  const handleIOSPrint = () => {
-    try {
-      // Method 1: Try to create a new window with the invoice content
-      const printContent = document.getElementById('invoice-print-content');
-      if (!printContent) {
-        alert('Unable to prepare invoice for printing. Please try again.');
-        return;
-      }
-
-      // Clone the content to avoid modifying the original
-      const clonedContent = printContent.cloneNode(true);
-      
-      // Create a new window with the invoice content
-      const printWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
-      
-      if (printWindow) {
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Invoice - ${actualSaleData.customer_name}</title>
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <style>
-                body {
-                  font-family: Arial, sans-serif;
-                  margin: 0;
-                  padding: 20px;
-                  background: white;
-                }
-                @media print {
-                  body { margin: 0; padding: 10px; }
-                  .no-print { display: none !important; }
-                }
-                @page {
-                  margin: 0.5in;
-                  size: A4;
-                }
-                /* Import the styles from the original component */
-                table { border-collapse: collapse; width: 100%; }
-                .MuiTableCell-root { border: 1px solid black; padding: 4px; font-size: 11px; }
-                .print-button {
-                  position: fixed;
-                  top: 10px;
-                  right: 10px;
-                  z-index: 1000;
-                  padding: 10px 20px;
-                  background: #1976d2;
-                  color: white;
-                  border: none;
-                  border-radius: 4px;
-                  cursor: pointer;
-                  font-size: 14px;
-                }
-                .print-button:hover {
-                  background: #1565c0;
-                }
-              </style>
-            </head>
-            <body>
-              <button class="print-button no-print" onclick="window.print()">Print Invoice</button>
-              ${clonedContent.outerHTML}
-              <script>
-                // Auto-trigger print dialog after a short delay
-                setTimeout(() => {
-                  window.print();
-                }, 1000);
-              </script>
-            </body>
-          </html>
-        `);
-        
-        printWindow.document.close();
-        
-        // Focus the new window
-        printWindow.focus();
-        
-        // Clean up - close the window after printing (with delay for user action)
-        setTimeout(() => {
-          try {
-            if (!printWindow.closed) {
-              printWindow.close();
-            }
-          } catch (e) {
-            // Ignore errors when closing window
-          }
-        }, 10000); // Close after 10 seconds
-        
-      } else {
-        // Fallback if popup is blocked
-        handleIOSShare();
-      }
-    } catch (error) {
-      console.error('iOS Print Error:', error);
-      handleIOSShare();
-    }
-  };
-
-  const handleIOSShare = () => {
-    // Fallback: Use Web Share API or provide instructions
-    if (navigator.share) {
-      // Use Web Share API if available
-      navigator.share({
-        title: `Invoice - ${actualSaleData.customer_name}`,
-        text: `Invoice for ${actualSaleData.quantity} bricks - ₹${totalAmount.toFixed(2)}`,
-        url: window.location.href
-      }).catch(err => {
-        console.log('Error sharing:', err);
-        showIOSInstructions();
-      });
-    } else {
-      showIOSInstructions();
-    }
-  };
-
-  const showIOSInstructions = () => {
-    alert(`To print on iPad:
-    
-1. Take a screenshot of this invoice (Power + Volume Up)
-2. OR use the Share button in Safari and select "Print"
-3. OR copy this page URL and open in another app that supports printing
-
-For best results, try rotating your iPad to landscape mode before printing.`);
   };
 
   return (
@@ -445,13 +389,13 @@ For best results, try rotating your iPad to landscape mode before printing.`);
           }}
         >
           {/* Logo at very left corner */}
-          <Box sx={{ position: 'absolute', top: 45, left: 20, zIndex: 1 }}>
+          <Box sx={{ position: 'absolute', top: 60, left: 20, zIndex: 1 }}>
             <img 
               src="/assets/patel-bricks-logo.png" // Replace with your actual logo path
               alt="Patel Bricks Logo"
               style={{
-                width: '140px',
-                height: '140px',
+                width: '120px',
+                height: '100px',
                 objectFit: 'contain'
               }}
               onError={(e) => {
@@ -775,7 +719,7 @@ For best results, try rotating your iPad to landscape mode before printing.`);
         </Box>
       </DialogContent>
       
-      {/* FIXED: Dialog Actions with device-specific buttons */}
+      {/* Dialog Actions with Download Button */}
       <DialogActions 
         sx={{ 
           p: 2, 
@@ -790,62 +734,24 @@ For best results, try rotating your iPad to landscape mode before printing.`);
             onClick={onClose}
             variant="outlined"
             startIcon={<CloseIcon />}
+            disabled={isGeneratingPDF}
           >
             Close
           </Button>
-           <Button
-                    onClick={handleSecondPrint}
-                    variant="contained"
-                    startIcon={<ShareIcon />}
-                    sx={{ 
-                      backgroundColor: '#1976d2',
-                      '&:hover': {
-                        backgroundColor: '#1565c0'
-                      }
-                    }}
-                  >
-                    BAPU TEST KARVA MATE
-                  </Button>
-          
-          {/* Show different buttons based on device */}
-          {(() => {
-            const device = detectDevice();
-            if (device.isIOS || device.isIPad) {
-              return (
-                <>
-                  <Button
-                    onClick={handlePrint}
-                    variant="contained"
-                    startIcon={<ShareIcon />}
-                    sx={{ 
-                      backgroundColor: '#1976d2',
-                      '&:hover': {
-                        backgroundColor: '#1565c0'
-                      }
-                    }}
-                  >
-                    Print/Share
-                  </Button>
-                </>
-              );
-            } else {
-              return (
-                <Button
-                  onClick={handlePrint}
-                  variant="contained"
-                  startIcon={<DownloadIcon />}
-                  sx={{ 
-                    backgroundColor: '#1976d2',
-                    '&:hover': {
-                      backgroundColor: '#1565c0'
-                    }
-                  }}
-                >
-                  Download PDF
-                </Button>
-              );
-            }
-          })()}
+          <Button
+            onClick={handlePrint}
+            variant="contained"
+            startIcon={isGeneratingPDF ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+            disabled={isGeneratingPDF}
+            sx={{ 
+              backgroundColor: '#1976d2',
+              '&:hover': {
+                backgroundColor: '#1565c0'
+              }
+            }}
+          >
+            {isGeneratingPDF ? 'Generating PDF...' : 'Download PDF'}
+          </Button>
         </Box>
       </DialogActions>
     </Dialog>
