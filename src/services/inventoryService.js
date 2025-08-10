@@ -22,7 +22,6 @@ export const inventoryService = {
         data: result.data || { total_stock: 0, last_updated: Date.now() },
       };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -112,7 +111,6 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -195,7 +193,6 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -225,9 +222,7 @@ export const inventoryService = {
     inventoryService.inventoryListeners.forEach((callback) => {
       try {
         callback(updateEvent);
-      } catch (error) {
-        
-      }
+      } catch (error) {}
     });
   },
 
@@ -283,7 +278,6 @@ export const inventoryService = {
         },
       };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -356,17 +350,22 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
 
   // ENHANCED: Purchase cement with optional date support
-  purchaseCement: async (bags, costPerBag, supplier = "", notes = "", date = null) => {
+  purchaseCement: async (
+    bags,
+    costPerBag,
+    supplier = "",
+    notes = "",
+    date = null
+  ) => {
     try {
       // Use provided date or current date
       const purchaseDate = date || dbUtils.dateString();
-      
+
       // First update the stock
       const stockResult = await inventoryService.updateCementStock(
         bags,
@@ -398,7 +397,9 @@ export const inventoryService = {
       updates[`${DB_PATHS.CEMENT}/purchases/${purchaseKey}`] = purchaseData;
 
       // NEW: Store in date-wise purchases for better querying
-      updates[`${DB_PATHS.CEMENT}/purchases_by_date/${purchaseDate}/${purchaseKey}`] = purchaseData;
+      updates[
+        `${DB_PATHS.CEMENT}/purchases_by_date/${purchaseDate}/${purchaseKey}`
+      ] = purchaseData;
 
       const purchaseResult = await dbUtils.batchUpdate(updates);
 
@@ -415,7 +416,6 @@ export const inventoryService = {
 
       return purchaseResult;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -449,7 +449,6 @@ export const inventoryService = {
         data: purchases,
       };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -457,7 +456,9 @@ export const inventoryService = {
   // NEW: Get cement purchases by date range
   getCementPurchasesByDateRange: async (startDate, endDate) => {
     try {
-      const result = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases_by_date`);
+      const result = await dbUtils.readData(
+        `${DB_PATHS.CEMENT}/purchases_by_date`
+      );
 
       if (!result.success || !result.data) {
         return { success: true, data: [] };
@@ -479,7 +480,9 @@ export const inventoryService = {
 
       // Sort by date (most recent first)
       purchases = purchases.sort((a, b) => {
-        return new Date(b.date || b.timestamp) - new Date(a.date || a.timestamp);
+        return (
+          new Date(b.date || b.timestamp) - new Date(a.date || a.timestamp)
+        );
       });
 
       return {
@@ -487,7 +490,6 @@ export const inventoryService = {
         data: purchases,
       };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -495,11 +497,14 @@ export const inventoryService = {
   // NEW: Update cement purchase record
   updateCementPurchase: async (purchaseId, updateData) => {
     try {
-      const { date, bags, cost_per_bag, total_cost, supplier, notes } = updateData;
+      const { date, bags, cost_per_bag, total_cost, supplier, notes } =
+        updateData;
 
       // Get current purchase data to find original date
-      const currentPurchaseResult = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases/${purchaseId}`);
-      
+      const currentPurchaseResult = await dbUtils.readData(
+        `${DB_PATHS.CEMENT}/purchases/${purchaseId}`
+      );
+
       if (!currentPurchaseResult.success || !currentPurchaseResult.data) {
         return { success: false, error: "Purchase record not found" };
       }
@@ -522,16 +527,21 @@ export const inventoryService = {
       const updates = {};
 
       // Update in legacy purchases path
-      updates[`${DB_PATHS.CEMENT}/purchases/${purchaseId}`] = updatedPurchaseData;
+      updates[`${DB_PATHS.CEMENT}/purchases/${purchaseId}`] =
+        updatedPurchaseData;
 
       // Handle date-wise storage
       if (date !== originalDate) {
         // If date changed, move from old date to new date
-        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${originalDate}/${purchaseId}`] = null; // Remove from old date
-        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${date}/${purchaseId}`] = updatedPurchaseData; // Add to new date
+        updates[
+          `${DB_PATHS.CEMENT}/purchases_by_date/${originalDate}/${purchaseId}`
+        ] = null; // Remove from old date
+        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${date}/${purchaseId}`] =
+          updatedPurchaseData; // Add to new date
       } else {
         // Same date, just update
-        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${date}/${purchaseId}`] = updatedPurchaseData;
+        updates[`${DB_PATHS.CEMENT}/purchases_by_date/${date}/${purchaseId}`] =
+          updatedPurchaseData;
       }
 
       const result = await dbUtils.batchUpdate(updates);
@@ -546,7 +556,7 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      console.error('Error updating cement purchase:', error);
+      console.error("Error updating cement purchase:", error);
       return { success: false, error: error.message };
     }
   },
@@ -555,8 +565,10 @@ export const inventoryService = {
   deleteCementPurchase: async (purchaseId) => {
     try {
       // Get current purchase data to find the date
-      const currentPurchaseResult = await dbUtils.readData(`${DB_PATHS.CEMENT}/purchases/${purchaseId}`);
-      
+      const currentPurchaseResult = await dbUtils.readData(
+        `${DB_PATHS.CEMENT}/purchases/${purchaseId}`
+      );
+
       if (!currentPurchaseResult.success || !currentPurchaseResult.data) {
         return { success: false, error: "Purchase record not found" };
       }
@@ -570,7 +582,9 @@ export const inventoryService = {
       updates[`${DB_PATHS.CEMENT}/purchases/${purchaseId}`] = null;
 
       // Delete from date-wise purchases path
-      updates[`${DB_PATHS.CEMENT}/purchases_by_date/${purchaseDate}/${purchaseId}`] = null;
+      updates[
+        `${DB_PATHS.CEMENT}/purchases_by_date/${purchaseDate}/${purchaseId}`
+      ] = null;
 
       const result = await dbUtils.batchUpdate(updates);
 
@@ -587,7 +601,7 @@ export const inventoryService = {
 
       return result;
     } catch (error) {
-      console.error('Error deleting cement purchase:', error);
+      console.error("Error deleting cement purchase:", error);
       return { success: false, error: error.message };
     }
   },
@@ -644,7 +658,6 @@ export const inventoryService = {
 
       return { success: false, error: "Failed to load inventory status" };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -654,7 +667,6 @@ export const inventoryService = {
     try {
       return dbUtils.listenToData(DB_PATHS.INVENTORY.BRICKS, callback);
     } catch (error) {
-      
       return () => {}; // Return empty cleanup function
     }
   },
@@ -664,7 +676,6 @@ export const inventoryService = {
     try {
       return dbUtils.listenToData(DB_PATHS.INVENTORY.CEMENT, callback);
     } catch (error) {
-      
       return () => {}; // Return empty cleanup function
     }
   },
@@ -681,7 +692,6 @@ export const inventoryService = {
           .getInventoryStatus()
           .then(callback)
           .catch((error) => {
-            
             callback({ success: false, error: error.message });
           });
       });
@@ -693,7 +703,6 @@ export const inventoryService = {
             .getInventoryStatus()
             .then(callback)
             .catch((error) => {
-              
               callback({ success: false, error: error.message });
             });
         }
@@ -708,13 +717,10 @@ export const inventoryService = {
             if (typeof unsubscribe === "function") {
               unsubscribe();
             }
-          } catch (error) {
-            
-          }
+          } catch (error) {}
         });
       };
     } catch (error) {
-      
       return () => {}; // Return empty cleanup function
     }
   },
@@ -724,8 +730,6 @@ export const inventoryService = {
    */
   getInventoryAdjustments: async () => {
     try {
-      
-
       // Get adjustments from both history and transactions paths
       const [historyResult, transactionsResult] = await Promise.all([
         dbUtils.readData(`${DB_PATHS.INVENTORY.BRICKS}/history`),
@@ -782,14 +786,11 @@ export const inventoryService = {
       // Sort by timestamp (oldest first) for accurate calculation
       adjustments.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-      
-
       return {
         success: true,
         data: adjustments,
       };
     } catch (error) {
-      
       return {
         success: false,
         error: error.message,
@@ -844,7 +845,6 @@ export const inventoryService = {
         data: sortedTransactions,
       };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -875,7 +875,6 @@ export const inventoryService = {
         },
       };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   },
@@ -904,8 +903,534 @@ export const inventoryService = {
 
       return status;
     } catch (error) {
-      
       return { success: false, error: error.message };
+    }
+  },
+  /**
+   * MATERIAL INVENTORY OPERATIONS (NEW)
+   */
+
+  // Purchase material with Firebase storage
+  purchaseMaterial: async (materialData) => {
+    try {
+      const {
+        materialType,
+        quantity,
+        purchaseRate,
+        totalCost,
+        unit,
+        supplier,
+        notes,
+        date,
+      } = materialData;
+
+      // Use provided date or current date
+      const purchaseDate = date || dbUtils.dateString();
+      const timestamp = dbUtils.timestamp();
+
+      // Create purchase record
+      const purchaseData = {
+        material_type: materialType,
+        quantity: parseFloat(quantity),
+        purchase_rate: parseFloat(purchaseRate),
+        total_cost: parseFloat(totalCost),
+        unit,
+        supplier: supplier || "Unknown Supplier",
+        notes: notes || "",
+        date: purchaseDate,
+        timestamp,
+      };
+
+      // Generate purchase key
+      const purchaseKey = `${materialType}_${timestamp}`;
+      const updates = {};
+
+      // Store in main purchases path
+      updates[`${DB_PATHS.MATERIAL_PURCHASES}/${purchaseKey}`] = purchaseData;
+
+      // Store in date-wise purchases for better querying
+      updates[
+        `${DB_PATHS.MATERIAL_PURCHASES}_by_date/${purchaseDate}/${purchaseKey}`
+      ] = purchaseData;
+
+      // Store in material-specific purchases
+      updates[
+        `${DB_PATHS.MATERIAL_PURCHASES}_by_type/${materialType}/${purchaseKey}`
+      ] = purchaseData;
+
+      // Update material stock
+      const materialPath = DB_PATHS.MATERIALS[materialType.toUpperCase()];
+      if (materialPath) {
+        // Get current stock
+        const currentStockResult = await dbUtils.readData(
+          `${materialPath}/inventory`
+        );
+        const currentStock = currentStockResult.data || {
+          total_quantity: 0,
+          unit,
+          last_updated: 0,
+        };
+
+        const newStock =
+          (currentStock.total_quantity || 0) + parseFloat(quantity);
+
+        // Update material inventory
+        updates[`${materialPath}/inventory/total_quantity`] = newStock;
+        updates[`${materialPath}/inventory/unit`] = unit;
+        updates[`${materialPath}/inventory/last_updated`] = timestamp;
+        updates[`${materialPath}/inventory/last_purchase_rate`] =
+          parseFloat(purchaseRate);
+
+        // Log the material transaction
+        const transactionKey = `purchase_${timestamp}`;
+        updates[`${materialPath}/transactions/${transactionKey}`] = {
+          operation: "add",
+          quantity: parseFloat(quantity),
+          previous_stock: currentStock.total_quantity || 0,
+          new_stock: newStock,
+          purchase_rate: parseFloat(purchaseRate),
+          total_cost: parseFloat(totalCost),
+          supplier,
+          notes: notes || `Material purchase: ${quantity} ${unit}`,
+          timestamp,
+          reference: `PURCHASE_${purchaseKey}`,
+        };
+      }
+
+      // Execute batch update
+      const result = await dbUtils.batchUpdate(updates);
+
+      if (result.success) {
+        // Trigger inventory update event
+        inventoryService.triggerInventoryUpdate("material", {
+          material_type: materialType,
+          operation: "purchase",
+          quantity: parseFloat(quantity),
+          unit,
+          timestamp,
+        });
+
+        return {
+          success: true,
+          data: {
+            purchase_id: purchaseKey,
+            ...purchaseData,
+          },
+          message: `${materialType} purchase recorded successfully`,
+        };
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Error purchasing material:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Get material purchase history
+  getMaterialPurchaseHistory: async (limit = null) => {
+    try {
+      const result = await dbUtils.readData(DB_PATHS.MATERIAL_PURCHASES);
+
+      if (!result.success || !result.data) {
+        return { success: true, data: [] };
+      }
+
+      // Convert to array and sort by timestamp (most recent first)
+      let purchases = Object.entries(result.data).map(([key, data]) => ({
+        id: key,
+        ...data,
+      }));
+
+      // Sort by timestamp or date (most recent first)
+      purchases = purchases
+        .sort((a, b) => {
+          const aTime = new Date(a.date || a.timestamp).getTime();
+          const bTime = new Date(b.date || b.timestamp).getTime();
+          return bTime - aTime;
+        })
+        .slice(0, limit);
+
+      return {
+        success: true,
+        data: purchases,
+      };
+    } catch (error) {
+      console.error("Error loading material purchase history:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Update material purchase record
+  updateMaterialPurchase: async (purchaseId, updateData) => {
+    try {
+      const {
+        date,
+        material_type,
+        quantity,
+        purchase_rate,
+        total_cost,
+        supplier,
+        notes,
+      } = updateData;
+
+      // Get current purchase data
+      const currentPurchaseResult = await dbUtils.readData(
+        `${DB_PATHS.MATERIAL_PURCHASES}/${purchaseId}`
+      );
+
+      if (!currentPurchaseResult.success || !currentPurchaseResult.data) {
+        return { success: false, error: "Purchase record not found" };
+      }
+
+      const currentPurchase = currentPurchaseResult.data;
+      const originalDate = currentPurchase.date || dbUtils.dateString();
+      const originalMaterialType = currentPurchase.material_type;
+      const originalQuantity = currentPurchase.quantity;
+
+      // Prepare updated purchase data
+      const updatedPurchaseData = {
+        ...currentPurchase,
+        date,
+        material_type,
+        quantity: parseFloat(quantity),
+        purchase_rate: parseFloat(purchase_rate),
+        total_cost: parseFloat(total_cost),
+        supplier,
+        notes,
+        last_modified: dbUtils.timestamp(),
+      };
+
+      const updates = {};
+
+      // Update in main purchases path
+      updates[`${DB_PATHS.MATERIAL_PURCHASES}/${purchaseId}`] =
+        updatedPurchaseData;
+
+      // Handle date-wise storage
+      if (date !== originalDate) {
+        // If date changed, move from old date to new date
+        updates[
+          `${DB_PATHS.MATERIAL_PURCHASES}_by_date/${originalDate}/${purchaseId}`
+        ] = null;
+        updates[
+          `${DB_PATHS.MATERIAL_PURCHASES}_by_date/${date}/${purchaseId}`
+        ] = updatedPurchaseData;
+      } else {
+        // Same date, just update
+        updates[
+          `${DB_PATHS.MATERIAL_PURCHASES}_by_date/${date}/${purchaseId}`
+        ] = updatedPurchaseData;
+      }
+
+      // Handle material type changes
+      if (material_type !== originalMaterialType) {
+        // Remove from old material type
+        updates[
+          `${DB_PATHS.MATERIAL_PURCHASES}_by_type/${originalMaterialType}/${purchaseId}`
+        ] = null;
+        // Add to new material type
+        updates[
+          `${DB_PATHS.MATERIAL_PURCHASES}_by_type/${material_type}/${purchaseId}`
+        ] = updatedPurchaseData;
+      } else {
+        // Same material type, just update
+        updates[
+          `${DB_PATHS.MATERIAL_PURCHASES}_by_type/${material_type}/${purchaseId}`
+        ] = updatedPurchaseData;
+      }
+
+      const result = await dbUtils.batchUpdate(updates);
+
+      if (result.success) {
+        return {
+          success: true,
+          data: updatedPurchaseData,
+          message: "Material purchase updated successfully",
+        };
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Error updating material purchase:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Delete material purchase record
+  deleteMaterialPurchase: async (purchaseId) => {
+    try {
+      // Get current purchase data
+      const currentPurchaseResult = await dbUtils.readData(
+        `${DB_PATHS.MATERIAL_PURCHASES}/${purchaseId}`
+      );
+
+      if (!currentPurchaseResult.success || !currentPurchaseResult.data) {
+        return { success: false, error: "Purchase record not found" };
+      }
+
+      const currentPurchase = currentPurchaseResult.data;
+      const purchaseDate = currentPurchase.date || dbUtils.dateString();
+      const materialType = currentPurchase.material_type;
+
+      const updates = {};
+
+      // Delete from main purchases path
+      updates[`${DB_PATHS.MATERIAL_PURCHASES}/${purchaseId}`] = null;
+
+      // Delete from date-wise purchases path
+      updates[
+        `${DB_PATHS.MATERIAL_PURCHASES}_by_date/${purchaseDate}/${purchaseId}`
+      ] = null;
+
+      // Delete from material-specific purchases path
+      updates[
+        `${DB_PATHS.MATERIAL_PURCHASES}_by_type/${materialType}/${purchaseId}`
+      ] = null;
+
+      const result = await dbUtils.batchUpdate(updates);
+
+      if (result.success) {
+        return {
+          success: true,
+          data: {
+            deleted_purchase: currentPurchase,
+            purchase_id: purchaseId,
+          },
+          message: "Material purchase deleted successfully",
+        };
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Error deleting material purchase:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Update material stock (for adjustments)
+  updateMaterialStock: async (
+    materialType,
+    quantity,
+    operation,
+    notes = ""
+  ) => {
+    try {
+      const materialPath = DB_PATHS.MATERIALS[materialType.toUpperCase()];
+      if (!materialPath) {
+        return { success: false, error: "Invalid material type" };
+      }
+
+      // Get current stock
+      const currentStockResult = await dbUtils.readData(
+        `${materialPath}/inventory`
+      );
+      const currentStock = currentStockResult.data || {
+        total_quantity: 0,
+        last_updated: 0,
+      };
+
+      let newStock;
+      if (operation === "add") {
+        newStock = (currentStock.total_quantity || 0) + parseFloat(quantity);
+      } else if (operation === "subtract") {
+        newStock = Math.max(
+          0,
+          (currentStock.total_quantity || 0) - parseFloat(quantity)
+        );
+      } else {
+        throw new Error('Invalid operation. Use "add" or "subtract"');
+      }
+
+      const timestamp = dbUtils.timestamp();
+      const updates = {};
+
+      // Update material inventory
+      updates[`${materialPath}/inventory/total_quantity`] = newStock;
+      updates[`${materialPath}/inventory/last_updated`] = timestamp;
+
+      // Log the transaction
+      const transactionKey = `adj_${timestamp}`;
+      updates[`${materialPath}/transactions/${transactionKey}`] = {
+        operation,
+        quantity: parseFloat(quantity),
+        previous_stock: currentStock.total_quantity || 0,
+        new_stock: newStock,
+        notes,
+        timestamp,
+        reference: `ADJUSTMENT_${transactionKey}`,
+      };
+
+      const result = await dbUtils.batchUpdate(updates);
+
+      if (result.success) {
+        // Trigger inventory update event
+        inventoryService.triggerInventoryUpdate("material", {
+          material_type: materialType,
+          operation: "adjustment",
+          change:
+            operation === "add" ? parseFloat(quantity) : -parseFloat(quantity),
+          new_stock: newStock,
+          timestamp,
+        });
+
+        return {
+          success: true,
+          data: {
+            material_type: materialType,
+            previous_stock: currentStock.total_quantity || 0,
+            new_stock: newStock,
+            change:
+              operation === "add"
+                ? parseFloat(quantity)
+                : -parseFloat(quantity),
+          },
+          message: `${materialType} stock ${
+            operation === "add" ? "increased" : "decreased"
+          } by ${quantity}`,
+        };
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Error updating material stock:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Get material stock levels
+  getMaterialStock: async (materialType = null) => {
+    try {
+      if (materialType) {
+        // Get specific material stock
+        const materialPath = DB_PATHS.MATERIALS[materialType.toUpperCase()];
+        if (!materialPath) {
+          return { success: false, error: "Invalid material type" };
+        }
+
+        const result = await dbUtils.readData(`${materialPath}/inventory`);
+        return {
+          success: true,
+          data: result.data || {
+            total_quantity: 0,
+            unit: "tons",
+            last_updated: 0,
+          },
+        };
+      } else {
+        // Get all material stocks
+        const materialTypes = ["sand", "fly_ash", "dust", "lime", "chemical"];
+        const stocks = {};
+
+        for (const type of materialTypes) {
+          const materialPath = DB_PATHS.MATERIALS[type.toUpperCase()];
+          if (materialPath) {
+            const result = await dbUtils.readData(`${materialPath}/inventory`);
+            stocks[type] = result.data || {
+              total_quantity: 0,
+              unit: type === "chemical" ? "litres" : "tons",
+              last_updated: 0,
+            };
+          }
+        }
+
+        return {
+          success: true,
+          data: stocks,
+        };
+      }
+    } catch (error) {
+      console.error("Error fetching material stock:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Get material purchases by date range
+  getMaterialPurchasesByDateRange: async (startDate, endDate) => {
+    try {
+      const result = await dbUtils.readData(
+        `${DB_PATHS.MATERIAL_PURCHASES}_by_date`
+      );
+
+      if (!result.success || !result.data) {
+        return { success: true, data: [] };
+      }
+
+      let purchases = [];
+
+      // Filter purchases by date range
+      Object.entries(result.data).forEach(([date, dayPurchases]) => {
+        if (date >= startDate && date <= endDate) {
+          Object.entries(dayPurchases).forEach(([key, data]) => {
+            purchases.push({
+              id: key,
+              ...data,
+            });
+          });
+        }
+      });
+
+      // Sort by date (most recent first)
+      purchases = purchases.sort((a, b) => {
+        return (
+          new Date(b.date || b.timestamp) - new Date(a.date || a.timestamp)
+        );
+      });
+
+      return {
+        success: true,
+        data: purchases,
+      };
+    } catch (error) {
+      console.error("Error getting material purchases by date range:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Listen to material inventory changes
+  listenToMaterialInventory: (callback) => {
+    try {
+      const unsubscribers = [];
+      const materialTypes = ["sand", "fly_ash", "dust", "lime", "chemical"];
+
+      materialTypes.forEach((type) => {
+        const materialPath = DB_PATHS.MATERIALS[type.toUpperCase()];
+        if (materialPath) {
+          const unsubscriber = dbUtils.listenToData(
+            `${materialPath}/inventory`,
+            (data) => {
+              if (data !== null) {
+                callback({
+                  type: "material",
+                  material_type: type,
+                  data: data,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          );
+          unsubscribers.push(unsubscriber);
+        }
+      });
+
+      // Return cleanup function
+      return () => {
+        unsubscribers.forEach((unsubscribe) => {
+          try {
+            if (typeof unsubscribe === "function") {
+              unsubscribe();
+            }
+          } catch (error) {
+            console.error(
+              "Error unsubscribing from material inventory:",
+              error
+            );
+          }
+        });
+      };
+    } catch (error) {
+      console.error("Error setting up material inventory listeners:", error);
+      return () => {}; // Return empty cleanup function
     }
   },
 };

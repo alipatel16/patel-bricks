@@ -34,6 +34,7 @@ import {
   CheckCircle as CheckCircleIcon,
   AttachMoney as MoneyIcon,
   Refresh as RefreshIcon,
+  Construction as MaterialIcon,
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 
@@ -44,10 +45,12 @@ import { useInventory, useBrickInventory, useCementInventory } from '../context/
 // Import services for calculated stock
 import { productionService } from '../services/productionService';
 import { salesService } from '../services/salesService';
+import { inventoryService } from '../services/inventoryService';
 
 // Import separate components
 import CementPurchaseHistory from '../components/inventory/CementPurchaseHistory';
 import TransactionHistory from '../components/inventory/TransactionHistory';
+import MaterialPurchaseHistory from '../components/inventory/MaterialPurchaseHistory';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -83,13 +86,23 @@ function Inventory() {
   // State management
   const [currentTab, setCurrentTab] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState(''); // 'brick-adjust', 'cement-purchase', 'cement-adjust'
+  const [dialogType, setDialogType] = useState(''); // 'brick-adjust', 'cement-purchase', 'cement-adjust', 'material-purchase'
+
+  // Material types for the new purchase dialog
+  const materialTypes = [
+    { value: 'sand', label: 'Sand', unit: 'tons' },
+    { value: 'fly_ash', label: 'Fly Ash', unit: 'tons' },
+    { value: 'dust', label: 'Dust', unit: 'tons' },
+    { value: 'lime', label: 'Lime', unit: 'tons' },
+    { value: 'chemical', label: 'Chemical', unit: 'litres' },
+  ];
 
   // Form management
   const {
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting }
   } = useForm({
     defaultValues: {
@@ -99,8 +112,14 @@ function Inventory() {
       costPerBag: '',
       supplier: '',
       date: new Date().toISOString().split('T')[0],
+      materialType: 'sand',
+      purchaseRate: '',
     }
   });
+
+  // Watch material type to update form labels
+  const selectedMaterialType = watch('materialType');
+  const selectedMaterial = materialTypes.find(m => m.value === selectedMaterialType);
 
   // Function to calculate actual brick stock
   const calculateActualBrickStock = async () => {
@@ -148,7 +167,7 @@ function Inventory() {
     try {
       await Promise.all([
         loadCalculatedBrickStock(),
-        inventoryActions.refreshInventory()
+        inventoryService.forceSyncInventory()
       ]);
       appActions.showNotification('Inventory data refreshed', 'success');
     } catch (error) {
@@ -172,6 +191,15 @@ function Inventory() {
       reset({
         quantity: '',
         costPerBag: cement.cost_per_bag || 25,
+        supplier: '',
+        notes: '',
+        date: new Date().toISOString().split('T')[0],
+      });
+    } else if (type === 'material-purchase') {
+      reset({
+        materialType: 'sand',
+        quantity: '',
+        purchaseRate: '',
         supplier: '',
         notes: '',
         date: new Date().toISOString().split('T')[0],
@@ -220,6 +248,20 @@ function Inventory() {
           );
           break;
 
+        case 'material-purchase':
+          // Call Firebase-based material purchase service
+          result = await inventoryService.purchaseMaterial({
+            materialType: data.materialType,
+            quantity: parseFloat(data.quantity),
+            purchaseRate: parseFloat(data.purchaseRate),
+            totalCost: parseFloat(data.quantity) * parseFloat(data.purchaseRate),
+            supplier: data.supplier,
+            notes: data.notes,
+            date: data.date,
+            unit: selectedMaterial.unit
+          });
+          break;
+
         default:
           throw new Error('Invalid dialog type');
       }
@@ -230,6 +272,8 @@ function Inventory() {
         if (dialogType === 'brick-adjust') {
           loadCalculatedBrickStock();
         }
+        // Trigger inventory refresh using the service's force sync
+        inventoryService.forceSyncInventory();
         appActions.showNotification('Operation completed successfully', 'success');
       }
     } catch (error) {
@@ -247,6 +291,8 @@ function Inventory() {
         return 'Adjust Cement Stock';
       case 'cement-purchase':
         return 'Purchase Cement';
+      case 'material-purchase':
+        return 'Purchase Material';
       default:
         return 'Inventory Operation';
     }
@@ -272,7 +318,7 @@ function Inventory() {
             Inventory Management
           </Typography>
           <Typography variant="body1" color="textSecondary">
-            Monitor and manage your brick and cement inventory levels.
+            Monitor and manage your brick, cement, and material inventory levels.
           </Typography>
         </Box>
         
@@ -288,8 +334,16 @@ function Inventory() {
           </Tooltip>
           <Button
             variant="outlined"
+            startIcon={<MaterialIcon />}
+            onClick={() => handleOpenDialog('material-purchase')}
+            color="success"
+          >
+            Purchase Materials
+          </Button>
+          <Button
+            variant="outlined"
             startIcon={<HistoryIcon />}
-            onClick={() => setCurrentTab(2)}
+            onClick={() => setCurrentTab(3)}
           >
             View History
           </Button>
@@ -491,6 +545,7 @@ function Inventory() {
             <Tab label="Cement Inventory" />
             <Tab label="Transaction History" />
             <Tab label="Cement Purchase History"/>
+            <Tab label="Material Purchase History"/>
           </Tabs>
         </Box>
 
@@ -658,6 +713,11 @@ function Inventory() {
         <TabPanel value={currentTab} index={3}>
           <CementPurchaseHistory />
         </TabPanel>
+
+        {/* Material Purchase History Tab */}
+        <TabPanel value={currentTab} index={4}>
+          <MaterialPurchaseHistory />
+        </TabPanel>
       </Card>
 
       {/* Inventory Operation Dialog */}
@@ -672,8 +732,29 @@ function Inventory() {
           
           <DialogContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-              {/* Date field for cement purchase */}
-              {dialogType === 'cement-purchase' && (
+              {/* Material Type Selection for material-purchase */}
+              {dialogType === 'material-purchase' && (
+                <Controller
+                  name="materialType"
+                  control={control}
+                  rules={{ required: "Material type is required" }}
+                  render={({ field }) => (
+                    <FormControl fullWidth>
+                      <InputLabel>Material Type</InputLabel>
+                      <Select {...field} label="Material Type">
+                        {materialTypes.map((material) => (
+                          <MenuItem key={material.value} value={material.value}>
+                            {material.label} ({material.unit})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                />
+              )}
+
+              {/* Date field for cement and material purchase */}
+              {(dialogType === 'cement-purchase' || dialogType === 'material-purchase') && (
                 <Controller
                   name="date"
                   control={control}
@@ -701,13 +782,20 @@ function Inventory() {
                 control={control}
                 rules={{ 
                   required: 'Quantity is required',
-                  min: { value: 1, message: 'Quantity must be at least 1' }
+                  min: { value: 0.01, message: 'Quantity must be greater than 0' }
                 }}
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label={dialogType === 'cement-purchase' ? 'Bags to Purchase' : 'Quantity'}
+                    label={
+                      dialogType === 'cement-purchase' 
+                        ? 'Bags to Purchase' 
+                        : dialogType === 'material-purchase'
+                        ? `Quantity (${selectedMaterial?.unit || 'units'})`
+                        : 'Quantity'
+                    }
                     type="number"
+                    step={dialogType === 'material-purchase' ? '0.01' : '1'}
                     fullWidth
                     error={!!errors.quantity}
                     helperText={errors.quantity?.message}
@@ -715,7 +803,7 @@ function Inventory() {
                 )}
               />
 
-              {dialogType !== 'cement-purchase' && (
+              {dialogType !== 'cement-purchase' && dialogType !== 'material-purchase' && (
                 <Controller
                   name="operation"
                   control={control}
@@ -731,7 +819,8 @@ function Inventory() {
                 />
               )}
 
-              {(dialogType === 'cement-purchase' || dialogType === 'cement-adjust') && (
+              {/* Cost/Rate fields */}
+              {dialogType === 'cement-purchase' && (
                 <Controller
                   name="costPerBag"
                   control={control}
@@ -753,15 +842,61 @@ function Inventory() {
                 />
               )}
 
-              {dialogType === 'cement-purchase' && (
+              {dialogType === 'material-purchase' && (
+                <Controller
+                  name="purchaseRate"
+                  control={control}
+                  rules={{ 
+                    required: 'Purchase rate is required',
+                    min: { value: 0.01, message: 'Rate must be greater than 0' }
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label={`Rate per ${selectedMaterial?.unit} (₹)`}
+                      type="number"
+                      step="0.01"
+                      fullWidth
+                      error={!!errors.purchaseRate}
+                      helperText={errors.purchaseRate?.message}
+                    />
+                  )}
+                />
+              )}
+
+              {dialogType === 'cement-adjust' && (
+                <Controller
+                  name="costPerBag"
+                  control={control}
+                  rules={{ 
+                    required: 'Cost per bag is required',
+                    min: { value: 0.01, message: 'Cost must be greater than 0' }
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Cost per Bag (₹)"
+                      type="number"
+                      step="0.01"
+                      fullWidth
+                      error={!!errors.costPerBag}
+                      helperText={errors.costPerBag?.message}
+                    />
+                  )}
+                />
+              )}
+
+              {/* Supplier field for purchases */}
+              {(dialogType === 'cement-purchase' || dialogType === 'material-purchase') && (
                 <Controller
                   name="supplier"
                   control={control}
                   render={({ field }) => (
                     <TextField
                       {...field}
-                      label="Supplier (optional)"
+                      label="Supplier Name"
                       fullWidth
+                      placeholder="Enter supplier name"
                     />
                   )}
                 />
@@ -780,6 +915,27 @@ function Inventory() {
                   />
                 )}
               />
+
+              {/* Total cost display for material purchase */}
+              {dialogType === 'material-purchase' && watch('quantity') && watch('purchaseRate') && (
+                <Box sx={{ 
+                  p: 2, 
+                  backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                  borderRadius: 1,
+                  border: 1,
+                  borderColor: alpha(theme.palette.primary.main, 0.2)
+                }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Total Cost Calculation:
+                  </Typography>
+                  <Typography variant="h6" color="primary">
+                    ₹{(parseFloat(watch('quantity') || 0) * parseFloat(watch('purchaseRate') || 0)).toLocaleString()}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    {watch('quantity')} {selectedMaterial?.unit} × ₹{watch('purchaseRate')} per {selectedMaterial?.unit}
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </DialogContent>
           

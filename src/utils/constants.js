@@ -31,6 +31,14 @@ export const DB_PATHS = {
     BRICKS: 'bricks/inventory',
     CEMENT: 'cement/inventory',
   },
+  MATERIALS: {
+    SAND: 'materials/sand',
+    FLY_ASH: 'materials/fly_ash', 
+    DUST: 'materials/dust',
+    LIME: 'materials/lime',
+    CHEMICAL: 'materials/chemical',
+  },
+  MATERIAL_PURCHASES: 'materials/purchases',
 };
 
 // Date Formats
