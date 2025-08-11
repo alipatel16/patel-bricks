@@ -103,7 +103,7 @@ function MaterialPurchaseHistory() {
     try {
       setPurchaseHistoryLoading(true);
       // Use Firebase-based service method
-      const result = await inventoryService.getMaterialPurchaseHistory(null);
+      const result = await inventoryService.getMaterialPurchaseHistory(1000);
       
       if (result.success) {
         setMaterialPurchaseHistory(result.data || []);
