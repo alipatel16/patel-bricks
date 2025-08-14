@@ -233,12 +233,12 @@ function Production() {
         return;
       }
       
-      if (!cementUsed || cementUsed <= 0) {
+      // if (!cementUsed || cementUsed <= 0) {
         
-        alert("Please enter a valid cement amount");
-        appActions.showNotification("Please enter a valid cement amount", "error");
-        return;
-      }
+      //   alert("Please enter a valid cement amount");
+      //   appActions.showNotification("Please enter a valid cement amount", "error");
+      //   return;
+      // }
 
       // For updates, we need to check available cement + current production's cement
       const availableCement = editingProduction 

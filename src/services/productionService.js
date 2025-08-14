@@ -557,9 +557,9 @@ export const productionService = {
         return { success: false, error: "Invalid quantity provided" };
       }
 
-      if (!newCementUsed || newCementUsed <= 0) {
-        return { success: false, error: "Invalid cement amount provided" };
-      }
+      // if (!newCementUsed || newCementUsed <= 0) {
+      //   return { success: false, error: "Invalid cement amount provided" };
+      // }
 
       // Validate date format if date is being changed
       const targetDate = newDate || originalDate;
