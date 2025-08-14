@@ -1,4 +1,4 @@
-// components/customers/CustomerManagement.js - Consistent Design Version
+// components/customers/CustomerManagement.js - Enhanced version with automatic historical sales update
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -34,6 +34,8 @@ import {
   LinearProgress,
   useTheme,
   alpha,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -51,9 +53,13 @@ import {
   TrendingUp as TrendingUpIcon,
   Group as GroupIcon,
   Refresh as RefreshIcon,
+  History as HistoryIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { customerService } from '../../services/customerService';
-import { INDIAN_STATES } from '../../utils/constants';
+import { salesService } from '../../services/salesService'; // NEW: Import salesService
+import { dbUtils } from '../../services/firebase'; // NEW: Import dbUtils
+import { INDIAN_STATES, DB_PATHS } from '../../utils/constants'; // NEW: Import DB_PATHS
 import { formatCurrency } from '../../utils/calculations';
 import toast from 'react-hot-toast';
 
@@ -93,6 +99,10 @@ const CustomerManagement = () => {
     brick_rate: ''
   });
 
+  // NEW: States for historical sales update functionality
+  const [updateHistoricalSales, setUpdateHistoricalSales] = useState(true);
+  const [isUpdatingHistoricalSales, setIsUpdatingHistoricalSales] = useState(false);
+
   useEffect(() => {
     loadCustomers();
   }, []);
@@ -107,7 +117,7 @@ const CustomerManagement = () => {
         toast.error('Failed to load customers');
       }
     } catch (error) {
-      
+      console.error('Load customers error:', error);
       toast.error('Failed to load customers');
     } finally {
       setLoading(false);
@@ -121,7 +131,7 @@ const CustomerManagement = () => {
       await loadCustomers();
       toast.success('Customer data refreshed');
     } catch (error) {
-      
+      console.error('Refresh error:', error);
       toast.error('Failed to refresh customer data');
     } finally {
       setRefreshing(false);
@@ -230,7 +240,7 @@ const CustomerManagement = () => {
         toast.error(result.error);
       }
     } catch (error) {
-      
+      console.error('Save customer error:', error);
       toast.error('Failed to save customer');
     } finally {
       setLoading(false);
@@ -272,6 +282,7 @@ const CustomerManagement = () => {
     setLocationDialogOpen(false);
     setSelectedCustomer(null);
     setEditingLocation(null);
+    setUpdateHistoricalSales(true); // Reset to default
     setLocationForm({
       name: '',
       address: '',
@@ -284,6 +295,100 @@ const CustomerManagement = () => {
     });
   };
 
+  // NEW: Function to update historical sales records
+  const updateHistoricalSalesRecords = async (customerId, oldLocationName, newLocationName, newBrickRate = null) => {
+    try {
+      console.log(`Updating historical sales: ${oldLocationName} -> ${newLocationName} for customer ${customerId}`);
+      
+      // Get all sales records
+      const salesResult = await salesService.getAllSales();
+      if (!salesResult.success || !salesResult.data) {
+        console.log('No sales data found or failed to fetch sales');
+        return { success: true, updatedCount: 0 };
+      }
+
+      // Find sales records for this customer with the old location name
+      const salesToUpdate = salesResult.data.filter(sale => 
+        sale.customer_phone === customerId && 
+        sale.location_name === oldLocationName
+      );
+
+      console.log(`Found ${salesToUpdate.length} sales records to update`);
+
+      if (salesToUpdate.length === 0) {
+        return { success: true, updatedCount: 0 };
+      }
+
+      // Prepare batch updates
+      const updates = {};
+      
+      salesToUpdate.forEach(sale => {
+        const saleUpdates = {
+          ...sale,
+          location_name: newLocationName,
+          last_edited: dbUtils.timestamp(),
+          edit_history: sale.edit_history || sale.invoice_number,
+          updated_by_location_change: true,
+        };
+
+        // Optionally update brick rate if provided and different
+        if (newBrickRate && parseFloat(newBrickRate) !== parseFloat(sale.price_per_brick)) {
+          saleUpdates.price_per_brick = parseFloat(newBrickRate);
+          saleUpdates.price_updated_by_location_change = true;
+          
+          // Recalculate amounts with new rate
+          const quantity = parseInt(sale.quantity || 0);
+          const discount = parseFloat(sale.discount_amount || 0);
+          const newSubtotal = quantity * parseFloat(newBrickRate);
+          const newTaxableAmount = newSubtotal - discount;
+          
+          saleUpdates.subtotal = newSubtotal;
+          saleUpdates.taxable_amount = newTaxableAmount;
+          
+          // Recalculate GST if applicable
+          if (sale.include_gst || sale.gst_included) {
+            const gstRate = sale.is_inter_state ? 12 : 12; // 12% total GST
+            const gstAmount = (newTaxableAmount * gstRate) / 100;
+            
+            if (sale.is_inter_state) {
+              saleUpdates.igst_amount = gstAmount;
+              saleUpdates.cgst_amount = 0;
+              saleUpdates.sgst_amount = 0;
+            } else {
+              saleUpdates.cgst_amount = gstAmount / 2;
+              saleUpdates.sgst_amount = gstAmount / 2;
+              saleUpdates.igst_amount = 0;
+            }
+            
+            saleUpdates.total_tax = gstAmount;
+            saleUpdates.total_amount = newTaxableAmount + gstAmount;
+          } else {
+            saleUpdates.total_amount = newTaxableAmount;
+          }
+        }
+
+        // Add to batch updates
+        updates[`${DB_PATHS.SALES}/transactions/${sale.invoice_number}`] = saleUpdates;
+      });
+
+      // Execute batch update
+      const updateResult = await dbUtils.batchUpdate(updates);
+      
+      if (updateResult.success) {
+        console.log(`Successfully updated ${salesToUpdate.length} sales records`);
+        return { success: true, updatedCount: salesToUpdate.length };
+      } else {
+        console.error('Failed to update sales records:', updateResult.error);
+        return { success: false, error: updateResult.error };
+      }
+
+    } catch (error) {
+      console.error('Error updating historical sales records:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // ENHANCED: Save location with historical sales update functionality
   const handleSaveLocation = async () => {
     if (!locationForm.name || !locationForm.address) {
       toast.error('Location name and address are required');
@@ -291,7 +396,14 @@ const CustomerManagement = () => {
     }
 
     setLoading(true);
+    setIsUpdatingHistoricalSales(true);
+
     try {
+      // Capture old location name for historical sales update
+      const oldLocationName = editingLocation ? editingLocation.name : null;
+      const newLocationName = locationForm.name;
+      const newBrickRate = locationForm.brick_rate;
+
       let result;
       if (editingLocation) {
         result = await customerService.updateCustomerLocation(
@@ -307,17 +419,49 @@ const CustomerManagement = () => {
       }
 
       if (result.success) {
-        toast.success(result.message);
+        // If this is an edit and location name changed, update historical sales
+        if (editingLocation && 
+            oldLocationName && 
+            oldLocationName !== newLocationName && 
+            updateHistoricalSales) {
+          
+          console.log('Location name changed, updating historical sales...');
+          
+          const historicalUpdateResult = await updateHistoricalSalesRecords(
+            selectedCustomer.id, 
+            oldLocationName, 
+            newLocationName,
+            newBrickRate
+          );
+
+          if (historicalUpdateResult.success) {
+            if (historicalUpdateResult.updatedCount > 0) {
+              toast.success(
+                `${result.message} and updated ${historicalUpdateResult.updatedCount} historical sales records`
+              );
+            } else {
+              toast.success(`${result.message} (no historical sales found to update)`);
+            }
+          } else {
+            toast.warning(
+              `${result.message} but failed to update some historical sales records: ${historicalUpdateResult.error}`
+            );
+          }
+        } else {
+          toast.success(result.message);
+        }
+
         await loadCustomers();
         handleCloseLocationDialog();
       } else {
         toast.error(result.error);
       }
     } catch (error) {
-      
+      console.error('Save location error:', error);
       toast.error('Failed to save location');
     } finally {
       setLoading(false);
+      setIsUpdatingHistoricalSales(false);
     }
   };
 
@@ -333,7 +477,7 @@ const CustomerManagement = () => {
           toast.error(result.error);
         }
       } catch (error) {
-        
+        console.error('Delete location error:', error);
         toast.error('Failed to delete location');
       } finally {
         setLoading(false);
@@ -353,7 +497,7 @@ const CustomerManagement = () => {
           toast.error(result.error);
         }
       } catch (error) {
-        
+        console.error('Delete customer error:', error);
         toast.error('Failed to delete customer');
       } finally {
         setLoading(false);
@@ -401,6 +545,20 @@ const CustomerManagement = () => {
       {/* Loading indicator */}
       {(loading || refreshing) && (
         <LinearProgress sx={{ mb: 2 }} />
+      )}
+
+      {/* NEW: Historical Sales Update Progress */}
+      {isUpdatingHistoricalSales && (
+        <Alert 
+          severity="info" 
+          sx={{ mb: 2 }}
+          icon={<HistoryIcon />}
+        >
+          <Typography variant="body2">
+            Updating historical sales records with new location information...
+          </Typography>
+          <LinearProgress sx={{ mt: 1 }} />
+        </Alert>
       )}
 
       {/* Stats Cards - Consistent Design with Fixed Heights */}
@@ -627,7 +785,7 @@ const CustomerManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Customers List - Simplified Design */}
+      {/* Customers List - Keep existing implementation */}
       {filteredCustomers.length === 0 ? (
         <Card>
           <CardContent sx={{ textAlign: 'center', py: 6 }}>
@@ -987,7 +1145,7 @@ const CustomerManagement = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Location Dialog - Keep existing implementation but simplify styling */}
+      {/* ENHANCED: Location Dialog with Historical Sales Update Option */}
       <Dialog open={locationDialogOpen} onClose={handleCloseLocationDialog} maxWidth="md" fullWidth>
         <DialogTitle>
           <Box display="flex" alignItems="center" gap={1}>
@@ -1115,6 +1273,43 @@ const CustomerManagement = () => {
                 </Select>
               </FormControl>
             </Grid>
+
+            {/* NEW: Historical Sales Update Option */}
+            {editingLocation && editingLocation.name !== locationForm.name && (
+              <Grid item xs={12}>
+                <Alert 
+                  severity="warning" 
+                  sx={{ mb: 2 }}
+                  icon={<WarningIcon />}
+                >
+                  <Typography variant="body2" fontWeight="bold">
+                    Location Name Changed
+                  </Typography>
+                  <Typography variant="body2">
+                    The location name has changed from "{editingLocation.name}" to "{locationForm.name}".
+                  </Typography>
+                </Alert>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={updateHistoricalSales}
+                      onChange={(e) => setUpdateHistoricalSales(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight="medium">
+                        Update historical sales records
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Automatically update all past sales for this customer that reference the old location name "{editingLocation.name}" to use the new name "{locationForm.name}". This will save you from manually editing each sale record.
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
@@ -1123,8 +1318,9 @@ const CustomerManagement = () => {
             onClick={handleSaveLocation} 
             variant="contained"
             disabled={loading}
+            startIcon={isUpdatingHistoricalSales ? <HistoryIcon /> : null}
           >
-            {loading ? 'Saving...' : editingLocation ? 'Update Location' : 'Add Location'}
+            {loading ? (isUpdatingHistoricalSales ? 'Updating Sales...' : 'Saving...') : editingLocation ? 'Update Location' : 'Add Location'}
           </Button>
         </DialogActions>
       </Dialog>
