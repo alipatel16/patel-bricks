@@ -1,4 +1,4 @@
-// components/Sales/RecordSaleDialog.js - Broader dialog with 3-column grid
+// components/Sales/RecordSaleDialog.js - FIXED: Auto-populate location in edit mode
 import { useState, useEffect } from "react";
 import {
   Box,
@@ -53,7 +53,8 @@ import {
 } from "../../utils/constants";
 import { productionService } from "../../services/productionService";
 import { salesService } from "../../services/salesService";
-import { dbUtils } from "../../services/firebase"; // NEW: Import for loading vehicles
+import { customerService } from "../../services/customerService"; // NEW: Import customerService
+import { dbUtils } from "../../services/firebase";
 
 const RecordSaleDialog = ({
   open,
@@ -74,7 +75,7 @@ const RecordSaleDialog = ({
   calculatedAmounts,
   setCalculatedAmounts,
   searchCustomers,
-  // ONLY ADDITION: Edit mode props
+  // Edit mode props
   editingData,
   isEditMode,
 }) => {
@@ -85,7 +86,7 @@ const RecordSaleDialog = ({
   const [customerSearchTimeout, setCustomerSearchTimeout] = useState(null);
   const [calculatedBrickStock, setCalculatedBrickStock] = useState(0);
 
-  // NEW: Vehicle management state
+  // Vehicle management state
   const [vehicleOptions, setVehicleOptions] = useState([]);
   const [vehicleLoading, setVehicleLoading] = useState(false);
 
@@ -130,12 +131,12 @@ const RecordSaleDialog = ({
   const watchDiscountType = watch("discountType");
   const watchCustomerState = watch("customerState");
   const watchIncludeGST = watch("includeGST");
-  const watchVehicleNumber = watch("vehicleNumber"); // NEW: Watch vehicle number
+  const watchVehicleNumber = watch("vehicleNumber");
 
-  // ONLY ADDITION: Handle edit mode - populate form with existing data
+  // FIXED: Enhanced edit mode handling with proper customer data loading
   useEffect(() => {
     if (isEditMode && editingData && open) {
-      
+      console.log('Edit mode - setting up form with data:', editingData);
       
       // Reset form with edit data
       reset({
@@ -157,13 +158,131 @@ const RecordSaleDialog = ({
         notes: editingData.notes || "",
         includeGST: editingData.includeGST || false,
       });
+
+      // FIXED: Load complete customer data for edit mode
+      const loadCustomerDataForEdit = async () => {
+        if (editingData.originalSale && editingData.originalSale.customer_phone) {
+          try {
+            console.log('Loading customer data for edit mode:', editingData.originalSale.customer_phone);
+            
+            // Load complete customer data from customerService
+            const customerResult = await customerService.getCustomerById(editingData.originalSale.customer_phone);
+            
+            if (customerResult.success && customerResult.data) {
+              const fullCustomerData = customerResult.data;
+              console.log('Loaded full customer data:', fullCustomerData);
+              
+              // Set selected customer with complete data including locations
+              setSelectedCustomer(fullCustomerData);
+              
+              // Set location options from customer data
+              if (fullCustomerData.locations && fullCustomerData.locations.length > 0) {
+                setLocationOptions(fullCustomerData.locations);
+                
+                // Find and set the selected location
+                const matchingLocation = fullCustomerData.locations.find(
+                  loc => loc.name === editingData.locationName
+                );
+                
+                if (matchingLocation) {
+                  console.log('Found matching location:', matchingLocation);
+                  setSelectedLocation(matchingLocation);
+                } else {
+                  // If location not found in customer data, create a temporary location object
+                  const tempLocation = {
+                    id: 'temp_location',
+                    name: editingData.locationName || '',
+                    address: editingData.originalSale.customer_address || ''
+                  };
+                  console.log('Creating temporary location:', tempLocation);
+                  setSelectedLocation(tempLocation);
+                }
+              } else {
+                // No locations in customer data, create temporary location
+                if (editingData.locationName) {
+                  const tempLocation = {
+                    id: 'temp_location',
+                    name: editingData.locationName,
+                    address: editingData.originalSale.customer_address || ''
+                  };
+                  setLocationOptions([tempLocation]);
+                  setSelectedLocation(tempLocation);
+                }
+              }
+            } else {
+              // Fallback: Create customer object from sale data
+              console.log('Fallback: Creating customer from sale data');
+              const customerFromSale = {
+                name: editingData.customerName,
+                phone: editingData.customerPhone,
+                email: editingData.customerEmail,
+                state: editingData.customerState,
+                state_code: editingData.customerStateCode,
+                gstin: editingData.customerGSTIN,
+                locations: editingData.locationName ? [{
+                  id: 'temp_location',
+                  name: editingData.locationName,
+                  address: editingData.originalSale?.customer_address || editingData.locationName
+                }] : []
+              };
+              
+              setSelectedCustomer(customerFromSale);
+              
+              if (editingData.locationName) {
+                const tempLocation = {
+                  id: 'temp_location',
+                  name: editingData.locationName,
+                  address: editingData.originalSale?.customer_address || editingData.locationName
+                };
+                setLocationOptions([tempLocation]);
+                setSelectedLocation(tempLocation);
+              }
+            }
+          } catch (error) {
+            console.error('Error loading customer data for edit:', error);
+            // Fallback to creating customer from sale data
+            const customerFromSale = {
+              name: editingData.customerName,
+              phone: editingData.customerPhone,
+              email: editingData.customerEmail,
+              state: editingData.customerState,
+              state_code: editingData.customerStateCode,
+              gstin: editingData.customerGSTIN,
+              locations: editingData.locationName ? [{
+                id: 'temp_location',
+                name: editingData.locationName,
+                address: editingData.originalSale?.customer_address || editingData.locationName
+              }] : []
+            };
+            
+            setSelectedCustomer(customerFromSale);
+            
+            if (editingData.locationName) {
+              const tempLocation = {
+                id: 'temp_location',
+                name: editingData.locationName,
+                address: editingData.originalSale?.customer_address || editingData.locationName
+              };
+              setLocationOptions([tempLocation]);
+              setSelectedLocation(tempLocation);
+            }
+          }
+        }
+      };
+
+      // Load customer data for edit mode
+      loadCustomerDataForEdit();
+      
     } else if (!isEditMode && open) {
       // Reset to default values for new sale
       reset(defaultValues);
+      setSelectedCustomer(null);
+      setSelectedLocation(null);
+      setLocationOptions([]);
     }
-  }, [isEditMode, editingData, open, reset]);
+  }, [isEditMode, editingData, open, reset, setSelectedCustomer, setSelectedLocation, setLocationOptions]);
 
-  // NEW: Load vehicles from settings
+  // Load vehicles from settings
   const loadVehicleOptions = async () => {
     try {
       setVehicleLoading(true);
@@ -175,14 +294,14 @@ const RecordSaleDialog = ({
         setVehicleOptions([]);
       }
     } catch (error) {
-      
+      console.error('Load vehicles error:', error);
       setVehicleOptions([]);
     } finally {
       setVehicleLoading(false);
     }
   };
 
-  // NEW: Load vehicles on component mount
+  // Load vehicles on component mount
   useEffect(() => {
     if (open) {
       loadVehicleOptions();
@@ -224,7 +343,7 @@ const RecordSaleDialog = ({
 
       return totalProduction - totalSales;
     } catch (error) {
-      
+      console.error('Calculate brick stock error:', error);
       return 0;
     }
   };
@@ -238,8 +357,13 @@ const RecordSaleDialog = ({
     loadCalculatedBrickStock();
   }, []);
   
-  // Auto-populate customer when typing (debounced)
+  // Auto-populate customer when typing (debounced) - ONLY for non-edit mode
   useEffect(() => {
+    // Skip auto-search in edit mode
+    if (isEditMode) {
+      return;
+    }
+
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
     }
@@ -258,13 +382,13 @@ const RecordSaleDialog = ({
               setCustomerOptions(suggestions.map((s) => s.customer));
             }
           } catch (error) {
-            
+            console.error('Customer search error:', error);
           } finally {
             setCustomerSearchLoading(false);
           }
         }, 300)
       );
-    } else {
+    } else if (!isEditMode) {
       setCustomerOptions([]);
       setSelectedCustomer(null);
       setLocationOptions([]);
@@ -284,6 +408,7 @@ const RecordSaleDialog = ({
     setLocationOptions,
     setSelectedLocation,
     setCustomerSearchLoading,
+    isEditMode, // Add isEditMode dependency
   ]);
 
   // Auto-populate locations when customer is selected and user types location
@@ -420,7 +545,7 @@ const RecordSaleDialog = ({
     }
   };
 
-  // NEW: Handle vehicle selection from autocomplete
+  // Handle vehicle selection from autocomplete
   const handleVehicleSelect = (event, value) => {
     if (value && typeof value === "object") {
       // Selected from existing vehicles
@@ -449,7 +574,7 @@ const RecordSaleDialog = ({
     try {
       await onSubmit(data);
       
-      // ONLY MODIFICATION: Don't auto-reset in edit mode
+      // Don't auto-reset in edit mode
       if (!isEditMode) {
         // Reset the form automatically for next sale after successful submission
         // Small delay to ensure any success messages are shown first
@@ -470,7 +595,7 @@ const RecordSaleDialog = ({
         }, 1000); // Increased delay to ensure success toast is visible
       }
     } catch (error) {
-      
+      console.error('Form submit error:', error);
       // Don't reset on error, let user see the error and fix it
     }
   };
@@ -479,7 +604,7 @@ const RecordSaleDialog = ({
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="xl" // UPDATED: Changed from "md" to "xl" for broader dialog
+      maxWidth="xl"
       fullWidth
       fullScreen={isMobile}
     >
@@ -489,7 +614,6 @@ const RecordSaleDialog = ({
             <ShoppingCartIcon sx={{ mr: 2 }} />
             <Box>
               <Typography variant="h6" fontWeight="bold">
-                {/* ONLY MODIFICATION: Change title based on edit mode */}
                 {isEditMode ? "Edit Sale" : "Record New Sale"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -531,33 +655,7 @@ const RecordSaleDialog = ({
         {isLoading && <LinearProgress sx={{ mb: 2 }} />}
         <form onSubmit={handleSubmit(handleFormSubmit)}>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            {/* Total Amount Display Card - when amount is calculated */}
-            {/* {calculatedAmounts.totalAmount > 0 && (
-              <>
-                <Grid item xs={12}>
-                  <Card variant="outlined">
-                    <CardContent sx={{ p: 2 }}>
-                      <Box textAlign="center">
-                        <Typography
-                          variant="h5"
-                          color="success.main"
-                          fontWeight="bold"
-                        >
-                          {formatCurrency(calculatedAmounts.totalAmount)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Total Amount (
-                          {watchIncludeGST ? "incl. GST" : "excl. GST"})
-                        </Typography>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Divider sx={{ width: "100%", my: 1 }} />
-              </>
-            )} */}
-
-            {/* Customer Information - Now in 3-column grid */}
+            {/* Customer Information */}
             <Grid item xs={12}>
               <Typography
                 variant="subtitle1"
@@ -570,7 +668,6 @@ const RecordSaleDialog = ({
               </Typography>
             </Grid>
 
-            {/* UPDATED: Changed from md={6} to md={4} for 3-column layout */}
             <Grid item xs={12} md={4}>
               <Autocomplete
                 options={customerOptions}
@@ -621,7 +718,6 @@ const RecordSaleDialog = ({
               />
             </Grid>
 
-            {/* UPDATED: Changed from md={6} to md={4} for 3-column layout */}
             <Grid item xs={12} md={4}>
               <Controller
                 name="customerPhone"
@@ -648,7 +744,7 @@ const RecordSaleDialog = ({
               />
             </Grid>
 
-            {/* Location Field - UPDATED: Changed from md={6} to md={4} for 3-column layout */}
+            {/* Location Field */}
             <Grid item xs={12} md={4}>
               <Autocomplete
                 options={locationOptions}
@@ -715,86 +811,6 @@ const RecordSaleDialog = ({
               />
             </Grid>
 
-            {/* COMMENTED OUT: Customer Email Field */}
-            {/* <Grid item xs={12} md={4}>
-              <Controller
-                name="customerEmail"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Email (Optional)"
-                    type="email"
-                    size="small"
-                    fullWidth
-                    error={!!errors.customerEmail}
-                    helperText={errors.customerEmail?.message}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <EmailIcon color="primary" fontSize="small" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                )}
-              />
-            </Grid> */}
-
-            {/* COMMENTED OUT: State and State Code Fields */}
-            {/* <Grid item xs={12} md={4}>
-              <Controller
-                name="customerState"
-                control={control}
-                rules={{ required: "State is required" }}
-                render={({ field }) => (
-                  <FormControl fullWidth size="small" required error={!!errors.customerState}>
-                    <InputLabel>Customer State</InputLabel>
-                    <Select
-                      {...field}
-                      label="Customer State"
-                      startAdornment={
-                        <InputAdornment position="start">
-                          <StateIcon color="primary" fontSize="small" />
-                        </InputAdornment>
-                      }
-                    >
-                      {Object.entries(INDIAN_STATES).map(([code, state]) => (
-                        <MenuItem key={code} value={code}>
-                          {state.name} ({code})
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {errors.customerState && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 2 }}>
-                        {errors.customerState.message}
-                      </Typography>
-                    )}
-                  </FormControl>
-                )}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Controller
-                name="customerStateCode"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="State Code"
-                    size="small"
-                    fullWidth
-                    disabled
-                    helperText="Auto-populated based on selected state"
-                    InputProps={{
-                      readOnly: true,
-                    }}
-                  />
-                )}
-              />
-            </Grid> */}
-
             {/* GSTIN Field - only show when GST is included */}
             {watchIncludeGST && <Grid item xs={12} md={4}>
               <Controller
@@ -818,7 +834,7 @@ const RecordSaleDialog = ({
 
             <Divider sx={{ width: "100%", my: 1 }} />
 
-            {/* Product Information - Now in 3-column grid */}
+            {/* Product Information */}
             <Grid item xs={12}>
               <Typography
                 variant="subtitle1"
@@ -831,7 +847,6 @@ const RecordSaleDialog = ({
               </Typography>
             </Grid>
 
-            {/* UPDATED: Changed from md={6} to md={4} for 3-column layout */}
             <Grid item xs={12} md={4}>
               <Controller
                 name="quantity"
@@ -858,7 +873,6 @@ const RecordSaleDialog = ({
               />
             </Grid>
 
-            {/* UPDATED: Changed from md={6} to md={4} for 3-column layout */}
             <Grid item xs={12} md={4}>
               <Controller
                 name="pricePerBrick"
@@ -898,7 +912,7 @@ const RecordSaleDialog = ({
 
             <Divider sx={{ width: "100%", my: 1 }} />
 
-            {/* Transport Information - Now in 3-column grid */}
+            {/* Transport Information */}
             <Grid item xs={12}>
               <Typography
                 variant="subtitle1"
@@ -911,7 +925,6 @@ const RecordSaleDialog = ({
               </Typography>
             </Grid>
 
-            {/* UPDATED: Changed from md={6} to md={4} for 3-column layout */}
             <Grid item xs={12} md={4}>
               <Autocomplete
                 options={vehicleOptions}
@@ -982,7 +995,6 @@ const RecordSaleDialog = ({
               />
             </Grid>
 
-            {/* UPDATED: Changed from md={6} to md={4} for 3-column layout */}
             <Grid item xs={12} md={4}>
               <Controller
                 name="challanNumber"
@@ -1074,122 +1086,6 @@ const RecordSaleDialog = ({
             )}
 
             <Divider sx={{ width: "100%", my: 1 }} />
-
-            {/* Payment Information */}
-            {/* <Grid item xs={12}>
-              <Typography
-                variant="subtitle1"
-                gutterBottom
-                color="primary"
-                fontWeight="bold"
-              >
-                Payment & Notes
-              </Typography>
-            </Grid>
-
-        
-            <Grid item xs={12}>
-              <Controller
-                name="includeGST"
-                control={control}
-                render={({ field }) => (
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        {...field}
-                        checked={field.value}
-                        color="primary"
-                        size="small"
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="body2" fontWeight="medium"> 
-                          Include GST in calculation
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Toggle to add/remove GST (12%) from the total amount
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                )}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Controller
-                name="paymentMethod"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Payment Method</InputLabel>
-                    <Select {...field} label="Payment Method">
-                      {Object.values(PAYMENT_METHODS).map((method) => (
-                        <MenuItem key={method.id} value={method.id}>
-                          {method.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Controller
-                name="discount"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Discount"
-                    type="number"
-                    size="small"
-                    fullWidth
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">₹</InputAdornment>
-                      ),
-                    }}
-                  />
-                )}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Controller
-                name="discountType"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth size="small"> 
-                    <InputLabel>Discount Type</InputLabel>
-                    <Select {...field} label="Discount Type">
-                      <MenuItem value="amount">Amount (₹)</MenuItem>
-                      <MenuItem value="percentage">Percentage (%)</MenuItem>
-                    </Select>
-                  </FormControl>
-                )}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Controller
-                name="notes"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Notes (Optional)"
-                    size="small"
-                    fullWidth
-                    multiline
-                    rows={2}
-                    placeholder="Additional notes about this sale..."
-                  />
-                )}
-              />
-            </Grid> */}
           </Grid>
         </form>
       </DialogContent>
@@ -1206,7 +1102,6 @@ const RecordSaleDialog = ({
             isSubmitting ? <CircularProgress size={16} /> : <ShoppingCartIcon />
           }
         >
-          {/* ONLY MODIFICATION: Change button text based on edit mode */}
           {isSubmitting 
             ? (isEditMode ? "Updating..." : "Recording...") 
             : (isEditMode ? "Update Sale" : "Record Sale")

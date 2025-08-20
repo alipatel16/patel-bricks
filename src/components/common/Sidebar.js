@@ -24,6 +24,8 @@ import {
   Settings as SettingsIcon,
   TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
+  LocalShipping as LocalShippingIcon,
+  Receipt as ReceiptIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -47,6 +49,8 @@ const iconMap = {
   People: PeopleIcon,
   Assessment: AssessmentIcon,
   Settings: SettingsIcon,
+  LocalShipping: LocalShippingIcon,
+  Receipt: ReceiptIcon,
 };
 
 function Sidebar({ open, onToggle }) {

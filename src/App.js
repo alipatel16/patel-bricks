@@ -25,6 +25,8 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 
 import CustomerManagement from './components/customers/CustomerManagement';
+import SupplierManagement from './components/Supplier/SupplierManagement';
+import GSTReports from './components/GST/GSTReports';
 
 // ADD THIS IMPORT
 import LoginPage from './components/auth/LoginPage';
@@ -188,7 +190,9 @@ const AppContent = () => {
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/sales" element={<Sales />} />
               <Route path="/customers" element={<CustomerManagement />} />
+              <Route path="/suppliers" element={<SupplierManagement />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/gst-reports" element={<GSTReports />} />
               <Route path="/settings" element={<Settings />} />
               
               {/* Redirect unknown routes to dashboard */}

@@ -107,7 +107,9 @@ function Header({ isConnected = true }) {
       inventory: 'Inventory',
       sales: 'Sales',
       customers : 'Customers',
+      suppliers: 'Suppliers',
       reports: 'Reports',
+      'gst-reports': 'GST Reports',
       settings: 'Settings',
     };
     return titles[page] || 'Dashboard';
