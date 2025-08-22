@@ -81,8 +81,8 @@ function QuickActions() {
       icon: <AssessmentIcon />,
       color: 'info',
       onClick: () => {
-        navigate('/reports');
-        appActions.setCurrentPage('reports');
+        navigate('/gst-reports');
+        appActions.setCurrentPage('gst-reports');
       },
     },
     {
