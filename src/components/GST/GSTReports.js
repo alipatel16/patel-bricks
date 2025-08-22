@@ -98,7 +98,7 @@ const GSTReports = () => {
         Object.entries(invoicesResult.data).forEach(([id, invoice]) => {
           // Only process invoices with GST component and within date range
           if (invoice.gstBricks && invoice.gstBricks > 0) {
-            const invoiceDate = invoice.createdDate; // Assuming this is in YYYY-MM-DD format
+            const invoiceDate = invoice.invoiceData?.invoiceDate || invoice.createdDate; // Assuming this is in YYYY-MM-DD format
 
             // Check if invoice is within the selected date range
             if (invoiceDate >= fromDate && invoiceDate <= toDate) {
