@@ -346,16 +346,20 @@ const GSTInvoiceViewer = ({
   };
 
   // MODIFIED: Enhanced print function - PDF for iOS, window.print for desktop
-  const handlePrint = () => {
-    const device = detectDevice();
+  const handlePrint = async () => {
+    const device = await detectDevice();
     
-    if (device.isIOS || device.isIPad || device.isMobile) {
+    if (device.isIOS || device.isIPad || device.isMobile || device.isSafari) {
       // For iOS devices, generate PDF
       generatePDF();
     } else {
       // For desktop and other devices, use standard window.print
       window.print();
     }
+  };
+
+  const handleIOSPrint = async () => {
+    generatePDF();
   };
 
   return (
@@ -1248,6 +1252,22 @@ const GSTInvoiceViewer = ({
             }}
           >
             {isGeneratingPDF ? 'Generating PDF...' : 'Download PDF'}
+          </Button>
+          <Button
+            onClick={handleIOSPrint}
+            variant="contained"
+            startIcon={isGeneratingPDF ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+            disabled={isGeneratingPDF}
+            sx={{ 
+              backgroundColor: '#1976d2',
+              boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
+              '&:hover': {
+                backgroundColor: '#1565c0',
+                boxShadow: '0 6px 16px rgba(25, 118, 210, 0.4)'
+              }
+            }}
+          >
+            {'Generate PDF'}
           </Button>
         </Box>
       </DialogActions>
