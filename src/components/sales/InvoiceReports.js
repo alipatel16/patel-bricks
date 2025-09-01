@@ -167,12 +167,14 @@ function InvoiceReports({
 
   // FIXED: Direct invoice viewers - open the correct viewer based on component type
   const handleViewGSTInvoice = () => {
+     setInvoiceViewDialogOpen(false);
     if (viewingInvoiceData && selectedInvoiceForView) {
       setGstInvoiceViewerOpen(true);
     }
   };
 
   const handleViewNonGSTInvoice = () => {
+    setInvoiceViewDialogOpen(false);
     if (viewingInvoiceData && selectedInvoiceForView) {
       setNonGstInvoiceViewerOpen(true);
     }
