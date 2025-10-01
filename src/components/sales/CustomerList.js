@@ -739,7 +739,7 @@ const CustomerList = ({ sales, searchFilters, setSearchFilters }) => {
                         <strong>Rate:</strong> {formatCurrency(viewingInvoiceData.actualRate)} per brick
                       </Typography>
                       <Typography variant="body1">
-                        <strong>Amount (with 5% GST):</strong> {formatCurrency(viewingInvoiceData.gstAmount)}
+                        <strong>Amount (with 12% GST):</strong> {formatCurrency(viewingInvoiceData.gstAmount)}
                       </Typography>
                       <Box sx={{ mt: 2 }}>
                         <Button

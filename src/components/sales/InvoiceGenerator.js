@@ -441,9 +441,9 @@ const InvoiceGenerator = ({
       nonGstBricks,
       actualRate,
       totalBricks: gstBricks + nonGstBricks,
-      gstAmount: gstBricks * actualRate * 1.05,
+      gstAmount: gstBricks * actualRate * 1.12,
       nonGstAmount: nonGstBricks * actualRate,
-      totalAmount: gstBricks * actualRate * 1.05 + nonGstBricks * actualRate,
+      totalAmount: gstBricks * actualRate * 1.12 + nonGstBricks * actualRate,
       generatedOn: new Date().toISOString(),
       // Include customer GSTIN specifically for GST invoice processing
       customerGSTIN: customerGSTIN || "",
@@ -692,7 +692,7 @@ const InvoiceGenerator = ({
                         brick
                       </Typography>
                       <Typography variant="body1">
-                        <strong>Amount (with 5% GST):</strong>{" "}
+                        <strong>Amount (with 12% GST):</strong>{" "}
                         {formatCurrency(generatedInvoiceData.gstAmount)}
                       </Typography>
                       {/* Show customer GSTIN status for GST invoice */}
@@ -1186,9 +1186,9 @@ const InvoiceGenerator = ({
                       {formatCurrency(
                         (parseInt(formData.gstBricks) || 0) *
                           customerSalesData.averageRate *
-                          1.05
+                          1.12
                       )}{" "}
-                      (with 5% GST)
+                      (with 12% GST)
                       {customerGSTIN && (
                         <span style={{ fontSize: "11px", display: "block" }}>
                           {" "}

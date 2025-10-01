@@ -550,7 +550,7 @@ function InvoiceReports({
                       </Typography>
                       <Typography variant="body1">
                         <strong>Amount:</strong> {formatCurrency(selectedInvoiceForView.total_amount)}
-                        {selectedInvoiceForView.invoice_type === "GST" ? " (with 5% GST)" : " (without GST)"}
+                        {selectedInvoiceForView.invoice_type === "GST" ? " (with 12% GST)" : " (without GST)"}
                       </Typography>
                       <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
                         <Button

@@ -176,7 +176,7 @@ const LedgerGenerator = ({ open, onClose, customer, salesHistory }) => {
       if (invoice.gstBricks > 0) {
         ledgerEntries.push({
           date: actualInvoiceDate, // FIXED: Using custom invoice date
-          particulars: `GST Invoice - ${formatQuantity(invoice.gstBricks)} bricks @ ${formatCurrency(invoiceData.actualRate)} each`,
+          particulars: `GST Invoice - ${formatQuantity(invoice.gstBricks)} bricks @ ${formatCurrency(invoiceData.actualRate)} each (with 12% GST)`,
           invoiceNumber: `${invoice.id}_GST`,
           debit: invoiceData.gstAmount || 0,
           credit: 0,
