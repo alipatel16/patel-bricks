@@ -1,5 +1,5 @@
 // components/customers/CustomerManagement.js - Enhanced version with automatic historical sales update
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Card,
@@ -36,7 +36,7 @@ import {
   alpha,
   Checkbox,
   FormControlLabel,
-} from '@mui/material';
+} from "@mui/material";
 import {
   Person as PersonIcon,
   Phone as PhoneIcon,
@@ -55,33 +55,33 @@ import {
   Refresh as RefreshIcon,
   History as HistoryIcon,
   Warning as WarningIcon,
-} from '@mui/icons-material';
-import { customerService } from '../../services/customerService';
-import { salesService } from '../../services/salesService'; // NEW: Import salesService
-import { dbUtils } from '../../services/firebase'; // NEW: Import dbUtils
-import { INDIAN_STATES, DB_PATHS } from '../../utils/constants'; // NEW: Import DB_PATHS
-import { formatCurrency } from '../../utils/calculations';
-import toast from 'react-hot-toast';
+} from "@mui/icons-material";
+import { customerService } from "../../services/customerService";
+import { salesService } from "../../services/salesService"; // NEW: Import salesService
+import { dbUtils } from "../../services/firebase"; // NEW: Import dbUtils
+import { INDIAN_STATES, DB_PATHS } from "../../utils/constants"; // NEW: Import DB_PATHS
+import { formatCurrency } from "../../utils/calculations";
+import toast from "react-hot-toast";
 
 const CustomerManagement = () => {
   const theme = useTheme();
   const [customers, setCustomers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortBy, setSortBy] = useState('name');
-  const [filterBy, setFilterBy] = useState('all');
-  
+  const [sortBy, setSortBy] = useState("name");
+  const [filterBy, setFilterBy] = useState("all");
+
   // Customer Dialog State
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [customerForm, setCustomerForm] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    business_name: '',
-    gstin: '',
-    notes: ''
+    name: "",
+    phone: "",
+    email: "",
+    business_name: "",
+    gstin: "",
+    notes: "",
   });
 
   // Location Dialog State
@@ -89,19 +89,20 @@ const CustomerManagement = () => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [editingLocation, setEditingLocation] = useState(null);
   const [locationForm, setLocationForm] = useState({
-    name: '',
-    address: '',
-    contact_person: '',
-    contact_phone: '',
-    pincode: '',
-    state: 'GJ',
-    state_code: '24',
-    brick_rate: ''
+    name: "",
+    address: "",
+    contact_person: "",
+    contact_phone: "",
+    pincode: "",
+    state: "GJ",
+    state_code: "24",
+    brick_rate: "",
   });
 
   // NEW: States for historical sales update functionality
   const [updateHistoricalSales, setUpdateHistoricalSales] = useState(true);
-  const [isUpdatingHistoricalSales, setIsUpdatingHistoricalSales] = useState(false);
+  const [isUpdatingHistoricalSales, setIsUpdatingHistoricalSales] =
+    useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -114,11 +115,11 @@ const CustomerManagement = () => {
       if (result.success) {
         setCustomers(result.data || []);
       } else {
-        toast.error('Failed to load customers');
+        toast.error("Failed to load customers");
       }
     } catch (error) {
-      console.error('Load customers error:', error);
-      toast.error('Failed to load customers');
+      console.error("Load customers error:", error);
+      toast.error("Failed to load customers");
     } finally {
       setLoading(false);
     }
@@ -129,10 +130,10 @@ const CustomerManagement = () => {
     setRefreshing(true);
     try {
       await loadCustomers();
-      toast.success('Customer data refreshed');
+      toast.success("Customer data refreshed");
     } catch (error) {
-      console.error('Refresh error:', error);
-      toast.error('Failed to refresh customer data');
+      console.error("Refresh error:", error);
+      toast.error("Failed to refresh customer data");
     } finally {
       setRefreshing(false);
     }
@@ -140,35 +141,45 @@ const CustomerManagement = () => {
 
   // Enhanced filtering and sorting
   const getFilteredAndSortedCustomers = () => {
-    let filtered = customers.filter(customer =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.phone.includes(searchTerm) ||
-      (customer.business_name && customer.business_name.toLowerCase().includes(searchTerm.toLowerCase()))
+    let filtered = customers.filter(
+      (customer) =>
+        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.phone.includes(searchTerm) ||
+        (customer.business_name &&
+          customer.business_name
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase()))
     );
 
     // Apply filters
-    if (filterBy === 'business') {
-      filtered = filtered.filter(customer => customer.business_name);
-    } else if (filterBy === 'high_value') {
-      filtered = filtered.filter(customer => (customer.total_amount || 0) > 50000);
-    } else if (filterBy === 'recent') {
+    if (filterBy === "business") {
+      filtered = filtered.filter((customer) => customer.business_name);
+    } else if (filterBy === "high_value") {
+      filtered = filtered.filter(
+        (customer) => (customer.total_amount || 0) > 50000
+      );
+    } else if (filterBy === "recent") {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      filtered = filtered.filter(customer => 
-        customer.last_purchase && new Date(customer.last_purchase) > thirtyDaysAgo
+      filtered = filtered.filter(
+        (customer) =>
+          customer.last_purchase &&
+          new Date(customer.last_purchase) > thirtyDaysAgo
       );
     }
 
     // Apply sorting
     filtered.sort((a, b) => {
       switch (sortBy) {
-        case 'name':
+        case "name":
           return a.name.localeCompare(b.name);
-        case 'recent':
-          return new Date(b.last_purchase || 0) - new Date(a.last_purchase || 0);
-        case 'amount':
+        case "recent":
+          return (
+            new Date(b.last_purchase || 0) - new Date(a.last_purchase || 0)
+          );
+        case "amount":
           return (b.total_amount || 0) - (a.total_amount || 0);
-        case 'purchases':
+        case "purchases":
           return (b.total_purchases || 0) - (a.total_purchases || 0);
         default:
           return 0;
@@ -183,22 +194,22 @@ const CustomerManagement = () => {
     if (customer) {
       setEditingCustomer(customer);
       setCustomerForm({
-        name: customer.name || '',
-        phone: customer.phone || '',
-        email: customer.email || '',
-        business_name: customer.business_name || '',
-        gstin: customer.gstin || '',
-        notes: customer.notes || ''
+        name: customer.name || "",
+        phone: customer.phone || "",
+        email: customer.email || "",
+        business_name: customer.business_name || "",
+        gstin: customer.gstin || "",
+        notes: customer.notes || "",
       });
     } else {
       setEditingCustomer(null);
       setCustomerForm({
-        name: '',
-        phone: '',
-        email: '',
-        business_name: '',
-        gstin: '',
-        notes: ''
+        name: "",
+        phone: "",
+        email: "",
+        business_name: "",
+        gstin: "",
+        notes: "",
       });
     }
     setCustomerDialogOpen(true);
@@ -208,40 +219,79 @@ const CustomerManagement = () => {
     setCustomerDialogOpen(false);
     setEditingCustomer(null);
     setCustomerForm({
-      name: '',
-      phone: '',
-      email: '',
-      business_name: '',
-      gstin: '',
-      notes: ''
+      name: "",
+      phone: "",
+      email: "",
+      business_name: "",
+      gstin: "",
+      notes: "",
     });
   };
 
   const handleSaveCustomer = async () => {
     if (!customerForm.name || !customerForm.phone) {
-      toast.error('Name and phone number are required');
+      toast.error("Name and phone number are required");
       return;
     }
 
     setLoading(true);
     try {
+      // Capture old name for historical update detection
+      const oldName = editingCustomer ? editingCustomer.name : null;
+      const newName = customerForm.name;
+      const customerId = editingCustomer
+        ? editingCustomer.id
+        : customerForm.phone;
+
       let result;
       if (editingCustomer) {
-        result = await customerService.updateCustomer(editingCustomer.id, customerForm);
+        result = await customerService.updateCustomer(
+          editingCustomer.id,
+          customerForm
+        );
       } else {
         result = await customerService.createCustomer(customerForm);
       }
 
       if (result.success) {
-        toast.success(result.message);
+        // Check if customer name changed during edit
+        if (editingCustomer && oldName && oldName !== newName) {
+          console.log("Customer name changed, updating historical records...");
+
+          const historicalUpdateResult =
+            await updateCustomerNameInHistoricalRecords(
+              customerId,
+              oldName,
+              newName
+            );
+
+          if (historicalUpdateResult.success) {
+            if (historicalUpdateResult.updatedCount > 0) {
+              toast.success(
+                `${result.message} and updated ${historicalUpdateResult.updatedCount} historical records`
+              );
+            } else {
+              toast.success(
+                `${result.message} (no historical records found to update)`
+              );
+            }
+          } else {
+            toast.warning(
+              `${result.message} but failed to update some historical records: ${historicalUpdateResult.error}`
+            );
+          }
+        } else {
+          toast.success(result.message);
+        }
+
         await loadCustomers();
         handleCloseCustomerDialog();
       } else {
         toast.error(result.error);
       }
     } catch (error) {
-      console.error('Save customer error:', error);
-      toast.error('Failed to save customer');
+      console.error("Save customer error:", error);
+      toast.error("Failed to save customer");
     } finally {
       setLoading(false);
     }
@@ -253,26 +303,26 @@ const CustomerManagement = () => {
     if (location) {
       setEditingLocation(location);
       setLocationForm({
-        name: location.name || '',
-        address: location.address || '',
-        contact_person: location.contact_person || '',
-        contact_phone: location.contact_phone || '',
-        pincode: location.pincode || '',
-        state: location.state || 'GJ',
-        state_code: location.state_code || '24',
-        brick_rate: customer.brick_rates?.[location.id] || ''
+        name: location.name || "",
+        address: location.address || "",
+        contact_person: location.contact_person || "",
+        contact_phone: location.contact_phone || "",
+        pincode: location.pincode || "",
+        state: location.state || "GJ",
+        state_code: location.state_code || "24",
+        brick_rate: customer.brick_rates?.[location.id] || "",
       });
     } else {
       setEditingLocation(null);
       setLocationForm({
-        name: '',
-        address: '',
-        contact_person: '',
-        contact_phone: '',
-        pincode: '',
-        state: 'GJ',
-        state_code: '24',
-        brick_rate: ''
+        name: "",
+        address: "",
+        contact_person: "",
+        contact_phone: "",
+        pincode: "",
+        state: "GJ",
+        state_code: "24",
+        brick_rate: "",
       });
     }
     setLocationDialogOpen(true);
@@ -284,33 +334,136 @@ const CustomerManagement = () => {
     setEditingLocation(null);
     setUpdateHistoricalSales(true); // Reset to default
     setLocationForm({
-      name: '',
-      address: '',
-      contact_person: '',
-      contact_phone: '',
-      pincode: '',
-      state: 'GJ',
-      state_code: '24',
-      brick_rate: ''
+      name: "",
+      address: "",
+      contact_person: "",
+      contact_phone: "",
+      pincode: "",
+      state: "GJ",
+      state_code: "24",
+      brick_rate: "",
     });
   };
 
-  // NEW: Function to update historical sales records
-  const updateHistoricalSalesRecords = async (customerId, oldLocationName, newLocationName, newBrickRate = null) => {
+  // NEW: Function to update historical sales and invoices with new customer name
+  const updateCustomerNameInHistoricalRecords = async (
+    customerId,
+    oldName,
+    newName
+  ) => {
     try {
-      console.log(`Updating historical sales: ${oldLocationName} -> ${newLocationName} for customer ${customerId}`);
-      
+      console.log(
+        `Updating customer name: ${oldName} -> ${newName} for customer ${customerId}`
+      );
+
+      const updates = {};
+      let totalUpdated = 0;
+
+      // 1. Update Sales Transactions
+      const salesResult = await salesService.getAllSales();
+      if (salesResult.success && salesResult.data) {
+        const salesToUpdate = salesResult.data.filter(
+          (sale) =>
+            sale.customer_phone === customerId && sale.customer_name === oldName
+        );
+
+        console.log(`Found ${salesToUpdate.length} sales records to update`);
+
+        salesToUpdate.forEach((sale) => {
+          updates[`${DB_PATHS.SALES}/transactions/${sale.invoice_number}`] = {
+            ...sale,
+            customer_name: newName,
+            last_edited: dbUtils.timestamp(),
+            updated_by_name_change: true,
+          };
+        });
+
+        totalUpdated += salesToUpdate.length;
+      }
+
+      // 2. Update Generated Invoices
+      const invoicesResult = await dbUtils.readData(
+        `${DB_PATHS.SALES}/invoices`
+      );
+      if (invoicesResult.success && invoicesResult.data) {
+        const invoicesToUpdate = Object.entries(invoicesResult.data).filter(
+          ([id, invoice]) =>
+            invoice.customerPhone === customerId &&
+            invoice.customerName === oldName
+        );
+
+        console.log(
+          `Found ${invoicesToUpdate.length} invoice records to update`
+        );
+
+        invoicesToUpdate.forEach(([id, invoice]) => {
+          const updatedInvoiceData = {
+            ...invoice.invoiceData,
+            customerData: {
+              ...invoice.invoiceData.customerData,
+              name: newName,
+            },
+          };
+
+          updates[`${DB_PATHS.SALES}/invoices/${id}`] = {
+            ...invoice,
+            customerName: newName,
+            invoiceData: updatedInvoiceData,
+            last_edited: dbUtils.timestamp(),
+            updated_by_name_change: true,
+          };
+        });
+
+        totalUpdated += invoicesToUpdate.length;
+      }
+
+      // Execute batch update if there are changes
+      if (Object.keys(updates).length > 0) {
+        const updateResult = await dbUtils.batchUpdate(updates);
+
+        if (updateResult.success) {
+          console.log(`Successfully updated ${totalUpdated} records`);
+          return { success: true, updatedCount: totalUpdated };
+        } else {
+          console.error("Failed to update records:", updateResult.error);
+          return { success: false, error: updateResult.error };
+        }
+      }
+
+      return { success: true, updatedCount: 0 };
+    } catch (error) {
+      console.error(
+        "Error updating customer name in historical records:",
+        error
+      );
+      return { success: false, error: error.message };
+    }
+  };
+
+  // NEW: Function to update historical sales records
+  const updateHistoricalSalesRecords = async (
+    customerId,
+    oldLocationName,
+    newLocationName,
+    newBrickRate = null
+  ) => {
+    try {
+      console.log(
+        `Updating historical sales: ${oldLocationName} -> ${newLocationName} for customer ${customerId}`
+      );
+
       // Get all sales records
       const salesResult = await salesService.getAllSales();
       if (!salesResult.success || !salesResult.data) {
-        console.log('No sales data found or failed to fetch sales');
+        console.log("No sales data found or failed to fetch sales");
         return { success: true, updatedCount: 0 };
       }
 
       // Find sales records for this customer with the old location name
-      const salesToUpdate = salesResult.data.filter(sale => 
-        sale.customer_phone === customerId && 
-        sale.location_name === oldLocationName
+      const salesToUpdate = salesResult.data.filter(
+        (sale) =>
+          sale.customer_phone === customerId &&
+          sale.location_name === oldLocationName
       );
 
       console.log(`Found ${salesToUpdate.length} sales records to update`);
@@ -321,8 +474,8 @@ const CustomerManagement = () => {
 
       // Prepare batch updates
       const updates = {};
-      
-      salesToUpdate.forEach(sale => {
+
+      salesToUpdate.forEach((sale) => {
         const saleUpdates = {
           ...sale,
           location_name: newLocationName,
@@ -332,24 +485,27 @@ const CustomerManagement = () => {
         };
 
         // Optionally update brick rate if provided and different
-        if (newBrickRate && parseFloat(newBrickRate) !== parseFloat(sale.price_per_brick)) {
+        if (
+          newBrickRate &&
+          parseFloat(newBrickRate) !== parseFloat(sale.price_per_brick)
+        ) {
           saleUpdates.price_per_brick = parseFloat(newBrickRate);
           saleUpdates.price_updated_by_location_change = true;
-          
+
           // Recalculate amounts with new rate
           const quantity = parseInt(sale.quantity || 0);
           const discount = parseFloat(sale.discount_amount || 0);
           const newSubtotal = quantity * parseFloat(newBrickRate);
           const newTaxableAmount = newSubtotal - discount;
-          
+
           saleUpdates.subtotal = newSubtotal;
           saleUpdates.taxable_amount = newTaxableAmount;
-          
+
           // Recalculate GST if applicable
           if (sale.include_gst || sale.gst_included) {
             const gstRate = sale.is_inter_state ? 12 : 12; // 12% total GST
             const gstAmount = (newTaxableAmount * gstRate) / 100;
-            
+
             if (sale.is_inter_state) {
               saleUpdates.igst_amount = gstAmount;
               saleUpdates.cgst_amount = 0;
@@ -359,7 +515,7 @@ const CustomerManagement = () => {
               saleUpdates.sgst_amount = gstAmount / 2;
               saleUpdates.igst_amount = 0;
             }
-            
+
             saleUpdates.total_tax = gstAmount;
             saleUpdates.total_amount = newTaxableAmount + gstAmount;
           } else {
@@ -368,22 +524,24 @@ const CustomerManagement = () => {
         }
 
         // Add to batch updates
-        updates[`${DB_PATHS.SALES}/transactions/${sale.invoice_number}`] = saleUpdates;
+        updates[`${DB_PATHS.SALES}/transactions/${sale.invoice_number}`] =
+          saleUpdates;
       });
 
       // Execute batch update
       const updateResult = await dbUtils.batchUpdate(updates);
-      
+
       if (updateResult.success) {
-        console.log(`Successfully updated ${salesToUpdate.length} sales records`);
+        console.log(
+          `Successfully updated ${salesToUpdate.length} sales records`
+        );
         return { success: true, updatedCount: salesToUpdate.length };
       } else {
-        console.error('Failed to update sales records:', updateResult.error);
+        console.error("Failed to update sales records:", updateResult.error);
         return { success: false, error: updateResult.error };
       }
-
     } catch (error) {
-      console.error('Error updating historical sales records:', error);
+      console.error("Error updating historical sales records:", error);
       return { success: false, error: error.message };
     }
   };
@@ -391,7 +549,7 @@ const CustomerManagement = () => {
   // ENHANCED: Save location with historical sales update functionality
   const handleSaveLocation = async () => {
     if (!locationForm.name || !locationForm.address) {
-      toast.error('Location name and address are required');
+      toast.error("Location name and address are required");
       return;
     }
 
@@ -420,16 +578,17 @@ const CustomerManagement = () => {
 
       if (result.success) {
         // If this is an edit and location name changed, update historical sales
-        if (editingLocation && 
-            oldLocationName && 
-            oldLocationName !== newLocationName && 
-            updateHistoricalSales) {
-          
-          console.log('Location name changed, updating historical sales...');
-          
+        if (
+          editingLocation &&
+          oldLocationName &&
+          oldLocationName !== newLocationName &&
+          updateHistoricalSales
+        ) {
+          console.log("Location name changed, updating historical sales...");
+
           const historicalUpdateResult = await updateHistoricalSalesRecords(
-            selectedCustomer.id, 
-            oldLocationName, 
+            selectedCustomer.id,
+            oldLocationName,
             newLocationName,
             newBrickRate
           );
@@ -440,7 +599,9 @@ const CustomerManagement = () => {
                 `${result.message} and updated ${historicalUpdateResult.updatedCount} historical sales records`
               );
             } else {
-              toast.success(`${result.message} (no historical sales found to update)`);
+              toast.success(
+                `${result.message} (no historical sales found to update)`
+              );
             }
           } else {
             toast.warning(
@@ -457,8 +618,8 @@ const CustomerManagement = () => {
         toast.error(result.error);
       }
     } catch (error) {
-      console.error('Save location error:', error);
-      toast.error('Failed to save location');
+      console.error("Save location error:", error);
+      toast.error("Failed to save location");
     } finally {
       setLoading(false);
       setIsUpdatingHistoricalSales(false);
@@ -466,19 +627,22 @@ const CustomerManagement = () => {
   };
 
   const handleDeleteLocation = async (customerId, locationId) => {
-    if (window.confirm('Are you sure you want to delete this location?')) {
+    if (window.confirm("Are you sure you want to delete this location?")) {
       setLoading(true);
       try {
-        const result = await customerService.deleteCustomerLocation(customerId, locationId);
+        const result = await customerService.deleteCustomerLocation(
+          customerId,
+          locationId
+        );
         if (result.success) {
-          toast.success('Location deleted successfully');
+          toast.success("Location deleted successfully");
           await loadCustomers();
         } else {
           toast.error(result.error);
         }
       } catch (error) {
-        console.error('Delete location error:', error);
-        toast.error('Failed to delete location');
+        console.error("Delete location error:", error);
+        toast.error("Failed to delete location");
       } finally {
         setLoading(false);
       }
@@ -486,19 +650,23 @@ const CustomerManagement = () => {
   };
 
   const handleDeleteCustomer = async (customerId) => {
-    if (window.confirm('Are you sure you want to delete this customer? This action cannot be undone.')) {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this customer? This action cannot be undone."
+      )
+    ) {
       setLoading(true);
       try {
         const result = await customerService.deleteCustomer(customerId);
         if (result.success) {
-          toast.success('Customer deleted successfully');
+          toast.success("Customer deleted successfully");
           await loadCustomers();
         } else {
           toast.error(result.error);
         }
       } catch (error) {
-        console.error('Delete customer error:', error);
-        toast.error('Failed to delete customer');
+        console.error("Delete customer error:", error);
+        toast.error("Failed to delete customer");
       } finally {
         setLoading(false);
       }
@@ -510,9 +678,21 @@ const CustomerManagement = () => {
   return (
     <Box>
       {/* Header - Consistent with Sales/Dashboard */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
+          <Typography
+            variant="h4"
+            component="h1"
+            gutterBottom
+            sx={{ fontWeight: 600 }}
+          >
             Customer Management
           </Typography>
           <Typography variant="body1" color="textSecondary">
@@ -543,17 +723,11 @@ const CustomerManagement = () => {
       </Box>
 
       {/* Loading indicator */}
-      {(loading || refreshing) && (
-        <LinearProgress sx={{ mb: 2 }} />
-      )}
+      {(loading || refreshing) && <LinearProgress sx={{ mb: 2 }} />}
 
       {/* NEW: Historical Sales Update Progress */}
       {isUpdatingHistoricalSales && (
-        <Alert 
-          severity="info" 
-          sx={{ mb: 2 }}
-          icon={<HistoryIcon />}
-        >
+        <Alert severity="info" sx={{ mb: 2 }} icon={<HistoryIcon />}>
           <Typography variant="body2">
             Updating historical sales records with new location information...
           </Typography>
@@ -626,7 +800,7 @@ const CustomerManagement = () => {
                     Business Clients
                   </Typography>
                   <Typography variant="h5" component="div">
-                    {customers.filter(c => c.business_name).length}
+                    {customers.filter((c) => c.business_name).length}
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
                     Corporate accounts
@@ -668,7 +842,11 @@ const CustomerManagement = () => {
                     Total Locations
                   </Typography>
                   <Typography variant="h5" component="div">
-                    {customers.reduce((total, customer) => total + (customer.locations?.length || 0), 0)}
+                    {customers.reduce(
+                      (total, customer) =>
+                        total + (customer.locations?.length || 0),
+                      0
+                    )}
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
                     Delivery locations
@@ -710,7 +888,13 @@ const CustomerManagement = () => {
                     Total Revenue
                   </Typography>
                   <Typography variant="h5" component="div">
-                    {formatCurrency(customers.reduce((total, customer) => total + (customer.total_amount || 0), 0))}
+                    {formatCurrency(
+                      customers.reduce(
+                        (total, customer) =>
+                          total + (customer.total_amount || 0),
+                        0
+                      )
+                    )}
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
                     Lifetime value
@@ -788,22 +972,23 @@ const CustomerManagement = () => {
       {/* Customers List - Keep existing implementation */}
       {filteredCustomers.length === 0 ? (
         <Card>
-          <CardContent sx={{ textAlign: 'center', py: 6 }}>
-            <GroupIcon 
-              sx={{ 
+          <CardContent sx={{ textAlign: "center", py: 6 }}>
+            <GroupIcon
+              sx={{
                 fontSize: 64,
                 color: theme.palette.grey[400],
-                mb: 2
+                mb: 2,
               }}
             />
             <Typography variant="h6" gutterBottom>
-              {customers.length === 0 ? 'No customers yet' : 'No customers match your search'}
+              {customers.length === 0
+                ? "No customers yet"
+                : "No customers match your search"}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              {customers.length === 0 
-                ? 'Add your first customer to get started with customer management'
-                : 'Try adjusting your search terms or filters'
-              }
+              {customers.length === 0
+                ? "Add your first customer to get started with customer management"
+                : "Try adjusting your search terms or filters"}
             </Typography>
             {customers.length === 0 && (
               <Button
@@ -821,7 +1006,14 @@ const CustomerManagement = () => {
           <Card key={customer.id} sx={{ mb: 2 }}>
             <Accordion>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, gap: 2 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    flexGrow: 1,
+                    gap: 2,
+                  }}
+                >
                   <Box
                     sx={{
                       p: 1,
@@ -832,25 +1024,26 @@ const CustomerManagement = () => {
                   >
                     {customer.business_name ? <BusinessIcon /> : <PersonIcon />}
                   </Box>
-                  
+
                   <Box sx={{ flexGrow: 1 }}>
                     <Typography variant="h6" fontWeight="medium">
                       {customer.name}
                       {customer.business_name && (
-                        <Chip 
-                          label="Business" 
-                          size="small" 
-                          color="primary" 
+                        <Chip
+                          label="Business"
+                          size="small"
+                          color="primary"
                           sx={{ ml: 1 }}
                         />
                       )}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {customer.phone} • {customer.locations?.length || 0} location(s)
+                      {customer.phone} • {customer.locations?.length || 0}{" "}
+                      location(s)
                       {customer.business_name && ` • ${customer.business_name}`}
                     </Typography>
                   </Box>
-                  
+
                   <Stack direction="row" spacing={1}>
                     <Chip
                       label={formatCurrency(customer.total_amount || 0)}
@@ -867,7 +1060,7 @@ const CustomerManagement = () => {
                   </Stack>
                 </Box>
               </AccordionSummary>
-              
+
               <AccordionDetails>
                 <Grid container spacing={3}>
                   {/* Customer Details */}
@@ -880,7 +1073,10 @@ const CustomerManagement = () => {
                             sx={{
                               p: 1,
                               borderRadius: 2,
-                              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              backgroundColor: alpha(
+                                theme.palette.primary.main,
+                                0.1
+                              ),
                               color: theme.palette.primary.main,
                             }}
                           >
@@ -908,21 +1104,40 @@ const CustomerManagement = () => {
                       <CardContent>
                         <Stack spacing={2}>
                           <Box>
-                            <Typography variant="body2" color="text.secondary">Email</Typography>
-                            <Typography variant="body1">{customer.email || 'Not provided'}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Email
+                            </Typography>
+                            <Typography variant="body1">
+                              {customer.email || "Not provided"}
+                            </Typography>
                           </Box>
                           <Box>
-                            <Typography variant="body2" color="text.secondary">GSTIN</Typography>
-                            <Typography variant="body1">{customer.gstin || 'Not provided'}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              GSTIN
+                            </Typography>
+                            <Typography variant="body1">
+                              {customer.gstin || "Not provided"}
+                            </Typography>
                           </Box>
                           <Box>
-                            <Typography variant="body2" color="text.secondary">Last Purchase</Typography>
-                            <Typography variant="body1">{customer.last_purchase || 'No purchases yet'}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Last Purchase
+                            </Typography>
+                            <Typography variant="body1">
+                              {customer.last_purchase || "No purchases yet"}
+                            </Typography>
                           </Box>
                           {customer.notes && (
                             <Box>
-                              <Typography variant="body2" color="text.secondary">Notes</Typography>
-                              <Typography variant="body1">{customer.notes}</Typography>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Notes
+                              </Typography>
+                              <Typography variant="body1">
+                                {customer.notes}
+                              </Typography>
                             </Box>
                           )}
                         </Stack>
@@ -940,7 +1155,10 @@ const CustomerManagement = () => {
                             sx={{
                               p: 1,
                               borderRadius: 2,
-                              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                              backgroundColor: alpha(
+                                theme.palette.primary.main,
+                                0.1
+                              ),
                               color: theme.palette.primary.main,
                             }}
                           >
@@ -962,8 +1180,8 @@ const CustomerManagement = () => {
                         {customer.locations && customer.locations.length > 0 ? (
                           <List dense>
                             {customer.locations.map((location) => (
-                              <ListItem 
-                                key={location.id} 
+                              <ListItem
+                                key={location.id}
                                 divider
                                 sx={{
                                   border: `1px solid ${theme.palette.divider}`,
@@ -973,24 +1191,42 @@ const CustomerManagement = () => {
                               >
                                 <ListItemText
                                   primary={
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      <HomeIcon color="action" fontSize="small" />
+                                    <Box
+                                      sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 1,
+                                      }}
+                                    >
+                                      <HomeIcon
+                                        color="action"
+                                        fontSize="small"
+                                      />
                                       <Typography variant="subtitle2">
                                         {location.name}
                                       </Typography>
                                       {location.is_primary && (
-                                        <Chip label="Primary" size="small" color="primary" />
+                                        <Chip
+                                          label="Primary"
+                                          size="small"
+                                          color="primary"
+                                        />
                                       )}
                                     </Box>
                                   }
                                   secondary={
                                     <Box sx={{ mt: 1 }}>
-                                      <Typography variant="body2" color="text.secondary">
+                                      <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                      >
                                         {location.address}
                                       </Typography>
                                       {customer.brick_rates?.[location.id] && (
                                         <Chip
-                                          label={`₹${customer.brick_rates[location.id]}/brick`}
+                                          label={`₹${
+                                            customer.brick_rates[location.id]
+                                          }/brick`}
                                           size="small"
                                           color="success"
                                           variant="outlined"
@@ -1003,13 +1239,23 @@ const CustomerManagement = () => {
                                 <ListItemSecondaryAction>
                                   <ButtonGroup size="small">
                                     <IconButton
-                                      onClick={() => handleOpenLocationDialog(customer, location)}
+                                      onClick={() =>
+                                        handleOpenLocationDialog(
+                                          customer,
+                                          location
+                                        )
+                                      }
                                       color="primary"
                                     >
                                       <EditIcon fontSize="small" />
                                     </IconButton>
                                     <IconButton
-                                      onClick={() => handleDeleteLocation(customer.id, location.id)}
+                                      onClick={() =>
+                                        handleDeleteLocation(
+                                          customer.id,
+                                          location.id
+                                        )
+                                      }
                                       color="error"
                                     >
                                       <DeleteIcon fontSize="small" />
@@ -1021,7 +1267,8 @@ const CustomerManagement = () => {
                           </List>
                         ) : (
                           <Alert severity="info">
-                            No locations added yet. Add a location to set specific brick rates.
+                            No locations added yet. Add a location to set
+                            specific brick rates.
                           </Alert>
                         )}
                       </CardContent>
@@ -1035,11 +1282,16 @@ const CustomerManagement = () => {
       )}
 
       {/* Customer Dialog - Keep existing implementation but simplify styling */}
-      <Dialog open={customerDialogOpen} onClose={handleCloseCustomerDialog} maxWidth="md" fullWidth>
+      <Dialog
+        open={customerDialogOpen}
+        onClose={handleCloseCustomerDialog}
+        maxWidth="md"
+        fullWidth
+      >
         <DialogTitle>
           <Box display="flex" alignItems="center" gap={1}>
             <PersonIcon color="primary" />
-            {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
+            {editingCustomer ? "Edit Customer" : "Add New Customer"}
           </Box>
         </DialogTitle>
         <DialogContent>
@@ -1049,7 +1301,9 @@ const CustomerManagement = () => {
                 label="Customer Name *"
                 fullWidth
                 value={customerForm.name}
-                onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })}
+                onChange={(e) =>
+                  setCustomerForm({ ...customerForm, name: e.target.value })
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1059,13 +1313,15 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="Phone Number *"
                 fullWidth
                 value={customerForm.phone}
-                onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                onChange={(e) =>
+                  setCustomerForm({ ...customerForm, phone: e.target.value })
+                }
                 disabled={!!editingCustomer}
                 InputProps={{
                   startAdornment: (
@@ -1076,14 +1332,16 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="Email Address"
                 type="email"
                 fullWidth
                 value={customerForm.email}
-                onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
+                onChange={(e) =>
+                  setCustomerForm({ ...customerForm, email: e.target.value })
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1093,13 +1351,18 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="Business Name"
                 fullWidth
                 value={customerForm.business_name}
-                onChange={(e) => setCustomerForm({ ...customerForm, business_name: e.target.value })}
+                onChange={(e) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    business_name: e.target.value,
+                  })
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1109,17 +1372,22 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="GSTIN"
                 fullWidth
                 value={customerForm.gstin}
-                onChange={(e) => setCustomerForm({ ...customerForm, gstin: e.target.value.toUpperCase() })}
+                onChange={(e) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    gstin: e.target.value.toUpperCase(),
+                  })
+                }
                 helperText="15-character GSTIN number"
               />
             </Grid>
-            
+
             <Grid item xs={12}>
               <TextField
                 label="Notes"
@@ -1127,7 +1395,9 @@ const CustomerManagement = () => {
                 multiline
                 rows={3}
                 value={customerForm.notes}
-                onChange={(e) => setCustomerForm({ ...customerForm, notes: e.target.value })}
+                onChange={(e) =>
+                  setCustomerForm({ ...customerForm, notes: e.target.value })
+                }
                 placeholder="Additional notes about the customer..."
               />
             </Grid>
@@ -1135,22 +1405,33 @@ const CustomerManagement = () => {
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
           <Button onClick={handleCloseCustomerDialog}>Cancel</Button>
-          <Button 
-            onClick={handleSaveCustomer} 
+          <Button
+            onClick={handleSaveCustomer}
             variant="contained"
             disabled={loading}
           >
-            {loading ? 'Saving...' : editingCustomer ? 'Update Customer' : 'Add Customer'}
+            {loading
+              ? "Saving..."
+              : editingCustomer
+              ? "Update Customer"
+              : "Add Customer"}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* ENHANCED: Location Dialog with Historical Sales Update Option */}
-      <Dialog open={locationDialogOpen} onClose={handleCloseLocationDialog} maxWidth="md" fullWidth>
+      <Dialog
+        open={locationDialogOpen}
+        onClose={handleCloseLocationDialog}
+        maxWidth="md"
+        fullWidth
+      >
         <DialogTitle>
           <Box display="flex" alignItems="center" gap={1}>
             <LocationIcon color="primary" />
-            {editingLocation ? 'Edit Location' : `Add Location for ${selectedCustomer?.name}`}
+            {editingLocation
+              ? "Edit Location"
+              : `Add Location for ${selectedCustomer?.name}`}
           </Box>
         </DialogTitle>
         <DialogContent>
@@ -1160,7 +1441,9 @@ const CustomerManagement = () => {
                 label="Location Name *"
                 fullWidth
                 value={locationForm.name}
-                onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
+                onChange={(e) =>
+                  setLocationForm({ ...locationForm, name: e.target.value })
+                }
                 placeholder="e.g., Main Office, Warehouse, etc."
                 InputProps={{
                   startAdornment: (
@@ -1171,14 +1454,19 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="Brick Rate (per piece)"
                 type="number"
                 fullWidth
                 value={locationForm.brick_rate}
-                onChange={(e) => setLocationForm({ ...locationForm, brick_rate: e.target.value })}
+                onChange={(e) =>
+                  setLocationForm({
+                    ...locationForm,
+                    brick_rate: e.target.value,
+                  })
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1189,7 +1477,7 @@ const CustomerManagement = () => {
                 helperText="Different rates for different locations"
               />
             </Grid>
-            
+
             <Grid item xs={12}>
               <TextField
                 label="Address *"
@@ -1197,7 +1485,9 @@ const CustomerManagement = () => {
                 multiline
                 rows={2}
                 value={locationForm.address}
-                onChange={(e) => setLocationForm({ ...locationForm, address: e.target.value })}
+                onChange={(e) =>
+                  setLocationForm({ ...locationForm, address: e.target.value })
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1207,13 +1497,18 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="Contact Person"
                 fullWidth
                 value={locationForm.contact_person}
-                onChange={(e) => setLocationForm({ ...locationForm, contact_person: e.target.value })}
+                onChange={(e) =>
+                  setLocationForm({
+                    ...locationForm,
+                    contact_person: e.target.value,
+                  })
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1223,13 +1518,18 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="Contact Phone"
                 fullWidth
                 value={locationForm.contact_phone}
-                onChange={(e) => setLocationForm({ ...locationForm, contact_phone: e.target.value })}
+                onChange={(e) =>
+                  setLocationForm({
+                    ...locationForm,
+                    contact_phone: e.target.value,
+                  })
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -1239,16 +1539,18 @@ const CustomerManagement = () => {
                 }}
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <TextField
                 label="Pincode"
                 fullWidth
                 value={locationForm.pincode}
-                onChange={(e) => setLocationForm({ ...locationForm, pincode: e.target.value })}
+                onChange={(e) =>
+                  setLocationForm({ ...locationForm, pincode: e.target.value })
+                }
               />
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <FormControl fullWidth>
                 <InputLabel>State</InputLabel>
@@ -1257,11 +1559,13 @@ const CustomerManagement = () => {
                   label="State"
                   onChange={(e) => {
                     const selectedState = e.target.value;
-                    const stateData = Object.entries(INDIAN_STATES).find(([code, data]) => code === selectedState);
-                    setLocationForm({ 
-                      ...locationForm, 
-                      state: selectedState, 
-                      state_code: stateData ? stateData[1].code : '24' 
+                    const stateData = Object.entries(INDIAN_STATES).find(
+                      ([code, data]) => code === selectedState
+                    );
+                    setLocationForm({
+                      ...locationForm,
+                      state: selectedState,
+                      state_code: stateData ? stateData[1].code : "24",
                     });
                   }}
                 >
@@ -1277,23 +1581,22 @@ const CustomerManagement = () => {
             {/* NEW: Historical Sales Update Option */}
             {editingLocation && editingLocation.name !== locationForm.name && (
               <Grid item xs={12}>
-                <Alert 
-                  severity="warning" 
-                  sx={{ mb: 2 }}
-                  icon={<WarningIcon />}
-                >
+                <Alert severity="warning" sx={{ mb: 2 }} icon={<WarningIcon />}>
                   <Typography variant="body2" fontWeight="bold">
                     Location Name Changed
                   </Typography>
                   <Typography variant="body2">
-                    The location name has changed from "{editingLocation.name}" to "{locationForm.name}".
+                    The location name has changed from "{editingLocation.name}"
+                    to "{locationForm.name}".
                   </Typography>
                 </Alert>
                 <FormControlLabel
                   control={
                     <Checkbox
                       checked={updateHistoricalSales}
-                      onChange={(e) => setUpdateHistoricalSales(e.target.checked)}
+                      onChange={(e) =>
+                        setUpdateHistoricalSales(e.target.checked)
+                      }
                       color="primary"
                     />
                   }
@@ -1303,7 +1606,11 @@ const CustomerManagement = () => {
                         Update historical sales records
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Automatically update all past sales for this customer that reference the old location name "{editingLocation.name}" to use the new name "{locationForm.name}". This will save you from manually editing each sale record.
+                        Automatically update all past sales for this customer
+                        that reference the old location name "
+                        {editingLocation.name}" to use the new name "
+                        {locationForm.name}". This will save you from manually
+                        editing each sale record.
                       </Typography>
                     </Box>
                   }
@@ -1314,13 +1621,19 @@ const CustomerManagement = () => {
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
           <Button onClick={handleCloseLocationDialog}>Cancel</Button>
-          <Button 
-            onClick={handleSaveLocation} 
+          <Button
+            onClick={handleSaveLocation}
             variant="contained"
             disabled={loading}
             startIcon={isUpdatingHistoricalSales ? <HistoryIcon /> : null}
           >
-            {loading ? (isUpdatingHistoricalSales ? 'Updating Sales...' : 'Saving...') : editingLocation ? 'Update Location' : 'Add Location'}
+            {loading
+              ? isUpdatingHistoricalSales
+                ? "Updating Sales..."
+                : "Saving..."
+              : editingLocation
+              ? "Update Location"
+              : "Add Location"}
           </Button>
         </DialogActions>
       </Dialog>
