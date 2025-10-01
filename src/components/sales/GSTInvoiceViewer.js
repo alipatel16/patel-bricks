@@ -107,10 +107,10 @@ const GSTInvoiceViewer = ({
     } else {
       // Calculate GST amounts
       if (isInterState) {
-        igstAmount = (taxableAmount * 12) / 100; // 12% IGST for inter-state
+        igstAmount = (taxableAmount * 5) / 100; // 12% IGST for inter-state
       } else {
-        cgstAmount = (taxableAmount * 6) / 100; // 6% CGST for intra-state
-        sgstAmount = (taxableAmount * 6) / 100; // 6% SGST for intra-state
+        cgstAmount = (taxableAmount * 2.5) / 100; // 6% CGST for intra-state
+        sgstAmount = (taxableAmount * 2.5) / 100; // 6% SGST for intra-state
       }
     }
   }
@@ -847,7 +847,7 @@ const GSTInvoiceViewer = ({
                     printColorAdjust: 'exact',
                     colorAdjust: 'exact'
                   }}>
-                    SGST 6 %
+                    SGST 2.5 %
                   </TableCell>
                   <TableCell sx={{ 
                     border: '1px solid rgba(255,255,255,0.2)', 
@@ -861,7 +861,7 @@ const GSTInvoiceViewer = ({
                     printColorAdjust: 'exact',
                     colorAdjust: 'exact'
                   }}>
-                    CGST 6 %
+                    CGST 2.5 %
                   </TableCell>
                   <TableCell sx={{ 
                     border: '1px solid rgba(255,255,255,0.2)', 

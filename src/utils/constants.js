@@ -99,9 +99,9 @@ export const VALIDATION_RULES = {
 
 // GST RATES AND HSN CODES
 export const GST_RATES = {
-  CGST: 6, // Central GST 6%
-  SGST: 6, // State GST 6%
-  IGST: 12, // Integrated GST 12% (for inter-state)
+  CGST: 2.5, // Central GST 6%
+  SGST: 2.5, // State GST 6%
+  IGST: 5, // Integrated GST 12% (for inter-state)
 };
 
 export const GST_REPORT_TYPES = {
