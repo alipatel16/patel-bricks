@@ -1,4 +1,4 @@
-// components/customers/CustomerManagement.js - Enhanced version with automatic historical sales update
+// components/customers/CustomerManagement.js - Enhanced version with price update for historical sales
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -57,9 +57,9 @@ import {
   Warning as WarningIcon,
 } from "@mui/icons-material";
 import { customerService } from "../../services/customerService";
-import { salesService } from "../../services/salesService"; // NEW: Import salesService
-import { dbUtils } from "../../services/firebase"; // NEW: Import dbUtils
-import { INDIAN_STATES, DB_PATHS } from "../../utils/constants"; // NEW: Import DB_PATHS
+import { salesService } from "../../services/salesService";
+import { dbUtils } from "../../services/firebase";
+import { INDIAN_STATES, DB_PATHS } from "../../utils/constants";
 import { formatCurrency } from "../../utils/calculations";
 import toast from "react-hot-toast";
 
@@ -440,113 +440,241 @@ const CustomerManagement = () => {
     }
   };
 
-  // NEW: Function to update historical sales records
-  const updateHistoricalSalesRecords = async (
-    customerId,
-    oldLocationName,
-    newLocationName,
-    newBrickRate = null
-  ) => {
-    try {
+  // ENHANCED: Function to update historical sales records with new location name and/or price
+const updateHistoricalSalesRecords = async (
+  customerId,
+  oldLocationName,
+  newLocationName,
+  newBrickRate = null
+) => {
+  try {
+    console.log(
+      `Updating historical sales: Location="${oldLocationName}" -> "${newLocationName}", Price=${
+        newBrickRate || "unchanged"
+      }`
+    );
+
+    // Get all sales records
+    const salesResult = await salesService.getAllSales();
+    if (!salesResult.success || !salesResult.data) {
+      console.log("No sales data found or failed to fetch sales");
+      return { success: true, updatedCount: 0 };
+    }
+
+    // Find sales records for this customer with the old location name
+    const salesToUpdate = salesResult.data.filter(
+      (sale) =>
+        sale.customer_phone === customerId &&
+        sale.location_name === oldLocationName
+    );
+
+    console.log(`Found ${salesToUpdate.length} sales records to update`);
+
+    if (salesToUpdate.length === 0) {
+      return { success: true, updatedCount: 0 };
+    }
+
+    // Prepare batch updates
+    const updates = {};
+    let totalUpdated = 0;
+
+    // Update sales transactions
+    salesToUpdate.forEach((sale) => {
+      const saleUpdates = {
+        ...sale,
+        location_name: newLocationName,
+        last_edited: dbUtils.timestamp(),
+        edit_history: sale.edit_history || sale.invoice_number,
+        updated_by_location_change: true,
+      };
+
+      // NEW: Update brick rate if provided and different
+      if (
+        newBrickRate &&
+        parseFloat(newBrickRate) !== parseFloat(sale.price_per_brick)
+      ) {
+        const oldPrice = parseFloat(sale.price_per_brick);
+        const newPrice = parseFloat(newBrickRate);
+
+        saleUpdates.price_per_brick = newPrice;
+        saleUpdates.price_updated_by_location_change = true;
+        saleUpdates.old_price_per_brick = oldPrice;
+
+        // Recalculate amounts with new rate
+        const quantity = parseInt(sale.quantity || 0);
+        const discount = parseFloat(sale.discount_amount || 0);
+        const newSubtotal = quantity * newPrice;
+        const newTaxableAmount = newSubtotal - discount;
+
+        saleUpdates.subtotal = newSubtotal;
+        saleUpdates.taxable_amount = newTaxableAmount;
+
+        // Recalculate GST if applicable
+        if (sale.include_gst || sale.gst_included) {
+          const gstRate = sale.is_inter_state ? 12 : 12;
+          const gstAmount = (newTaxableAmount * gstRate) / 100;
+
+          if (sale.is_inter_state) {
+            saleUpdates.igst_amount = gstAmount;
+            saleUpdates.cgst_amount = 0;
+            saleUpdates.sgst_amount = 0;
+          } else {
+            saleUpdates.cgst_amount = gstAmount / 2;
+            saleUpdates.sgst_amount = gstAmount / 2;
+            saleUpdates.igst_amount = 0;
+          }
+
+          saleUpdates.total_tax = gstAmount;
+          saleUpdates.total_amount = newTaxableAmount + gstAmount;
+        } else {
+          saleUpdates.total_amount = newTaxableAmount;
+        }
+
+        console.log(
+          `Updated sale ${sale.invoice_number}: Price ${oldPrice} -> ${newPrice}, Total ${sale.total_amount} -> ${saleUpdates.total_amount}`
+        );
+      }
+
+      // Add to batch updates
+      updates[`${DB_PATHS.SALES}/transactions/${sale.invoice_number}`] =
+        saleUpdates;
+      totalUpdated++;
+    });
+
+    // NEW: Also update generated invoices (ONLY for specific locations, NOT "All Sites")
+    const invoicesResult = await dbUtils.readData(
+      `${DB_PATHS.SALES}/invoices`
+    );
+    if (invoicesResult.success && invoicesResult.data) {
+      // FIXED: Filter invoices for specific location only (exclude "all" or "All Sites")
+      const invoicesToUpdate = Object.entries(invoicesResult.data).filter(
+        ([id, invoice]) => {
+          // Must match customer phone
+          if (invoice.customerPhone !== customerId) {
+            return false;
+          }
+
+          // IMPORTANT: Skip "All Sites" invoices
+          const topLevelSite = invoice.selectedSite;
+          const invoiceDataSite = invoice.invoiceData?.selectedSite;
+          
+          // Skip if this is an "All Sites" invoice
+          if (
+            topLevelSite === "all" || 
+            topLevelSite === "All Sites" ||
+            invoiceDataSite === "all" ||
+            invoiceDataSite === "All Sites"
+          ) {
+            return false;
+          }
+
+          const addressSite = invoice.invoiceData?.customerData?.address;
+
+          // Match ONLY if the specific location matches
+          return (
+            topLevelSite === oldLocationName ||
+            invoiceDataSite === oldLocationName ||
+            addressSite === oldLocationName
+          );
+        }
+      );
+
       console.log(
-        `Updating historical sales: ${oldLocationName} -> ${newLocationName} for customer ${customerId}`
+        `Found ${invoicesToUpdate.length} invoice records to update (excluding All Sites)`
       );
 
-      // Get all sales records
-      const salesResult = await salesService.getAllSales();
-      if (!salesResult.success || !salesResult.data) {
-        console.log("No sales data found or failed to fetch sales");
-        return { success: true, updatedCount: 0 };
-      }
-
-      // Find sales records for this customer with the old location name
-      const salesToUpdate = salesResult.data.filter(
-        (sale) =>
-          sale.customer_phone === customerId &&
-          sale.location_name === oldLocationName
-      );
-
-      console.log(`Found ${salesToUpdate.length} sales records to update`);
-
-      if (salesToUpdate.length === 0) {
-        return { success: true, updatedCount: 0 };
-      }
-
-      // Prepare batch updates
-      const updates = {};
-
-      salesToUpdate.forEach((sale) => {
-        const saleUpdates = {
-          ...sale,
-          location_name: newLocationName,
+      invoicesToUpdate.forEach(([id, invoice]) => {
+        // Update location name in both top-level and invoiceData
+        const updatedInvoice = {
+          ...invoice,
+          selectedSite: newLocationName,
           last_edited: dbUtils.timestamp(),
-          edit_history: sale.edit_history || sale.invoice_number,
           updated_by_location_change: true,
         };
 
-        // Optionally update brick rate if provided and different
-        if (
-          newBrickRate &&
-          parseFloat(newBrickRate) !== parseFloat(sale.price_per_brick)
-        ) {
-          saleUpdates.price_per_brick = parseFloat(newBrickRate);
-          saleUpdates.price_updated_by_location_change = true;
+        // Update invoiceData if it exists
+        if (invoice.invoiceData) {
+          updatedInvoice.invoiceData = {
+            ...invoice.invoiceData,
+            selectedSite: newLocationName,
+          };
 
-          // Recalculate amounts with new rate
-          const quantity = parseInt(sale.quantity || 0);
-          const discount = parseFloat(sale.discount_amount || 0);
-          const newSubtotal = quantity * parseFloat(newBrickRate);
-          const newTaxableAmount = newSubtotal - discount;
+          // Update customerData address if it matches the old location
+          if (
+            invoice.invoiceData.customerData?.address === oldLocationName
+          ) {
+            updatedInvoice.invoiceData.customerData = {
+              ...invoice.invoiceData.customerData,
+              address: newLocationName,
+            };
+          }
 
-          saleUpdates.subtotal = newSubtotal;
-          saleUpdates.taxable_amount = newTaxableAmount;
+          // Update price if changed (actualRate in invoices)
+          if (newBrickRate && invoice.invoiceData.actualRate) {
+            const oldRate = parseFloat(invoice.invoiceData.actualRate);
+            const newRate = parseFloat(newBrickRate);
 
-          // Recalculate GST if applicable
-          if (sale.include_gst || sale.gst_included) {
-            const gstRate = sale.is_inter_state ? 12 : 12; // 12% total GST
-            const gstAmount = (newTaxableAmount * gstRate) / 100;
+            if (oldRate !== newRate) {
+              const priceRatio = newRate / oldRate;
 
-            if (sale.is_inter_state) {
-              saleUpdates.igst_amount = gstAmount;
-              saleUpdates.cgst_amount = 0;
-              saleUpdates.sgst_amount = 0;
-            } else {
-              saleUpdates.cgst_amount = gstAmount / 2;
-              saleUpdates.sgst_amount = gstAmount / 2;
-              saleUpdates.igst_amount = 0;
+              // Store old rate
+              updatedInvoice.invoiceData.old_actual_rate = oldRate;
+              updatedInvoice.invoiceData.actualRate = newRate;
+
+              // Recalculate amounts proportionally
+              if (invoice.invoiceData.gstAmount) {
+                updatedInvoice.invoiceData.gstAmount =
+                  parseFloat(invoice.invoiceData.gstAmount) * priceRatio;
+              }
+
+              if (invoice.invoiceData.nonGstAmount) {
+                updatedInvoice.invoiceData.nonGstAmount =
+                  parseFloat(invoice.invoiceData.nonGstAmount) * priceRatio;
+              }
+
+              if (invoice.invoiceData.totalAmount) {
+                updatedInvoice.invoiceData.totalAmount =
+                  parseFloat(invoice.invoiceData.totalAmount) * priceRatio;
+              }
+
+              updatedInvoice.price_updated_by_location_change = true;
+
+              console.log(
+                `Updated invoice ${invoice.gstInvoiceNumber}: Rate ${oldRate} -> ${newRate}, Total ${invoice.invoiceData.totalAmount} -> ${updatedInvoice.invoiceData.totalAmount}`
+              );
             }
-
-            saleUpdates.total_tax = gstAmount;
-            saleUpdates.total_amount = newTaxableAmount + gstAmount;
-          } else {
-            saleUpdates.total_amount = newTaxableAmount;
           }
         }
 
-        // Add to batch updates
-        updates[`${DB_PATHS.SALES}/transactions/${sale.invoice_number}`] =
-          saleUpdates;
+        updates[`${DB_PATHS.SALES}/invoices/${id}`] = updatedInvoice;
+        totalUpdated++;
       });
-
-      // Execute batch update
-      const updateResult = await dbUtils.batchUpdate(updates);
-
-      if (updateResult.success) {
-        console.log(
-          `Successfully updated ${salesToUpdate.length} sales records`
-        );
-        return { success: true, updatedCount: salesToUpdate.length };
-      } else {
-        console.error("Failed to update sales records:", updateResult.error);
-        return { success: false, error: updateResult.error };
-      }
-    } catch (error) {
-      console.error("Error updating historical sales records:", error);
-      return { success: false, error: error.message };
     }
-  };
 
-  // ENHANCED: Save location with historical sales update functionality
+    // Execute batch update
+    if (Object.keys(updates).length === 0) {
+      console.log("No updates to perform");
+      return { success: true, updatedCount: 0 };
+    }
+
+    const updateResult = await dbUtils.batchUpdate(updates);
+
+    if (updateResult.success) {
+      console.log(
+        `Successfully updated ${totalUpdated} records (sales + invoices)`
+      );
+      return { success: true, updatedCount: totalUpdated };
+    } else {
+      console.error("Failed to update sales records:", updateResult.error);
+      return { success: false, error: updateResult.error };
+    }
+  } catch (error) {
+    console.error("Error updating historical sales records:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+  // ENHANCED: Save location with historical sales update for both name AND price changes
   const handleSaveLocation = async () => {
     if (!locationForm.name || !locationForm.address) {
       toast.error("Location name and address are required");
@@ -557,10 +685,26 @@ const CustomerManagement = () => {
     setIsUpdatingHistoricalSales(true);
 
     try {
-      // Capture old location name for historical sales update
+      // Capture old values for historical sales update
       const oldLocationName = editingLocation ? editingLocation.name : null;
+      const oldBrickRate = editingLocation
+        ? selectedCustomer.brick_rates?.[editingLocation.id]
+        : null;
       const newLocationName = locationForm.name;
       const newBrickRate = locationForm.brick_rate;
+
+      // Detect if price changed
+      const priceChanged =
+        editingLocation &&
+        oldBrickRate &&
+        newBrickRate &&
+        parseFloat(oldBrickRate) !== parseFloat(newBrickRate);
+
+      // Detect if location name changed
+      const nameChanged =
+        editingLocation &&
+        oldLocationName &&
+        oldLocationName !== newLocationName;
 
       let result;
       if (editingLocation) {
@@ -577,27 +721,32 @@ const CustomerManagement = () => {
       }
 
       if (result.success) {
-        // If this is an edit and location name changed, update historical sales
+        // Update historical sales if location name OR price changed (and user opted in)
         if (
           editingLocation &&
-          oldLocationName &&
-          oldLocationName !== newLocationName &&
+          (nameChanged || priceChanged) &&
           updateHistoricalSales
         ) {
-          console.log("Location name changed, updating historical sales...");
+          console.log("Location details changed, updating historical sales...");
 
           const historicalUpdateResult = await updateHistoricalSalesRecords(
             selectedCustomer.id,
-            oldLocationName,
+            oldLocationName || newLocationName, // Use old name if changed, otherwise new name
             newLocationName,
-            newBrickRate
+            priceChanged ? newBrickRate : null // Only update price if it changed
           );
 
           if (historicalUpdateResult.success) {
             if (historicalUpdateResult.updatedCount > 0) {
-              toast.success(
-                `${result.message} and updated ${historicalUpdateResult.updatedCount} historical sales records`
-              );
+              let updateMessage = `${result.message} and updated ${historicalUpdateResult.updatedCount} historical sales records`;
+              if (nameChanged && priceChanged) {
+                updateMessage += " (location name and price)";
+              } else if (nameChanged) {
+                updateMessage += " (location name)";
+              } else if (priceChanged) {
+                updateMessage += " (price)";
+              }
+              toast.success(updateMessage);
             } else {
               toast.success(
                 `${result.message} (no historical sales found to update)`
@@ -729,7 +878,8 @@ const CustomerManagement = () => {
       {isUpdatingHistoricalSales && (
         <Alert severity="info" sx={{ mb: 2 }} icon={<HistoryIcon />}>
           <Typography variant="body2">
-            Updating historical sales records with new location information...
+            Updating historical sales records with new location information and
+            pricing...
           </Typography>
           <LinearProgress sx={{ mt: 1 }} />
         </Alert>
@@ -746,7 +896,7 @@ const CustomerManagement = () => {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
-                  height: "100px", // Fixed height for consistency
+                  height: "100px",
                 }}
               >
                 <Box>
@@ -788,7 +938,7 @@ const CustomerManagement = () => {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
-                  height: "100px", // Fixed height for consistency
+                  height: "100px",
                 }}
               >
                 <Box>
@@ -830,7 +980,7 @@ const CustomerManagement = () => {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
-                  height: "100px", // Fixed height for consistency
+                  height: "100px",
                 }}
               >
                 <Box>
@@ -876,7 +1026,7 @@ const CustomerManagement = () => {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "flex-start",
-                  height: "100px", // Fixed height for consistency
+                  height: "100px",
                 }}
               >
                 <Box>
@@ -960,7 +1110,7 @@ const CustomerManagement = () => {
                 >
                   <MenuItem value="all">All Customers</MenuItem>
                   <MenuItem value="business">Business Only</MenuItem>
-                  <MenuItem value="high_value">High Value (>₹50K)</MenuItem>
+                  <MenuItem value="high_value">High Value (&gt;₹50K)</MenuItem>
                   <MenuItem value="recent">Recent (30 days)</MenuItem>
                 </Select>
               </FormControl>
@@ -1281,7 +1431,7 @@ const CustomerManagement = () => {
         ))
       )}
 
-      {/* Customer Dialog - Keep existing implementation but simplify styling */}
+      {/* Customer Dialog */}
       <Dialog
         open={customerDialogOpen}
         onClose={handleCloseCustomerDialog}
@@ -1578,45 +1728,79 @@ const CustomerManagement = () => {
               </FormControl>
             </Grid>
 
-            {/* NEW: Historical Sales Update Option */}
-            {editingLocation && editingLocation.name !== locationForm.name && (
-              <Grid item xs={12}>
-                <Alert severity="warning" sx={{ mb: 2 }} icon={<WarningIcon />}>
-                  <Typography variant="body2" fontWeight="bold">
-                    Location Name Changed
-                  </Typography>
-                  <Typography variant="body2">
-                    The location name has changed from "{editingLocation.name}"
-                    to "{locationForm.name}".
-                  </Typography>
-                </Alert>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={updateHistoricalSales}
-                      onChange={(e) =>
-                        setUpdateHistoricalSales(e.target.checked)
-                      }
-                      color="primary"
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="body2" fontWeight="medium">
-                        Update historical sales records
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Automatically update all past sales for this customer
-                        that reference the old location name "
-                        {editingLocation.name}" to use the new name "
-                        {locationForm.name}". This will save you from manually
-                        editing each sale record.
-                      </Typography>
-                    </Box>
-                  }
-                />
-              </Grid>
-            )}
+            {/* ENHANCED: Historical Sales Update Option for both name AND price changes */}
+            {editingLocation &&
+              (editingLocation.name !== locationForm.name ||
+                (selectedCustomer.brick_rates?.[editingLocation.id] &&
+                  parseFloat(
+                    selectedCustomer.brick_rates[editingLocation.id]
+                  ) !== parseFloat(locationForm.brick_rate))) && (
+                <Grid item xs={12}>
+                  <Alert
+                    severity="warning"
+                    sx={{ mb: 2 }}
+                    icon={<WarningIcon />}
+                  >
+                    <Typography variant="body2" fontWeight="bold">
+                      {editingLocation.name !== locationForm.name &&
+                      selectedCustomer.brick_rates?.[editingLocation.id] &&
+                      parseFloat(
+                        selectedCustomer.brick_rates[editingLocation.id]
+                      ) !== parseFloat(locationForm.brick_rate)
+                        ? "Location Name and Price Changed"
+                        : editingLocation.name !== locationForm.name
+                        ? "Location Name Changed"
+                        : "Price Changed"}
+                    </Typography>
+                    <Typography variant="body2">
+                      {editingLocation.name !== locationForm.name &&
+                        `Location name: "${editingLocation.name}" → "${locationForm.name}"`}
+                      {editingLocation.name !== locationForm.name &&
+                        selectedCustomer.brick_rates?.[editingLocation.id] &&
+                        parseFloat(
+                          selectedCustomer.brick_rates[editingLocation.id]
+                        ) !== parseFloat(locationForm.brick_rate) &&
+                        " and "}
+                      {selectedCustomer.brick_rates?.[editingLocation.id] &&
+                        parseFloat(
+                          selectedCustomer.brick_rates[editingLocation.id]
+                        ) !== parseFloat(locationForm.brick_rate) &&
+                        `Price: ₹${
+                          selectedCustomer.brick_rates[editingLocation.id]
+                        } → ₹${locationForm.brick_rate}`}
+                    </Typography>
+                  </Alert>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={updateHistoricalSales}
+                        onChange={(e) =>
+                          setUpdateHistoricalSales(e.target.checked)
+                        }
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          Update historical sales records
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Automatically update all past sales for this customer
+                          that reference this location with the new name
+                          {selectedCustomer.brick_rates?.[editingLocation.id] &&
+                            parseFloat(
+                              selectedCustomer.brick_rates[editingLocation.id]
+                            ) !== parseFloat(locationForm.brick_rate) &&
+                            " and recalculate amounts with the new price"}
+                          . This will save you from manually editing each sale
+                          record.
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </Grid>
+              )}
           </Grid>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
