@@ -1,4 +1,4 @@
-// Sales.js - Updated to use separated components with original design and proper edit handling
+// Sales.js - Updated to use separated components with original design and proper edit/delete handling
 import { useState, useEffect } from "react";
 import {
   Box,
@@ -29,31 +29,23 @@ import {
 } from "@mui/icons-material";
 import toast from "react-hot-toast";
 
-// Import contexts and services
 import { useInventory } from "../context/InventoryContext";
 import { useSales } from "../hooks/useSales";
 
-// Import separated components
 import SalesHistory from "../components/sales/SalesHistory";
 import CustomerList from "../components/sales/CustomerList";
 import RecordSaleDialog from "../components/sales/RecordSaleDialog";
 import InvoiceReports from "../components/sales/InvoiceReports";
-
-// Import components
 import GSTInvoiceViewer from "../components/sales/GSTInvoiceViewer";
 
-// Import utilities
 import {
   validateSaleCapacity,
   formatCurrency,
   formatQuantity,
   validateSaleData,
 } from "../utils/calculations";
-import {
-  HSN_CODES,
-} from "../utils/constants";
+import { HSN_CODES } from "../utils/constants";
 
-// Tab Panel Component
 function TabPanel({ children, value, index, ...other }) {
   return (
     <div
@@ -76,33 +68,27 @@ function Sales() {
   const {
     sales,
     recordSale,
+    deleteSale, // NEW
     loadSalesData,
     searchCustomers,
     isLoading,
   } = useSales();
 
-  // State management
   const [currentTab, setCurrentTab] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  
-  // FIXED: Proper edit state management
   const [editingData, setEditingData] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  
   const [refreshing, setRefreshing] = useState(false);
 
-  // Invoice viewer state
   const [invoiceViewerOpen, setInvoiceViewerOpen] = useState(false);
   const [selectedSaleForInvoice, setSelectedSaleForInvoice] = useState(null);
 
-  // Auto-complete states
   const [customerOptions, setCustomerOptions] = useState([]);
   const [locationOptions, setLocationOptions] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
-  // Search and filter states
   const [searchFilters, setSearchFilters] = useState({
     searchTerm: "",
     dateFrom: "",
@@ -110,10 +96,9 @@ function Sales() {
     customerName: "",
     locationName: "",
     vehicleNumber: "",
-    invoiceType: "", // Added for invoice reports filtering
+    invoiceType: "",
   });
 
-  // Calculate real-time totals
   const [calculatedAmounts, setCalculatedAmounts] = useState({
     subtotal: 0,
     discountAmount: 0,
@@ -123,38 +108,31 @@ function Sales() {
     isInterState: false,
   });
 
-  // Load initial data
   useEffect(() => {
     loadSalesData();
   }, [loadSalesData]);
 
-  // Handle refresh
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await loadSalesData();
     } catch (error) {
-      
       toast.error("Failed to refresh sales data");
     } finally {
       setRefreshing(false);
     }
   };
 
-  // Handle tab change
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
   };
 
-  // Handle view invoice
   const handleViewInvoice = (sale) => {
     setSelectedSaleForInvoice(sale);
     setInvoiceViewerOpen(true);
   };
 
-  // Handle dialog operations
   const handleOpenDialog = () => {
-    // Reset edit state for new sale
     setEditingData(null);
     setIsEditMode(false);
     setSelectedCustomer(null);
@@ -166,7 +144,6 @@ function Sales() {
 
   const handleCloseDialog = () => {
     setDialogOpen(false);
-    // Reset all edit-related state
     setEditingData(null);
     setIsEditMode(false);
     setSelectedCustomer(null);
@@ -175,19 +152,13 @@ function Sales() {
     setLocationOptions([]);
   };
 
-  // FIXED: Proper edit sale handler
   const handleEditSale = (editData) => {
-    
-    
-    // Set edit mode and data
     setEditingData(editData);
     setIsEditMode(true);
-    
-    // Pre-populate customer and location if they exist
+
     if (editData.originalSale) {
       const sale = editData.originalSale;
-      
-      // Create customer object if customer data exists
+
       if (sale.customer_name) {
         const customerObj = {
           name: sale.customer_name,
@@ -199,8 +170,7 @@ function Sales() {
         };
         setSelectedCustomer(customerObj);
       }
-      
-      // Create location object if location data exists
+
       if (sale.location_name) {
         const locationObj = {
           name: sale.location_name,
@@ -209,17 +179,34 @@ function Sales() {
         setSelectedLocation(locationObj);
       }
     }
-    
-    // Open dialog
+
     setDialogOpen(true);
   };
 
-  // FIXED: Enhanced form submission with proper edit handling and data reload
+  // NEW: Handle delete sale
+  const handleDeleteSale = async (sale) => {
+    try {
+      const result = await deleteSale(sale);
+
+      if (result.success) {
+        // Reload inventory if possible
+        try {
+          if (inventoryActions && typeof inventoryActions.loadInventoryData === "function") {
+            await inventoryActions.loadInventoryData();
+          }
+        } catch (inventoryError) {
+          console.error("Error reloading inventory after delete:", inventoryError);
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting sale:", error);
+      toast.error("Failed to delete sale");
+    }
+  };
+
   const onSubmit = async (data) => {
     try {
-      // Skip stock validation for edit mode (will be handled by recordSale function)
       if (!isEditMode) {
-        // Validate brick availability for new sales
         const capacity = validateSaleCapacity(
           parseInt(data.quantity),
           bricks.total_stock
@@ -233,7 +220,6 @@ function Sales() {
         }
       }
 
-      // Validate form data (without customerAddress)
       const validation = validateSaleData({
         quantity: data.quantity,
         pricePerBrick: data.pricePerBrick,
@@ -250,81 +236,55 @@ function Sales() {
         return;
       }
 
-      // Prepare enhanced sale data
       const enhancedSaleData = {
-        // Date (already in YYYY-MM-DD format)
         date: data.saleDate,
-
-        // Product details
         quantity: parseInt(data.quantity),
         pricePerBrick: parseFloat(data.pricePerBrick),
         hsnCode: HSN_CODES.FLY_ASH_BRICKS,
-
-        // Customer details
         customerName: data.customerName,
         customerPhone: data.customerPhone,
         customerEmail: data.customerEmail,
-        customerAddress: data.locationName || "Address not provided", // Use location as address
+        customerAddress: data.locationName || "Address not provided",
         customerState: data.customerState,
         customerStateCode: data.customerStateCode,
         customerGSTIN: data.customerGSTIN,
-
-        // Location details
         locationName: data.locationName,
         locationId: selectedLocation?.id || null,
-
-        // Transport details
         vehicleNumber: data.vehicleNumber.toUpperCase(),
         challanNumber: data.challanNumber,
-
-        // Payment details
         discount: parseFloat(data.discount) || 0,
         discountType: data.discountType,
         paymentMethod: data.paymentMethod,
         notes: data.notes,
-
-        // GST details
         includeGST: data.includeGST || false,
-        
-        // Add calculated amounts for reference
         calculatedAmounts: calculatedAmounts,
-
-        // CRITICAL FIX: Proper edit mode data passing
         ...(isEditMode && editingData?.originalSale && {
           isEdit: true,
           originalSaleId: editingData.originalSale.id || editingData.originalSale.invoice_number,
-          preserveInvoiceNumber: editingData.originalSale.invoice_number, // CRITICAL FIX
-          originalQuantity: parseInt(editingData.originalSale.quantity), // CRITICAL FIX for stock adjustment
+          preserveInvoiceNumber: editingData.originalSale.invoice_number,
+          originalQuantity: parseInt(editingData.originalSale.quantity),
         }),
       };
 
       const result = await recordSale(enhancedSaleData);
 
       if (result.success) {
-        // Show appropriate success message (only for edits, since recordSale handles new sales)
         if (isEditMode) {
           toast.success("Sale updated successfully!");
         }
-        
-        // CRITICAL FIX: Always reload sales data after any sale operation
+
         try {
           await loadSalesData();
         } catch (salesError) {
           console.error("Error reloading sales data:", salesError);
-          // Continue anyway - sale was successful
         }
-        
-        // Try to reload inventory data if the function exists
+
         try {
-          if (
-            inventoryActions &&
-            typeof inventoryActions.loadInventoryData === "function"
-          ) {
+          if (inventoryActions && typeof inventoryActions.loadInventoryData === "function") {
             await inventoryActions.loadInventoryData();
           }
         } catch (inventoryError) {
           console.error("Error reloading inventory data:", inventoryError);
-          // Continue anyway - sale was successful
         }
 
         handleCloseDialog();
@@ -335,7 +295,6 @@ function Sales() {
     }
   };
 
-  // Filter sales based on search criteria
   const filteredSales = sales.history.filter((sale) => {
     const matchesSearchTerm =
       !searchFilters.searchTerm ||
@@ -383,7 +342,6 @@ function Sales() {
 
   return (
     <Box>
-      {/* Header - Consistent with other pages */}
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
@@ -396,97 +354,40 @@ function Sales() {
 
         <Box sx={{ display: "flex", gap: 1 }}>
           <Tooltip title="Refresh sales data">
-            <IconButton
-              onClick={handleRefresh}
-              disabled={refreshing}
-              color="primary"
-            >
+            <IconButton onClick={handleRefresh} disabled={refreshing} color="primary">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
         </Box>
       </Box>
 
-      {/* Loading indicator */}
-      {(isLoading || refreshing) && (
-        <LinearProgress sx={{ mb: 2 }} />
-      )}
+      {(isLoading || refreshing) && <LinearProgress sx={{ mb: 2 }} />}
 
-      {/* Enhanced Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: "divider"}}>
-        <Tabs
-          value={currentTab}
-          onChange={handleTabChange}
-        >
-          <Tab
-            label="Overview"
-            icon={<TrendingUpIcon />}
-            iconPosition="top"
-          />
-          <Tab
-            label="Sales History"
-            icon={<ReceiptIcon />}
-            iconPosition="top"
-          />
-          <Tab
-            label="Analytics"
-            icon={<TrendingUpIcon />}
-            iconPosition="top"
-          />
-          <Tab
-            label="Customer Report"
-            icon={<PeopleIcon />}
-            iconPosition="top"
-          />
-          <Tab
-            label="Invoice Reports"
-            icon={<InvoiceIcon />}
-            iconPosition="top"
-          />
+      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={currentTab} onChange={handleTabChange}>
+          <Tab label="Overview" icon={<TrendingUpIcon />} iconPosition="top" />
+          <Tab label="Sales History" icon={<ReceiptIcon />} iconPosition="top" />
+          <Tab label="Analytics" icon={<TrendingUpIcon />} iconPosition="top" />
+          <Tab label="Customer Report" icon={<PeopleIcon />} iconPosition="top" />
+          <Tab label="Invoice Reports" icon={<InvoiceIcon />} iconPosition="top" />
         </Tabs>
       </Box>
 
       {/* Overview Tab */}
       <TabPanel value={currentTab} index={0}>
         <Grid container spacing={3}>
-          {/* Main Stats Grid - 3 Cards of Equal Size */}
           <Grid item xs={12}>
             <Grid container spacing={3}>
-              {/* Today's Sales */}
               <Grid item xs={12} sm={6} md={4}>
                 <Card sx={{ height: "100%" }}>
                   <CardContent>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        height: "100px", // Fixed height for consistency
-                      }}
-                    >
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", height: "100px" }}>
                       <Box>
-                        <Typography
-                          color="textSecondary"
-                          gutterBottom
-                          variant="overline"
-                        >
-                          Today's Sales
-                        </Typography>
-                        <Typography variant="h5" component="div">
-                          {sales.todaySales?.total_sales || 0}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          {formatQuantity(sales.todaySales?.total_quantity || 0, "bricks")}
-                        </Typography>
+                        <Typography color="textSecondary" gutterBottom variant="overline">Today's Sales</Typography>
+                        <Typography variant="h5" component="div">{sales.todaySales?.total_sales || 0}</Typography>
+                        <Typography variant="body2" color="textSecondary">{formatQuantity(sales.todaySales?.total_quantity || 0, "bricks")}</Typography>
                       </Box>
-                      <Box
-                        sx={{
-                          p: 1,
-                          borderRadius: 2,
-                          backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                          color: theme.palette.primary.main,
-                        }}
-                      >
+                      <Box sx={{ p: 1, borderRadius: 2, backgroundColor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main }}>
                         <ShoppingCartIcon />
                       </Box>
                     </Box>
@@ -494,41 +395,16 @@ function Sales() {
                 </Card>
               </Grid>
 
-              {/* Today's Revenue */}
               <Grid item xs={12} sm={6} md={4}>
                 <Card sx={{ height: "100%" }}>
                   <CardContent>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        height: "100px", // Fixed height for consistency
-                      }}
-                    >
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", height: "100px" }}>
                       <Box>
-                        <Typography
-                          color="textSecondary"
-                          gutterBottom
-                          variant="overline"
-                        >
-                          Today's Revenue
-                        </Typography>
-                        <Typography variant="h5" component="div">
-                          {formatCurrency(sales.todaySales?.total_revenue || 0)}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          Revenue earned today
-                        </Typography>
+                        <Typography color="textSecondary" gutterBottom variant="overline">Today's Revenue</Typography>
+                        <Typography variant="h5" component="div">{formatCurrency(sales.todaySales?.total_revenue || 0)}</Typography>
+                        <Typography variant="body2" color="textSecondary">Revenue earned today</Typography>
                       </Box>
-                      <Box
-                        sx={{
-                          p: 1,
-                          borderRadius: 2,
-                          backgroundColor: alpha(theme.palette.success.main, 0.1),
-                          color: theme.palette.success.main,
-                        }}
-                      >
+                      <Box sx={{ p: 1, borderRadius: 2, backgroundColor: alpha(theme.palette.success.main, 0.1), color: theme.palette.success.main }}>
                         <RevenueIcon />
                       </Box>
                     </Box>
@@ -536,41 +412,16 @@ function Sales() {
                 </Card>
               </Grid>
 
-              {/* Total Customers */}
               <Grid item xs={12} sm={6} md={4}>
                 <Card sx={{ height: "100%" }}>
                   <CardContent>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        height: "100px", // Fixed height for consistency
-                      }}
-                    >
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", height: "100px" }}>
                       <Box>
-                        <Typography
-                          color="textSecondary"
-                          gutterBottom
-                          variant="overline"
-                        >
-                          Total Customers
-                        </Typography>
-                        <Typography variant="h5" component="div">
-                          {sales.customers?.length || 0}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          Active customers
-                        </Typography>
+                        <Typography color="textSecondary" gutterBottom variant="overline">Total Customers</Typography>
+                        <Typography variant="h5" component="div">{sales.customers?.length || 0}</Typography>
+                        <Typography variant="body2" color="textSecondary">Active customers</Typography>
                       </Box>
-                      <Box
-                        sx={{
-                          p: 1,
-                          borderRadius: 2,
-                          backgroundColor: alpha(theme.palette.info.main, 0.1),
-                          color: theme.palette.info.main,
-                        }}
-                      >
+                      <Box sx={{ p: 1, borderRadius: 2, backgroundColor: alpha(theme.palette.info.main, 0.1), color: theme.palette.info.main }}>
                         <PeopleIcon />
                       </Box>
                     </Box>
@@ -580,22 +431,14 @@ function Sales() {
             </Grid>
           </Grid>
 
-          {/* Record New Sale Button - Consistent Design */}
           <Grid item xs={12}>
             <Card>
               <CardContent sx={{ p: 3 }}>
-                <Box
-                  display="flex"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
+                <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Box>
-                    <Typography variant="h6" gutterBottom fontWeight="bold">
-                      Record New Sale
-                    </Typography>
+                    <Typography variant="h6" gutterBottom fontWeight="bold">Record New Sale</Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Click the button to start recording a new sale with
-                      intelligent auto-population features.
+                      Click the button to start recording a new sale with intelligent auto-population features.
                     </Typography>
                   </Box>
                   <Button
@@ -603,13 +446,7 @@ function Sales() {
                     size="large"
                     startIcon={<AddIcon />}
                     onClick={handleOpenDialog}
-                    sx={{
-                      borderRadius: 2,
-                      px: 4,
-                      py: 1.5,
-                      fontSize: "1rem",
-                      fontWeight: 600,
-                    }}
+                    sx={{ borderRadius: 2, px: 4, py: 1.5, fontSize: "1rem", fontWeight: 600 }}
                   >
                     New Sale
                   </Button>
@@ -629,7 +466,8 @@ function Sales() {
           setSearchFilters={setSearchFilters}
           filteredSales={filteredSales}
           onViewInvoice={handleViewInvoice}
-          onEditSale={handleEditSale} // FIXED: Now properly connected
+          onEditSale={handleEditSale}
+          onDeleteSale={handleDeleteSale} // NEW
         />
       </TabPanel>
 
@@ -639,20 +477,14 @@ function Sales() {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom fontWeight="bold">
-                  Monthly Performance
-                </Typography>
+                <Typography variant="h6" gutterBottom fontWeight="bold">Monthly Performance</Typography>
                 <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Box>
-                    <Typography variant="h4" color="primary" fontWeight="bold">
-                      {sales.stats?.total_sales || 0}
-                    </Typography>
+                    <Typography variant="h4" color="primary" fontWeight="bold">{sales.stats?.total_sales || 0}</Typography>
                     <Typography variant="body2">Total Sales</Typography>
                   </Box>
                   <Box textAlign="right">
-                    <Typography variant="h4" color="success.main" fontWeight="bold">
-                      {formatCurrency(sales.stats?.total_revenue || 0)}
-                    </Typography>
+                    <Typography variant="h4" color="success.main" fontWeight="bold">{formatCurrency(sales.stats?.total_revenue || 0)}</Typography>
                     <Typography variant="body2">Revenue</Typography>
                   </Box>
                 </Box>
@@ -662,20 +494,14 @@ function Sales() {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom fontWeight="bold">
-                  Average Metrics
-                </Typography>
+                <Typography variant="h6" gutterBottom fontWeight="bold">Average Metrics</Typography>
                 <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Box>
-                    <Typography variant="h4" color="info.main" fontWeight="bold">
-                      {formatCurrency(sales.stats?.average_order_value || 0)}
-                    </Typography>
+                    <Typography variant="h4" color="info.main" fontWeight="bold">{formatCurrency(sales.stats?.average_order_value || 0)}</Typography>
                     <Typography variant="body2">Avg. Order Value</Typography>
                   </Box>
                   <Box textAlign="right">
-                    <Typography variant="h4" color="warning.main" fontWeight="bold">
-                      {formatQuantity(sales.stats?.total_quantity || 0)}
-                    </Typography>
+                    <Typography variant="h4" color="warning.main" fontWeight="bold">{formatQuantity(sales.stats?.total_quantity || 0)}</Typography>
                     <Typography variant="body2">Total Quantity</Typography>
                   </Box>
                 </Box>
@@ -694,7 +520,7 @@ function Sales() {
         />
       </TabPanel>
 
-      {/* Invoice Reports Tab - NOW USING SEPARATE COMPONENT */}
+      {/* Invoice Reports Tab */}
       <TabPanel value={currentTab} index={4}>
         <InvoiceReports
           searchFilters={searchFilters}
@@ -703,7 +529,6 @@ function Sales() {
         />
       </TabPanel>
 
-      {/* Record Sale Dialog - ENHANCED: Now handles edit mode */}
       <RecordSaleDialog
         open={dialogOpen}
         onClose={handleCloseDialog}
@@ -723,30 +548,21 @@ function Sales() {
         calculatedAmounts={calculatedAmounts}
         setCalculatedAmounts={setCalculatedAmounts}
         searchCustomers={searchCustomers}
-        // FIXED: Pass edit-related props
         editingData={editingData}
         isEditMode={isEditMode}
       />
 
-      {/* GST Invoice Viewer */}
       <GSTInvoiceViewer
         open={invoiceViewerOpen}
         onClose={() => setInvoiceViewerOpen(false)}
         saleData={selectedSaleForInvoice}
       />
 
-      {/* Enhanced Floating Action Button for Mobile */}
       {isMobile && (
         <Fab
           color="primary"
           aria-label="add sale"
-          sx={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            width: 64,
-            height: 64,
-          }}
+          sx={{ position: "fixed", bottom: 24, right: 24, width: 64, height: 64 }}
           onClick={handleOpenDialog}
         >
           <AddIcon fontSize="large" />

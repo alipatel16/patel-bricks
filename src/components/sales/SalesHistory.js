@@ -1,4 +1,4 @@
-// components/Sales/SalesHistory.js - Fixed version with correct GST handling and Edit functionality
+// components/Sales/SalesHistory.js - Fixed version with correct GST handling, Edit functionality, and Delete functionality
 import { useState, useEffect } from 'react';
 import {
   Box,
@@ -26,11 +26,16 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Print as PrintIcon,
-  Edit as EditIcon, // NEW: Import Edit icon
+  Edit as EditIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatQuantity } from '../../utils/calculations';
 
@@ -41,11 +46,17 @@ const SalesHistory = ({
   setSearchFilters, 
   filteredSales, 
   onViewInvoice,
-  onEditSale, // NEW: Add onEditSale prop for edit functionality
+  onEditSale,
+  onDeleteSale, // NEW: Add onDeleteSale prop
 }) => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
@@ -61,7 +72,7 @@ const SalesHistory = ({
   // Handle items per page change
   const handleItemsPerPageChange = (event) => {
     setItemsPerPage(event.target.value);
-    setCurrentPage(1); // Reset to first page
+    setCurrentPage(1);
   };
 
   // Reset pagination when filters change
@@ -75,14 +86,11 @@ const SalesHistory = ({
     const pricePerBrick = parseFloat(sale.price_per_brick || 0);
     const discountAmount = parseFloat(sale.discount_amount || 0);
     
-    // Check if GST was included (multiple field names for compatibility)
     const gstIncluded = sale.include_gst || sale.gst_included || sale.includeGST || false;
     
     if (gstIncluded) {
-      // If GST was included, use the stored total_amount
       return formatCurrency(sale.total_amount);
     } else {
-      // If GST was not included, calculate amount without GST
       const subtotal = quantity * pricePerBrick;
       const amountAfterDiscount = subtotal - discountAmount;
       return formatCurrency(amountAfterDiscount);
@@ -94,14 +102,10 @@ const SalesHistory = ({
     return sale.include_gst || sale.gst_included || sale.includeGST || false;
   };
 
-  // NEW: Handle edit sale - convert sale data to form format
+  // Handle edit sale
   const handleEditSale = (sale) => {
-    // Convert sale data to match RecordSaleDialog form format
     const editData = {
-      // Original sale data for identification
       originalSale: sale,
-      
-      // Form data matching RecordSaleDialog defaultValues structure
       saleDate: sale.date || new Date().toISOString().split("T")[0],
       customerName: sale.customer_name || "",
       customerPhone: sale.customer_phone || "",
@@ -121,10 +125,35 @@ const SalesHistory = ({
       includeGST: isGSTIncluded(sale),
     };
 
-    // Call the parent component's edit handler
     if (onEditSale) {
       onEditSale(editData);
     }
+  };
+
+  // Handle delete click - open confirmation dialog
+  const handleDeleteClick = (sale) => {
+    setSaleToDelete(sale);
+    setDeleteDialogOpen(true);
+  };
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!saleToDelete || !onDeleteSale) return;
+    
+    setDeleting(true);
+    try {
+      await onDeleteSale(saleToDelete);
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+      setSaleToDelete(null);
+    }
+  };
+
+  // Handle delete cancel
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setSaleToDelete(null);
   };
 
   return (
@@ -355,7 +384,7 @@ const SalesHistory = ({
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          {/* NEW: Edit Button */}
+                          {/* Edit Button */}
                           <Tooltip title="Edit Sale">
                             <IconButton
                               size="small"
@@ -366,13 +395,24 @@ const SalesHistory = ({
                             </IconButton>
                           </Tooltip>
                           
-                          {/* Existing View Invoice Button */}
+                          {/* View Invoice Button */}
                           <Tooltip title="View Invoice">
                             <IconButton
                               size="small"
                               onClick={() => onViewInvoice(sale)}
                             >
                               <PrintIcon />
+                            </IconButton>
+                          </Tooltip>
+
+                          {/* NEW: Delete Button */}
+                          <Tooltip title="Delete Sale (restores stock)">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteClick(sale)}
+                              color="error"
+                            >
+                              <DeleteIcon />
                             </IconButton>
                           </Tooltip>
                         </Box>
@@ -426,6 +466,36 @@ const SalesHistory = ({
           </>
         )}
       </CardContent>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete Sale</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete invoice{' '}
+            <strong>{saleToDelete?.invoice_number}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will permanently delete the sale record and restore{' '}
+            <strong>{saleToDelete ? Number(saleToDelete.quantity).toLocaleString() : 0} bricks</strong>{' '}
+            back to inventory.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            color="error"
+            variant="contained"
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 };

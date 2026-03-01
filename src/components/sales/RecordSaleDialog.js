@@ -1,4 +1,4 @@
-// components/Sales/RecordSaleDialog.js - FIXED: Auto-populate location in edit mode
+// components/Sales/RecordSaleDialog.js - FIXED: Auto-populate location in edit mode + customer search in edit mode
 import { useState, useEffect } from "react";
 import {
   Box,
@@ -53,7 +53,7 @@ import {
 } from "../../utils/constants";
 import { productionService } from "../../services/productionService";
 import { salesService } from "../../services/salesService";
-import { customerService } from "../../services/customerService"; // NEW: Import customerService
+import { customerService } from "../../services/customerService";
 import { dbUtils } from "../../services/firebase";
 
 const RecordSaleDialog = ({
@@ -75,22 +75,17 @@ const RecordSaleDialog = ({
   calculatedAmounts,
   setCalculatedAmounts,
   searchCustomers,
-  // Edit mode props
   editingData,
   isEditMode,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-  // Customer search timeout
   const [customerSearchTimeout, setCustomerSearchTimeout] = useState(null);
   const [calculatedBrickStock, setCalculatedBrickStock] = useState(0);
-
-  // Vehicle management state
   const [vehicleOptions, setVehicleOptions] = useState([]);
   const [vehicleLoading, setVehicleLoading] = useState(false);
 
-  // Default form values
   const defaultValues = {
     saleDate: new Date().toISOString().split("T")[0],
     customerName: "",
@@ -111,7 +106,6 @@ const RecordSaleDialog = ({
     includeGST: false,
   };
 
-  // Form management with reordered fields
   const {
     control,
     handleSubmit,
@@ -119,9 +113,7 @@ const RecordSaleDialog = ({
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm({
-    defaultValues,
-  });
+  } = useForm({ defaultValues });
 
   const watchCustomerName = watch("customerName");
   const watchLocationName = watch("locationName");
@@ -133,12 +125,9 @@ const RecordSaleDialog = ({
   const watchIncludeGST = watch("includeGST");
   const watchVehicleNumber = watch("vehicleNumber");
 
-  // FIXED: Enhanced edit mode handling with proper customer data loading
+  // Handle edit mode - pre-populate form
   useEffect(() => {
     if (isEditMode && editingData && open) {
-      console.log('Edit mode - setting up form with data:', editingData);
-      
-      // Reset form with edit data
       reset({
         saleDate: editingData.saleDate || new Date().toISOString().split("T")[0],
         customerName: editingData.customerName || "",
@@ -159,46 +148,33 @@ const RecordSaleDialog = ({
         includeGST: editingData.includeGST || false,
       });
 
-      // FIXED: Load complete customer data for edit mode
       const loadCustomerDataForEdit = async () => {
         if (editingData.originalSale && editingData.originalSale.customer_phone) {
           try {
-            console.log('Loading customer data for edit mode:', editingData.originalSale.customer_phone);
-            
-            // Load complete customer data from customerService
             const customerResult = await customerService.getCustomerById(editingData.originalSale.customer_phone);
-            
+
             if (customerResult.success && customerResult.data) {
               const fullCustomerData = customerResult.data;
-              console.log('Loaded full customer data:', fullCustomerData);
-              
-              // Set selected customer with complete data including locations
               setSelectedCustomer(fullCustomerData);
-              
-              // Set location options from customer data
+
               if (fullCustomerData.locations && fullCustomerData.locations.length > 0) {
                 setLocationOptions(fullCustomerData.locations);
-                
-                // Find and set the selected location
+
                 const matchingLocation = fullCustomerData.locations.find(
                   loc => loc.name === editingData.locationName
                 );
-                
+
                 if (matchingLocation) {
-                  console.log('Found matching location:', matchingLocation);
                   setSelectedLocation(matchingLocation);
                 } else {
-                  // If location not found in customer data, create a temporary location object
                   const tempLocation = {
                     id: 'temp_location',
                     name: editingData.locationName || '',
                     address: editingData.originalSale.customer_address || ''
                   };
-                  console.log('Creating temporary location:', tempLocation);
                   setSelectedLocation(tempLocation);
                 }
               } else {
-                // No locations in customer data, create temporary location
                 if (editingData.locationName) {
                   const tempLocation = {
                     id: 'temp_location',
@@ -210,8 +186,6 @@ const RecordSaleDialog = ({
                 }
               }
             } else {
-              // Fallback: Create customer object from sale data
-              console.log('Fallback: Creating customer from sale data');
               const customerFromSale = {
                 name: editingData.customerName,
                 phone: editingData.customerPhone,
@@ -225,9 +199,9 @@ const RecordSaleDialog = ({
                   address: editingData.originalSale?.customer_address || editingData.locationName
                 }] : []
               };
-              
+
               setSelectedCustomer(customerFromSale);
-              
+
               if (editingData.locationName) {
                 const tempLocation = {
                   id: 'temp_location',
@@ -240,7 +214,6 @@ const RecordSaleDialog = ({
             }
           } catch (error) {
             console.error('Error loading customer data for edit:', error);
-            // Fallback to creating customer from sale data
             const customerFromSale = {
               name: editingData.customerName,
               phone: editingData.customerPhone,
@@ -254,9 +227,9 @@ const RecordSaleDialog = ({
                 address: editingData.originalSale?.customer_address || editingData.locationName
               }] : []
             };
-            
+
             setSelectedCustomer(customerFromSale);
-            
+
             if (editingData.locationName) {
               const tempLocation = {
                 id: 'temp_location',
@@ -270,11 +243,9 @@ const RecordSaleDialog = ({
         }
       };
 
-      // Load customer data for edit mode
       loadCustomerDataForEdit();
-      
+
     } else if (!isEditMode && open) {
-      // Reset to default values for new sale
       reset(defaultValues);
       setSelectedCustomer(null);
       setSelectedLocation(null);
@@ -287,7 +258,6 @@ const RecordSaleDialog = ({
     try {
       setVehicleLoading(true);
       const result = await dbUtils.readData('settings/invoice_config');
-      
       if (result.success && result.data && result.data.vehicles) {
         setVehicleOptions(result.data.vehicles);
       } else {
@@ -301,7 +271,6 @@ const RecordSaleDialog = ({
     }
   };
 
-  // Load vehicles on component mount
   useEffect(() => {
     if (open) {
       loadVehicleOptions();
@@ -316,10 +285,8 @@ const RecordSaleDialog = ({
     }
   }, [watchCustomerState, setValue]);
 
-  // Function to calculate actual brick stock (enhanced version)
   const calculateActualBrickStock = async () => {
     try {
-      // Fetch all required data including manual adjustments
       const [productionResult, salesResult] = await Promise.all([
         productionService.getProductionHistory(1000),
         salesService.getAllSales(),
@@ -327,18 +294,12 @@ const RecordSaleDialog = ({
 
       const totalProduction =
         productionResult.success && productionResult.data
-          ? productionResult.data.reduce(
-              (sum, prod) => sum + (parseInt(prod.quantity) || 0),
-              0
-            )
+          ? productionResult.data.reduce((sum, prod) => sum + (parseInt(prod.quantity) || 0), 0)
           : 0;
 
       const totalSales =
         salesResult.success && salesResult.data
-          ? salesResult.data.reduce(
-              (sum, sale) => sum + (parseInt(sale.quantity) || 0),
-              0
-            )
+          ? salesResult.data.reduce((sum, sale) => sum + (parseInt(sale.quantity) || 0), 0)
           : 0;
 
       return totalProduction - totalSales;
@@ -356,14 +317,10 @@ const RecordSaleDialog = ({
   useEffect(() => {
     loadCalculatedBrickStock();
   }, []);
-  
-  // Auto-populate customer when typing (debounced) - ONLY for non-edit mode
-  useEffect(() => {
-    // Skip auto-search in edit mode
-    if (isEditMode) {
-      return;
-    }
 
+  // FIXED: Customer search - works in both new and edit mode
+  // Removed early return for isEditMode so popup appears when user types in edit mode too
+  useEffect(() => {
     if (customerSearchTimeout) {
       clearTimeout(customerSearchTimeout);
     }
@@ -389,10 +346,14 @@ const RecordSaleDialog = ({
         }, 300)
       );
     } else if (!isEditMode) {
+      // Only clear selected customer/location when NOT in edit mode
       setCustomerOptions([]);
       setSelectedCustomer(null);
       setLocationOptions([]);
       setSelectedLocation(null);
+    } else {
+      // In edit mode, just clear options list but keep the selected customer
+      setCustomerOptions([]);
     }
 
     return () => {
@@ -408,16 +369,13 @@ const RecordSaleDialog = ({
     setLocationOptions,
     setSelectedLocation,
     setCustomerSearchLoading,
-    isEditMode, // Add isEditMode dependency
+    isEditMode,
   ]);
 
   // Auto-populate locations when customer is selected and user types location
   useEffect(() => {
     if (selectedCustomer && watchLocationName !== undefined) {
-      const suggestions = generateLocationSuggestions(
-        selectedCustomer,
-        watchLocationName
-      );
+      const suggestions = generateLocationSuggestions(selectedCustomer, watchLocationName);
       setLocationOptions(suggestions.map((s) => s.location));
     }
   }, [selectedCustomer, watchLocationName, setLocationOptions]);
@@ -433,29 +391,19 @@ const RecordSaleDialog = ({
 
     if (quantity > 0 && pricePerBrick > 0) {
       if (includeGST) {
-        // Calculate with GST
         const amounts = calculateTotalSaleAmount(
-          quantity,
-          pricePerBrick,
-          discount,
-          discountType,
-          customerState,
-          "GJ" // Company state
+          quantity, pricePerBrick, discount, discountType, customerState, "GJ"
         );
         setCalculatedAmounts(amounts);
       } else {
-        // Calculate without GST
         const subtotal = quantity * pricePerBrick;
         let discountAmount = 0;
-
         if (discountType === "percentage") {
           discountAmount = (subtotal * discount) / 100;
         } else {
           discountAmount = discount;
         }
-
         const totalAmount = Math.max(0, subtotal - discountAmount);
-
         setCalculatedAmounts({
           subtotal,
           discountAmount,
@@ -476,35 +424,24 @@ const RecordSaleDialog = ({
       });
     }
   }, [
-    watchQuantity,
-    watchPricePerBrick,
-    watchDiscount,
-    watchDiscountType,
-    watchCustomerState,
-    watchIncludeGST,
-    setCalculatedAmounts,
+    watchQuantity, watchPricePerBrick, watchDiscount, watchDiscountType,
+    watchCustomerState, watchIncludeGST, setCalculatedAmounts,
   ]);
 
-  // Handle customer selection from autocomplete (enhanced for new customers)
+  // Handle customer selection from autocomplete
   const handleCustomerSelect = (event, value) => {
     if (value && typeof value === "object") {
-      // Selected from existing customers
       setSelectedCustomer(value);
-
-      // Auto-populate customer fields
       setValue("customerName", value.name || "");
       setValue("customerPhone", value.phone || "");
       setValue("customerEmail", value.email || "");
       setValue("customerState", value.state || "GJ");
       setValue("customerStateCode", value.state_code || "24");
       setValue("customerGSTIN", value.gstin || "");
-
-      // Clear location selection to let user choose
       setValue("locationName", "");
       setSelectedLocation(null);
       setLocationOptions(value.locations || []);
     } else if (value && typeof value === "string") {
-      // Free text entry for new customer
       setSelectedCustomer(null);
       setValue("customerName", value);
       setValue("customerPhone", "");
@@ -516,30 +453,24 @@ const RecordSaleDialog = ({
       setSelectedLocation(null);
       setLocationOptions([]);
     } else {
-      // Clear selection
       setSelectedCustomer(null);
       setLocationOptions([]);
       setSelectedLocation(null);
     }
   };
 
-  // Handle location selection from autocomplete (enhanced for new locations)
+  // Handle location selection from autocomplete
   const handleLocationSelect = (event, value) => {
     if (value && typeof value === "object") {
-      // Selected from existing locations
       setSelectedLocation(value);
       setValue("locationName", value.name);
-
-      // Set brick rate if available for this location
       if (selectedCustomer?.brick_rates?.[value.id]) {
         setValue("pricePerBrick", selectedCustomer.brick_rates[value.id]);
       }
     } else if (value && typeof value === "string") {
-      // Free text entry for new location
       setSelectedLocation(null);
       setValue("locationName", value);
     } else {
-      // Clear selection
       setSelectedLocation(null);
       setValue("locationName", "");
     }
@@ -548,18 +479,14 @@ const RecordSaleDialog = ({
   // Handle vehicle selection from autocomplete
   const handleVehicleSelect = (event, value) => {
     if (value && typeof value === "object") {
-      // Selected from existing vehicles
       setValue("vehicleNumber", value.number);
     } else if (value && typeof value === "string") {
-      // Free text entry for new vehicle
       setValue("vehicleNumber", value.toUpperCase());
     } else {
-      // Clear selection
       setValue("vehicleNumber", "");
     }
   };
 
-  // Handle dialog close
   const handleClose = () => {
     reset(defaultValues);
     setSelectedCustomer(null);
@@ -569,15 +496,10 @@ const RecordSaleDialog = ({
     onClose();
   };
 
-  // Enhanced submit handler with auto-reset after successful submission
   const handleFormSubmit = async (data) => {
     try {
       await onSubmit(data);
-      
-      // Don't auto-reset in edit mode
       if (!isEditMode) {
-        // Reset the form automatically for next sale after successful submission
-        // Small delay to ensure any success messages are shown first
         setTimeout(() => {
           reset(defaultValues);
           setSelectedCustomer(null);
@@ -585,18 +507,13 @@ const RecordSaleDialog = ({
           setCustomerOptions([]);
           setLocationOptions([]);
           setCalculatedAmounts({
-            subtotal: 0,
-            discountAmount: 0,
-            taxableAmount: 0,
-            totalTax: 0,
-            totalAmount: 0,
-            isInterState: false,
+            subtotal: 0, discountAmount: 0, taxableAmount: 0,
+            totalTax: 0, totalAmount: 0, isInterState: false,
           });
-        }, 1000); // Increased delay to ensure success toast is visible
+        }, 1000);
       }
     } catch (error) {
       console.error('Form submit error:', error);
-      // Don't reset on error, let user see the error and fix it
     }
   };
 
@@ -621,7 +538,6 @@ const RecordSaleDialog = ({
               </Typography>
             </Box>
           </Box>
-          {/* Sale Date moved to top right corner */}
           <Box sx={{ minWidth: 200 }}>
             <Controller
               name="saleDate"
@@ -657,12 +573,7 @@ const RecordSaleDialog = ({
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
             {/* Customer Information */}
             <Grid item xs={12}>
-              <Typography
-                variant="subtitle1"
-                gutterBottom
-                color="primary"
-                fontWeight="bold"
-              >
+              <Typography variant="subtitle1" gutterBottom color="primary" fontWeight="bold">
                 <PersonIcon sx={{ mr: 1, verticalAlign: "middle" }} />
                 Customer Information
               </Typography>
@@ -671,7 +582,9 @@ const RecordSaleDialog = ({
             <Grid item xs={12} md={4}>
               <Autocomplete
                 options={customerOptions}
-                getOptionLabel={(option) => `${option.name} (${option.phone})`}
+                getOptionLabel={(option) =>
+                  typeof option === "object" ? `${option.name} (${option.phone})` : option
+                }
                 onChange={handleCustomerSelect}
                 loading={customerSearchLoading}
                 freeSolo
@@ -705,7 +618,7 @@ const RecordSaleDialog = ({
                           endAdornment: (
                             <>
                               {customerSearchLoading ? (
-                                <CircularProgress color="inherit" size={16} /> 
+                                <CircularProgress color="inherit" size={16} />
                               ) : null}
                               {params.InputProps.endAdornment}
                             </>
@@ -749,7 +662,7 @@ const RecordSaleDialog = ({
               <Autocomplete
                 options={locationOptions}
                 getOptionLabel={(option) =>
-                  `${option.name} - ${option.address}`
+                  typeof option === "object" ? `${option.name} - ${option.address}` : option
                 }
                 onChange={handleLocationSelect}
                 freeSolo
@@ -763,9 +676,7 @@ const RecordSaleDialog = ({
                         {option.name}
                         {selectedCustomer?.brick_rates?.[option.id] && (
                           <Chip
-                            label={`₹${
-                              selectedCustomer.brick_rates[option.id]
-                            }/brick`}
+                            label={`₹${selectedCustomer.brick_rates[option.id]}/brick`}
                             size="small"
                             color="success"
                             sx={{ ml: 1 }}
@@ -812,36 +723,33 @@ const RecordSaleDialog = ({
             </Grid>
 
             {/* GSTIN Field - only show when GST is included */}
-            {watchIncludeGST && <Grid item xs={12} md={4}>
-              <Controller
-                name="customerGSTIN"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="GSTIN (Optional)"
-                    size="small"
-                    fullWidth
-                    placeholder="e.g., 24BLLPP8863R1ZX"
-                    error={!!errors.customerGSTIN}
-                    helperText={errors.customerGSTIN?.message || "15-character GSTIN number"}
-                    inputProps={{ maxLength: 15 }}
-                    onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                  />
-                )}
-              />
-            </Grid>}
+            {watchIncludeGST && (
+              <Grid item xs={12} md={4}>
+                <Controller
+                  name="customerGSTIN"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="GSTIN (Optional)"
+                      size="small"
+                      fullWidth
+                      placeholder="e.g., 24BLLPP8863R1ZX"
+                      error={!!errors.customerGSTIN}
+                      helperText={errors.customerGSTIN?.message || "15-character GSTIN number"}
+                      inputProps={{ maxLength: 15 }}
+                      onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                    />
+                  )}
+                />
+              </Grid>
+            )}
 
             <Divider sx={{ width: "100%", my: 1 }} />
 
             {/* Product Information */}
             <Grid item xs={12}>
-              <Typography
-                variant="subtitle1"
-                gutterBottom
-                color="primary"
-                fontWeight="bold"
-              >
+              <Typography variant="subtitle1" gutterBottom color="primary" fontWeight="bold">
                 <MoneyIcon sx={{ mr: 1, verticalAlign: "middle" }} />
                 Product Information
               </Typography>
@@ -879,10 +787,7 @@ const RecordSaleDialog = ({
                 control={control}
                 rules={{
                   required: "Price per brick is required",
-                  min: {
-                    value: 0.01,
-                    message: "Price must be greater than 0",
-                  },
+                  min: { value: 0.01, message: "Price must be greater than 0" },
                 }}
                 render={({ field }) => (
                   <TextField
@@ -914,12 +819,7 @@ const RecordSaleDialog = ({
 
             {/* Transport Information */}
             <Grid item xs={12}>
-              <Typography
-                variant="subtitle1"
-                gutterBottom
-                color="primary"
-                fontWeight="bold"
-              >
+              <Typography variant="subtitle1" gutterBottom color="primary" fontWeight="bold">
                 <VehicleIcon sx={{ mr: 1, verticalAlign: "middle" }} />
                 Transport Information
               </Typography>
@@ -936,18 +836,12 @@ const RecordSaleDialog = ({
                 renderOption={(props, option) => (
                   <Box component="li" {...props}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                      <Typography variant="body2" fontWeight="bold">
-                        {option.number}
-                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">{option.number}</Typography>
                       {option.driver && (
-                        <Typography variant="caption" color="text.secondary">
-                          Driver: {option.driver}
-                        </Typography>
+                        <Typography variant="caption" color="text.secondary">Driver: {option.driver}</Typography>
                       )}
                       {option.capacity && (
-                        <Typography variant="caption" color="text.secondary">
-                          Capacity: {option.capacity} tons
-                        </Typography>
+                        <Typography variant="caption" color="text.secondary">Capacity: {option.capacity} tons</Typography>
                       )}
                     </Box>
                   </Box>
@@ -985,9 +879,7 @@ const RecordSaleDialog = ({
                             </>
                           ),
                         }}
-                        onChange={(e) =>
-                          field.onChange(e.target.value.toUpperCase())
-                        }
+                        onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                       />
                     )}
                   />
@@ -1023,33 +915,20 @@ const RecordSaleDialog = ({
               <Grid item xs={12}>
                 <Card variant="outlined">
                   <CardContent sx={{ py: 1.5 }}>
-                    <Typography
-                      variant="subtitle1"
-                      gutterBottom
-                      color="success.main"
-                      fontWeight="bold"
-                    >
+                    <Typography variant="subtitle1" gutterBottom color="success.main" fontWeight="bold">
                       Amount Calculation
                     </Typography>
                     <Grid container spacing={2}>
                       <Grid item xs={6} sm={3}>
-                        <Typography variant="body2" color="text.secondary">
-                          Subtotal
-                        </Typography>
+                        <Typography variant="body2" color="text.secondary">Subtotal</Typography>
                         <Typography variant="body1" fontWeight="bold">
                           {formatCurrency(calculatedAmounts.subtotal)}
                         </Typography>
                       </Grid>
                       {calculatedAmounts.discountAmount > 0 && (
                         <Grid item xs={6} sm={3}>
-                          <Typography variant="body2" color="text.secondary">
-                            Discount
-                          </Typography>
-                          <Typography
-                            variant="body1"
-                            color="error.main"
-                            fontWeight="bold"
-                          >
+                          <Typography variant="body2" color="text.secondary">Discount</Typography>
+                          <Typography variant="body1" color="error.main" fontWeight="bold">
                             -{formatCurrency(calculatedAmounts.discountAmount)}
                           </Typography>
                         </Grid>
@@ -1057,9 +936,7 @@ const RecordSaleDialog = ({
                       {watchIncludeGST && calculatedAmounts.totalTax > 0 && (
                         <Grid item xs={6} sm={3}>
                           <Typography variant="body2" color="text.secondary">
-                            {calculatedAmounts.isInterState
-                              ? "IGST (12%)"
-                              : "CGST+SGST (12%)"}
+                            {calculatedAmounts.isInterState ? "IGST (12%)" : "CGST+SGST (12%)"}
                           </Typography>
                           <Typography variant="body1" fontWeight="bold">
                             {formatCurrency(calculatedAmounts.totalTax)}
@@ -1068,14 +945,9 @@ const RecordSaleDialog = ({
                       )}
                       <Grid item xs={6} sm={3}>
                         <Typography variant="body2" color="text.secondary">
-                          Total Amount{" "}
-                          {watchIncludeGST ? "(incl. GST)" : "(excl. GST)"}
+                          Total Amount {watchIncludeGST ? "(incl. GST)" : "(excl. GST)"}
                         </Typography>
-                        <Typography
-                          variant="h6"
-                          color="success.main"
-                          fontWeight="bold"
-                        >
+                        <Typography variant="h6" color="success.main" fontWeight="bold">
                           {formatCurrency(calculatedAmounts.totalAmount)}
                         </Typography>
                       </Grid>
@@ -1098,12 +970,10 @@ const RecordSaleDialog = ({
           onClick={handleSubmit(handleFormSubmit)}
           variant="contained"
           disabled={isSubmitting || calculatedAmounts.totalAmount === 0}
-          startIcon={
-            isSubmitting ? <CircularProgress size={16} /> : <ShoppingCartIcon />
-          }
+          startIcon={isSubmitting ? <CircularProgress size={16} /> : <ShoppingCartIcon />}
         >
-          {isSubmitting 
-            ? (isEditMode ? "Updating..." : "Recording...") 
+          {isSubmitting
+            ? (isEditMode ? "Updating..." : "Recording...")
             : (isEditMode ? "Update Sale" : "Record Sale")
           }
         </Button>

@@ -1,4 +1,4 @@
-// hooks/useSales.js - Updated with customer integration
+// hooks/useSales.js - Updated with customer integration and deleteSale support
 import { useState, useEffect, useCallback } from 'react';
 import { salesService } from '../services/salesService';
 import { customerService } from '../services/customerService';
@@ -7,7 +7,6 @@ import { DB_PATHS } from '../utils/constants';
 import toast from 'react-hot-toast';
 
 export const useSales = () => {
-  // Enhanced state structure
   const [sales, setSales] = useState({
     history: [],
     todaySales: null,
@@ -21,7 +20,6 @@ export const useSales = () => {
 
   const { isConnected, listenToData } = useFirebase();
 
-  // Load sales data with enhanced features
   const loadSalesData = useCallback(async (limit = null, filters = {}) => {
     try {
       setSales(prev => ({ ...prev, loading: true, error: null }));
@@ -48,7 +46,6 @@ export const useSales = () => {
       }));
 
     } catch (error) {
-      
       setSales(prev => ({
         ...prev,
         loading: false,
@@ -57,7 +54,6 @@ export const useSales = () => {
     }
   }, []);
 
-  // Load sales trends
   const loadSalesTrends = useCallback(async (days = 30) => {
     try {
       const result = await salesService.getSalesTrends ? 
@@ -71,21 +67,15 @@ export const useSales = () => {
         }));
       }
     } catch (error) {
-      
+      // ignore
     }
   }, []);
 
-  // Record new sale with enhanced features
   const recordSale = useCallback(async (saleData) => {
     try {
       const result = await salesService.recordSale(saleData);
       
       if (result.success) {
-        // REMOVED: Don't automatically reload data here since Sales.js handles it
-        // This prevents double loading and ensures proper timing
-        // await loadSalesData(); // REMOVED
-        
-        // Only show success message for new sales (edit messages handled in Sales.js)
         if (!saleData.isEdit) {
           toast.success(result.message || 'Sale recorded successfully!');
         }
@@ -101,7 +91,28 @@ export const useSales = () => {
     }
   }, []);
 
-  // Customer management functions
+  // NEW: Delete sale and restore stock
+  const deleteSale = useCallback(async (sale) => {
+    try {
+      const invoiceNumber = sale.invoice_number || sale.id;
+      const result = await salesService.deleteSale(invoiceNumber);
+
+      if (result.success) {
+        toast.success(result.message || 'Sale deleted successfully!');
+        // Reload sales data after deletion
+        await loadSalesData();
+        return result;
+      } else {
+        toast.error(result.error || 'Failed to delete sale');
+        return result;
+      }
+    } catch (error) {
+      console.error('Error in deleteSale:', error);
+      toast.error('Failed to delete sale');
+      return { success: false, error: error.message };
+    }
+  }, [loadSalesData]);
+
   const loadCustomers = useCallback(async () => {
     try {
       const result = await customerService.getAllCustomers();
@@ -115,7 +126,6 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   }, []);
@@ -125,7 +135,6 @@ export const useSales = () => {
       const result = await customerService.searchCustomers(searchTerm);
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   }, []);
@@ -141,7 +150,6 @@ export const useSales = () => {
       }
       
       if (result.success) {
-        // Reload customers after save
         await loadCustomers();
         toast.success(result.message || `Customer ${isEditing ? 'updated' : 'created'} successfully!`);
       } else {
@@ -150,7 +158,6 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      
       toast.error(`Failed to ${isEditing ? 'update' : 'create'} customer`);
       return { success: false, error: error.message };
     }
@@ -169,13 +176,11 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      
       toast.error('Failed to delete customer');
       return { success: false, error: error.message };
     }
   }, [loadCustomers]);
 
-  // Customer location management
   const addCustomerLocation = useCallback(async (customerId, locationData) => {
     try {
       const result = await customerService.addCustomerLocation(customerId, locationData);
@@ -189,7 +194,6 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      
       toast.error('Failed to add location');
       return { success: false, error: error.message };
     }
@@ -208,7 +212,6 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      
       toast.error('Failed to update location');
       return { success: false, error: error.message };
     }
@@ -227,19 +230,16 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      
       toast.error('Failed to delete location');
       return { success: false, error: error.message };
     }
   }, [loadCustomers]);
 
-  // Sale operations
   const getSaleByInvoice = useCallback(async (invoiceNumber) => {
     try {
       const result = await salesService.getSaleByInvoice(invoiceNumber);
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   }, []);
@@ -249,12 +249,10 @@ export const useSales = () => {
       const result = await salesService.generateInvoicePDF(invoiceNumber);
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   }, []);
 
-  // Filter sales with enhanced criteria
   const filterSales = useCallback(async (filters) => {
     try {
       const result = await salesService.getSalesHistory(null, filters);
@@ -268,15 +266,12 @@ export const useSales = () => {
       
       return result;
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   }, []);
 
-  // Get customer analytics
   const getCustomerAnalytics = useCallback(async (customerId) => {
     try {
-      // Get all sales for this customer
       const allSalesResult = await salesService.getSalesHistory(null);
       
       if (!allSalesResult.success) {
@@ -304,15 +299,12 @@ export const useSales = () => {
       
       return { success: true, data: analytics };
     } catch (error) {
-      
       return { success: false, error: error.message };
     }
   }, []);
 
-  // Real-time data listening
   useEffect(() => {
     if (isConnected) {
-      // Listen to sales changes
       const unsubscribeSales = listenToData(`${DB_PATHS.SALES}/transactions`, (data) => {
         if (data) {
           const salesArray = Object.entries(data).map(([id, sale]) => ({
@@ -327,7 +319,6 @@ export const useSales = () => {
         }
       });
 
-      // Listen to customer changes
       const unsubscribeCustomers = listenToData(DB_PATHS.CUSTOMERS, (data) => {
         if (data) {
           const customersArray = Object.entries(data).map(([id, customer]) => ({
@@ -349,38 +340,27 @@ export const useSales = () => {
     }
   }, [isConnected, listenToData]);
 
-  // Initialize data on mount
   useEffect(() => {
     loadSalesData();
   }, [loadSalesData]);
 
   return {
-    // State
     sales,
-    
-    // Sales operations
     loadSalesData,
     loadSalesTrends,
     recordSale,
+    deleteSale, // NEW
     getSaleByInvoice,
     generateInvoicePDF,
     filterSales,
-    
-    // Customer operations
     loadCustomers,
     searchCustomers,
     saveCustomer,
     deleteCustomer,
-    
-    // Customer location operations
     addCustomerLocation,
     updateCustomerLocation,
     deleteCustomerLocation,
-    
-    // Analytics
     getCustomerAnalytics,
-    
-    // Utilities
     isLoading: sales.loading,
     error: sales.error,
   };
