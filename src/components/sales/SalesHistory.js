@@ -38,6 +38,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { formatCurrency, formatQuantity } from '../../utils/calculations';
+import { productionService } from '../../services/productionService';
 
 const SalesHistory = ({ 
   sales, 
@@ -57,6 +58,29 @@ const SalesHistory = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [saleToDelete, setSaleToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Date range production total state
+  const [rangeProductionTotal, setRangeProductionTotal] = useState(0);
+
+  // Fetch production total for selected date range directly from service
+  useEffect(() => {
+    const fetchProductionTotal = async () => {
+      if (!searchFilters?.dateFrom && !searchFilters?.dateTo) {
+        setRangeProductionTotal(0);
+        return;
+      }
+      const result = await productionService.getProductionHistory(
+        1000,
+        searchFilters?.dateFrom || null,
+        searchFilters?.dateTo || null
+      );
+      if (result.success) {
+        const total = result.data.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+        setRangeProductionTotal(total);
+      }
+    };
+    fetchProductionTotal();
+  }, [searchFilters?.dateFrom, searchFilters?.dateTo]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
@@ -285,6 +309,29 @@ const SalesHistory = ({
             </Button>
           </Grid>
         </Grid>
+
+        {/* Date Range Report Summary */}
+        {(searchFilters?.dateFrom || searchFilters?.dateTo) && (
+          <Box sx={{ mb: 3, p: 2, bgcolor: 'action.hover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+              Date Range Report: {searchFilters?.dateFrom || 'Start'} to {searchFilters?.dateTo || 'End'}
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Bricks Sold</Typography>
+                <Typography variant="h6" color="primary.main" fontWeight="bold">
+                  {filteredSales.reduce((sum, sale) => sum + (Number(sale.quantity) || 0), 0).toLocaleString()}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Bricks Produced</Typography>
+                <Typography variant="h6" color="success.main" fontWeight="bold">
+                  {rangeProductionTotal.toLocaleString()}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
 
         {isLoading ? (
           <Box display="flex" justifyContent="center" p={3}>
