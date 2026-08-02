@@ -1,35 +1,18 @@
-// Import Firebase functions
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, push, set, get, update, remove, onValue, off } from 'firebase/database';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
+import { getFirestore, serverTimestamp, Timestamp } from 'firebase/firestore';
 
-// Import localStorage fallback
-import { localStorageUtils, initializeLocalStorage } from './localStorage';
+const requiredKeys = [
+  'REACT_APP_FIREBASE_API_KEY',
+  'REACT_APP_FIREBASE_AUTH_DOMAIN',
+  'REACT_APP_FIREBASE_PROJECT_ID',
+  'REACT_APP_FIREBASE_APP_ID',
+];
 
-const validateFirebasePath = (path) => {
-  if (!path || path === '/') return path;
-  
-  // Remove any invalid characters and clean the path
-  const cleanPath = path
-    .replace(/\/+/g, '/') // Replace multiple slashes with single slash
-    .replace(/^\//, '') // Remove leading slash
-    .replace(/\/$/, '') // Remove trailing slash
-    .replace(/[.#$\[\]]/g, '_'); // Replace invalid Firebase characters
-  
-  return cleanPath;
-};
+export const firebaseConfigured = requiredKeys.every((key) => Boolean(process.env[key]));
 
-// Check if Firebase is configured
-const isFirebaseConfigured = () => {
-  return !!(
-    process.env.REACT_APP_FIREBASE_API_KEY &&
-    process.env.REACT_APP_FIREBASE_DATABASE_URL &&
-    process.env.REACT_APP_FIREBASE_PROJECT_ID
-  );
-};
-
-// Firebase configuration
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
   databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL,
@@ -39,257 +22,14 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase (only if configured)
-let app = null;
-let database = null;
-let auth = null;
-let useLocalStorage = false;
-
-if (isFirebaseConfigured()) {
-  try {
-    app = initializeApp(firebaseConfig);
-    database = getDatabase(app);
-    auth = getAuth(app);
-    
-  } catch (error) {
-    
-    useLocalStorage = true;
-  }
-} else {
-  
-  useLocalStorage = true;
+if (!firebaseConfigured) {
+  console.warn('Firebase environment variables are incomplete. Copy .env.example to .env.');
 }
 
-export { database, auth };
+export const firebaseApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+export const auth = getAuth(firebaseApp);
+export const realtimeDb = getDatabase(firebaseApp);
+export const db = getFirestore(firebaseApp);
 
-// Database utility functions (works with both Firebase and localStorage)
-export const dbUtils = {
-  // Create a reference
-  createRef: (path) => {
-    if (useLocalStorage) return path;
-    return ref(database, path);
-  },
-  
-  // Write data
-  writeData: async (path, data) => {
-    try {
-      if (useLocalStorage) {
-        return await localStorageUtils.writeData(path, data);
-      }
-      
-      const dbRef = ref(database, path);
-      await set(dbRef, data);
-      return { success: true };
-    } catch (error) {
-      
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Read data once
-  readData: async (path) => {
-    try {
-      if (useLocalStorage) {
-        return await localStorageUtils.readData(path);
-      }
-
-      // Validate and clean the path
-      const cleanPath = validateFirebasePath(path);
-    
-      if (!cleanPath) {
-        // If path is empty or just '/', read the root
-        const snapshot = await get(ref(database));
-        const data = snapshot.exists() ? snapshot.val() : null;
-        return { success: true, data };
-      }
-      
-      const dbRef = ref(database, path);
-      const snapshot = await get(dbRef);
-      if (snapshot.exists()) {
-        return { success: true, data: snapshot.val() };
-      } else {
-        return { success: true, data: null };
-      }
-    } catch (error) {
-      
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Update data
-  updateData: async (path, updates) => {
-    try {
-      if (useLocalStorage) {
-        return await localStorageUtils.updateData(path, updates);
-      }
-      
-      const dbRef = ref(database, path);
-      await update(dbRef, updates);
-      return { success: true };
-    } catch (error) {
-      
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Push new data (generates unique key)
-  pushData: async (path, data) => {
-    try {
-      if (useLocalStorage) {
-        return await localStorageUtils.pushData(path, data);
-      }
-      
-      const dbRef = ref(database, path);
-      const newRef = await push(dbRef, data);
-      return { success: true, key: newRef.key };
-    } catch (error) {
-      
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Delete data
-  deleteData: async (path) => {
-    try {
-      if (useLocalStorage) {
-        return await localStorageUtils.deleteData(path);
-      }
-      
-      const dbRef = ref(database, path);
-      await remove(dbRef);
-      return { success: true };
-    } catch (error) {
-      
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Listen to data changes
-  listenToData: (path, callback) => {
-    if (useLocalStorage) {
-      return localStorageUtils.listenToData(path, callback);
-    }
-    
-    const dbRef = ref(database, path);
-    const unsubscribe = onValue(dbRef, (snapshot) => {
-      const data = snapshot.exists() ? snapshot.val() : null;
-      callback(data);
-    }, (error) => {
-      
-      callback(null, error);
-    });
-    
-    return unsubscribe;
-  },
-
-  // Stop listening to data changes
-  stopListening: (path, callback) => {
-    if (useLocalStorage) return;
-    
-    const dbRef = ref(database, path);
-    off(dbRef, 'value', callback);
-  },
-
-  // Batch update multiple paths
-  batchUpdate: async (updates) => {
-    try {
-      if (useLocalStorage) {
-        return await localStorageUtils.batchUpdate(updates);
-      }
-      
-      await update(ref(database), updates);
-      return { success: true };
-    } catch (error) {
-      
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Generate timestamp
-  timestamp: () => Date.now(),
-
-  // Generate date string
-  dateString: () => new Date().toISOString().split('T')[0], // YYYY-MM-DD format
-};
-
-// Initialize database (Firebase or localStorage)
-export const initializeDatabase = async () => {
-  try {
-    if (useLocalStorage) {
-      
-      return await initializeLocalStorage();
-    }
-    
-    // Check if Firebase data already exists
-    const { data: existingData } = await dbUtils.readData('/');
-    
-    if (!existingData) {
-      
-      
-      const defaultData = {
-        bricks: {
-          inventory: {
-            total_stock: 0,
-            last_updated: dbUtils.timestamp(),
-          },
-          production: {
-            daily: {},
-            monthly: {},
-          },
-          sales: {
-            transactions: {},
-            daily: {},
-          },
-        },
-        cement: {
-          inventory: {
-            total_bags: 0,
-            cost_per_bag: 25,
-            last_updated: dbUtils.timestamp(),
-          },
-          usage: {
-            daily: {},
-          },
-          purchases: {},
-        },
-        settings: {
-          cement_per_brick_ratio: 0.05,
-          default_brick_price: 2.5,
-          low_stock_alert: {
-            bricks: 1000,
-            cement: 10,
-          },
-          initialized: true,
-          created_at: dbUtils.timestamp(),
-        },
-      };
-
-      await dbUtils.writeData('/', defaultData);
-      
-      return { success: true, message: 'Database initialized' };
-    } else {
-      
-      return { success: true, message: 'Database already exists' };
-    }
-  } catch (error) {
-    
-    return { success: false, error: error.message };
-  }
-};
-
-// Connection status checker
-export const checkConnection = async () => {
-  try {
-    if (useLocalStorage) {
-      return true; // localStorage is always available
-    }
-    
-    const { success } = await dbUtils.readData('/settings');
-    return success;
-  } catch (error) {
-    
-    return false;
-  }
-};
-
-export default app;
+export { serverTimestamp, Timestamp };
+export const checkConnection = () => navigator.onLine;

@@ -1,7 +1,7 @@
 {
   "name": "brick-production-app",
-  "version": "1.0.0",
-  "description": "A web application for managing brick production, inventory, and sales",
+  "version": "2.3.0",
+  "description": "Firestore-first Patel Bricks management app with restored GST reports, complete material inventory, aligned sales entry and premium printable invoices",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.10.0",
@@ -48,5 +48,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "engines": {
+    "node": ">=20.19.4 <23"
   }
 }
