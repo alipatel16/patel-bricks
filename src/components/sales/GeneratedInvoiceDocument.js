@@ -68,9 +68,9 @@ const GeneratedInvoiceDocument = React.forwardRef(({ invoice, settings, componen
 
   return (
     <InvoiceCanvas ref={ref}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2.4} alignItems={{ sm: 'stretch' }} sx={{ pt: 0.7 }}>
+      <Stack direction="row" justifyContent="space-between" spacing={2.4} alignItems="stretch" sx={{ pt: 0.7 }}>
         <Box sx={{ minWidth: 0, borderLeft: `5px solid ${invoiceColors.accent}`, pl: 1.8 }}>
-          <Typography sx={{ fontSize: { xs: 27, sm: 32 }, fontWeight: 950, color: invoiceColors.navy, lineHeight: 1.02, letterSpacing: '-.025em' }}>
+          <Typography sx={{ fontSize: 32, fontWeight: 950, color: invoiceColors.navy, lineHeight: 1.02, letterSpacing: '-.025em' }}>
             {company.name || 'PATEL BRICKS'}
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.65, maxWidth: 465, color: invoiceColors.muted, lineHeight: 1.42 }}>{company.address || '—'}</Typography>
@@ -82,14 +82,14 @@ const GeneratedInvoiceDocument = React.forwardRef(({ invoice, settings, componen
         <InvoiceTypeBadge label={title} number={invoiceNumber} date={invoice.date || invoice.invoiceDate} tone={showGst ? 'accent' : 'green'} />
       </Stack>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mt: 1.6, py: 0.85, px: 1.35, bgcolor: invoiceColors.soft, borderTop: `1px solid ${invoiceColors.line}`, borderBottom: `1px solid ${invoiceColors.line}` }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mt: 1.6, py: 0.85, px: 1.35, bgcolor: invoiceColors.soft, borderTop: `1px solid ${invoiceColors.line}`, borderBottom: `1px solid ${invoiceColors.line}` }}>
         <Typography variant="caption" sx={{ color: invoiceColors.muted, fontWeight: 800 }}>
           Invoice coverage: <Box component="span" sx={{ color: invoiceColors.ink }}>{invoice.fromDate || invoice.originalInvoiceData?.dateRange?.from || '—'} to {invoice.toDate || invoice.originalInvoiceData?.dateRange?.to || '—'}</Box>
         </Typography>
         <Typography variant="caption" sx={{ color: showGst ? invoiceColors.accentDark : invoiceColors.green, fontWeight: 950, letterSpacing: '.08em' }}>{showGst ? 'GST INVOICE' : 'NON-GST INVOICE'}</Typography>
       </Stack>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5, mt: 1.7 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mt: 1.7 }}>
         {format.showCustomerDetails !== false && (
           <InfoPanel eyebrow="Billed to name and address" title={billedToName} accent>
             <Typography variant="body2">{billedToAddress}</Typography>
@@ -103,7 +103,7 @@ const GeneratedInvoiceDocument = React.forwardRef(({ invoice, settings, componen
         </InfoPanel>
       </Box>
 
-      <Box sx={{ mt: 1.15, px: 1.35, py: 0.85, border: `1px solid ${invoiceColors.line}`, bgcolor: invoiceColors.soft, display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 1 }}>
+      <Box sx={{ mt: 1.15, px: 1.35, py: 0.85, border: `1px solid ${invoiceColors.line}`, bgcolor: invoiceColors.soft, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
         <Box><Typography sx={{ fontSize: 9, color: invoiceColors.muted, fontWeight: 900, letterSpacing: '.08em' }}>SITE</Typography><Typography variant="body2" sx={{ fontWeight: 850 }}>{invoice.selectedSite || 'All sites'}</Typography></Box>
         <Box><Typography sx={{ fontSize: 9, color: invoiceColors.muted, fontWeight: 900, letterSpacing: '.08em' }}>LINKED SALES</Typography><Typography variant="body2" sx={{ fontWeight: 850 }}>{formatNumber(invoice.saleIds?.length || 0)}</Typography></Box>
         <Box><Typography sx={{ fontSize: 9, color: invoiceColors.muted, fontWeight: 900, letterSpacing: '.08em' }}>RATE</Typography><Typography variant="body2" sx={{ fontWeight: 850 }}>{formatCurrency(invoice.rate)} / brick</Typography></Box>
@@ -132,7 +132,7 @@ const GeneratedInvoiceDocument = React.forwardRef(({ invoice, settings, componen
         ))}
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) 320px' }, gap: 2, mt: 1.8, alignItems: 'start' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 2, mt: 1.8, alignItems: 'start' }}>
         <Box>
           <Box sx={{ border: `1px solid ${invoiceColors.line}`, bgcolor: invoiceColors.soft, p: 1.2 }}>
             <Typography sx={{ fontSize: 9.5, fontWeight: 900, letterSpacing: '.12em', color: invoiceColors.muted }}>QUANTITY SUMMARY</Typography>

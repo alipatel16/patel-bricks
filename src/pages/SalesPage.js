@@ -275,25 +275,57 @@ const SalesPage = () => {
     return null;
   };
 
+  const buildSaleInvoicePdf = async () => {
+    if (!invoiceRef.current || !viewerSale) return null;
+    const canvas = await html2canvas(invoiceRef.current, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      windowWidth: invoiceRef.current.scrollWidth,
+      windowHeight: invoiceRef.current.scrollHeight,
+    });
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 5;
+    const availableWidth = pageWidth - (margin * 2);
+    const availableHeight = pageHeight - (margin * 2);
+    const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+    const imageWidth = canvas.width * scale;
+    const imageHeight = canvas.height * scale;
+    const x = (pageWidth - imageWidth) / 2;
+    const y = (pageHeight - imageHeight) / 2;
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imageWidth, imageHeight);
+    return pdf;
+  };
+
   const downloadPdf = async () => {
     if (!invoiceRef.current || !viewerSale) return;
     setBusy(true);
     try {
-      const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5;
-      const availableWidth = pageWidth - (margin * 2);
-      const availableHeight = pageHeight - (margin * 2);
-      const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
-      const imageWidth = canvas.width * scale;
-      const imageHeight = canvas.height * scale;
-      const x = (pageWidth - imageWidth) / 2;
-      const y = (pageHeight - imageHeight) / 2;
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imageWidth, imageHeight);
-      pdf.save(`${viewerSale.invoiceNumber}.pdf`);
+      const pdf = await buildSaleInvoicePdf();
+      if (pdf) pdf.save(`${viewerSale.invoiceNumber}.pdf`);
     } catch (error) { toast.error(error.message || 'Unable to create PDF.'); } finally { setBusy(false); }
+  };
+
+  const printSaleInvoice = async () => {
+    if (!invoiceRef.current || !viewerSale) return;
+    const printWindow = window.open('', '_blank');
+    setBusy(true);
+    try {
+      if (printWindow) {
+        printWindow.document.write('<title>Preparing invoice…</title><p style="font-family:sans-serif;padding:24px">Preparing invoice…</p>');
+      }
+      const pdf = await buildSaleInvoicePdf();
+      if (!pdf) return;
+      const blobUrl = URL.createObjectURL(pdf.output('blob'));
+      if (printWindow) printWindow.location.replace(blobUrl);
+      else window.location.href = blobUrl;
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+    } catch (error) {
+      if (printWindow && !printWindow.closed) printWindow.close();
+      toast.error(error.message || 'Unable to prepare invoice for printing.');
+    } finally { setBusy(false); }
   };
 
   const rowActions = useCallback((row) => <Stack direction="row" spacing={0.15}>
@@ -529,7 +561,7 @@ const SalesPage = () => {
 
     <Dialog open={Boolean(paymentSale)} onClose={busy ? undefined : () => setPaymentSale(null)} maxWidth="xs" fullWidth><form onSubmit={submitPayment}><DialogTitle>Record payment</DialogTitle><DialogContent><Stack spacing={2} sx={{ pt: 1 }}><Alert severity="info">Pending balance: {formatCurrency(paymentSale?.balanceDue)}</Alert><TextField label="Amount" type="number" value={paymentForm.amount} onChange={(event) => setPaymentForm((current) => ({ ...current, amount: event.target.value }))} inputProps={{ min: 0.01, max: paymentSale?.balanceDue, step: '0.01' }} required /><TextField select label="Method" value={paymentForm.method} onChange={(event) => setPaymentForm((current) => ({ ...current, method: event.target.value }))}><MenuItem value="cash">Cash</MenuItem><MenuItem value="digital">Digital / UPI</MenuItem><MenuItem value="bank_transfer">Bank transfer</MenuItem><MenuItem value="cheque">Cheque</MenuItem></TextField><TextField type="date" label="Payment date" InputLabelProps={{ shrink: true }} value={paymentForm.date} onChange={(event) => setPaymentForm((current) => ({ ...current, date: event.target.value }))} required /><TextField label="Notes" value={paymentForm.notes} onChange={(event) => setPaymentForm((current) => ({ ...current, notes: event.target.value }))} /></Stack></DialogContent><DialogActions sx={{ p: 2.5 }}><Button onClick={() => setPaymentSale(null)}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? 'Saving…' : 'Record payment'}</Button></DialogActions></form></Dialog>
 
-    <Dialog open={Boolean(viewerSale)} onClose={busy ? undefined : () => setViewerSale(null)} maxWidth="lg" fullWidth><DialogTitle className="no-print"><Stack direction="row" justifyContent="space-between" alignItems="center"><span>{viewerSale?.invoiceNumber}</span><Stack direction="row" spacing={1}><Button startIcon={<PrintRoundedIcon />} onClick={() => window.print()}>Print</Button><Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={downloadPdf} disabled={busy}>{busy ? 'Preparing…' : 'PDF'}</Button></Stack></Stack></DialogTitle><DialogContent sx={{ p: { xs: 0, sm: 2 }, bgcolor: "#ECE9E4" }}><InvoiceDocument ref={invoiceRef} sale={viewerSale} settings={settings} /></DialogContent><DialogActions className="no-print" sx={{ p: 2.5 }}><Button onClick={() => setViewerSale(null)}>Close</Button></DialogActions></Dialog>
+    <Dialog open={Boolean(viewerSale)} onClose={busy ? undefined : () => setViewerSale(null)} maxWidth="lg" fullWidth><DialogTitle className="no-print"><Stack direction="row" justifyContent="space-between" alignItems="center"><span>{viewerSale?.invoiceNumber}</span><Stack direction="row" spacing={1}><Button startIcon={<PrintRoundedIcon />} onClick={printSaleInvoice} disabled={busy}>{busy ? 'Preparing…' : 'Print'}</Button><Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={downloadPdf} disabled={busy}>{busy ? 'Preparing…' : 'PDF'}</Button></Stack></Stack></DialogTitle><DialogContent sx={{ p: { xs: 0, sm: 2 }, bgcolor: "#ECE9E4" }}><InvoiceDocument ref={invoiceRef} sale={viewerSale} settings={settings} /></DialogContent><DialogActions className="no-print" sx={{ p: 2.5 }}><Button onClick={() => setViewerSale(null)}>Close</Button></DialogActions></Dialog>
 
     <ConfirmDialog open={Boolean(deleteSale)} title="Delete this invoice?" description="The sale, customer totals and summary documents will be reversed, and the sold bricks will return to stock." busy={busy} onClose={() => setDeleteSale(null)} onConfirm={confirmDelete} />
   </>;

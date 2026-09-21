@@ -57,9 +57,9 @@ export const InvoiceCanvas = React.forwardRef(({ children }, ref) => (
     ref={ref}
     className="invoice-print-area"
     sx={{
-      width: { xs: '100%', sm: '210mm' },
+      width: '210mm',
       maxWidth: '210mm',
-      minHeight: { xs: 0, sm: '297mm' },
+      minHeight: '297mm',
       boxSizing: 'border-box',
       mx: 'auto',
       bgcolor: '#FFFFFF',
@@ -70,7 +70,7 @@ export const InvoiceCanvas = React.forwardRef(({ children }, ref) => (
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
-      p: { xs: 2.2, sm: 3.0, md: 3.25 },
+      p: '7mm 8mm 6mm',
       '&::before': {
         content: '""',
         position: 'absolute',
@@ -104,11 +104,11 @@ export const InvoiceCanvas = React.forwardRef(({ children }, ref) => (
 export const InvoiceTypeBadge = ({ label, number, date, tone = 'accent' }) => {
   const color = tone === 'green' ? invoiceColors.green : invoiceColors.accent;
   return (
-    <Box sx={{ minWidth: { sm: 205 }, border: `1px solid ${invoiceColors.line}`, bgcolor: '#fff', alignSelf: 'stretch' }}>
+    <Box sx={{ minWidth: 205, border: `1px solid ${invoiceColors.line}`, bgcolor: '#fff', alignSelf: 'stretch' }}>
       <Box sx={{ px: 1.8, py: 0.85, bgcolor: color, color: '#fff' }}>
-        <Typography sx={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '.14em', textAlign: { xs: 'left', sm: 'right' } }}>{label}</Typography>
+        <Typography sx={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '.14em', textAlign: 'right' }}>{label}</Typography>
       </Box>
-      <Box sx={{ px: 1.6, py: 1.1, textAlign: { xs: 'left', sm: 'right' } }}>
+      <Box sx={{ px: 1.6, py: 1.1, textAlign: 'right' }}>
         <Typography sx={{ fontSize: 10, color: invoiceColors.muted, fontWeight: 800, letterSpacing: '.08em' }}>INVOICE NUMBER</Typography>
         <Typography sx={{ mt: 0.25, fontSize: 21, lineHeight: 1.12, fontWeight: 950, color: invoiceColors.ink, overflowWrap: 'anywhere' }}>{number || '—'}</Typography>
         <Typography variant="body2" sx={{ color: invoiceColors.muted, mt: 0.55 }}>{formatInvoiceDate(date)}</Typography>
@@ -159,7 +159,7 @@ export const AmountWords = ({ value }) => (
 export const BankAndTerms = ({ bank, terms = [], showBank = true, showTerms = true }) => {
   if (!showBank && !showTerms) return null;
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: showBank && showTerms ? '1fr 1.25fr' : '1fr' }, gap: 1.5, mt: 1.7 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: showBank && showTerms ? '1fr 1.25fr' : '1fr', gap: 1.5, mt: 1.7 }}>
       {showBank && (
         <InfoPanel eyebrow="Bank details" title={bank?.bankName || 'Payment details'}>
           {bank?.accountName && <Typography variant="body2">Account name: {bank.accountName}</Typography>}

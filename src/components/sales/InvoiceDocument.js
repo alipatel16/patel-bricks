@@ -38,9 +38,9 @@ const InvoiceDocument = React.forwardRef(({ sale, settings }, ref) => {
 
   return (
     <InvoiceCanvas ref={ref}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2.4} alignItems={{ sm: 'stretch' }} sx={{ pt: 0.7 }}>
+      <Stack direction="row" justifyContent="space-between" spacing={2.4} alignItems="stretch" sx={{ pt: 0.7 }}>
         <Box sx={{ minWidth: 0, borderLeft: `5px solid ${invoiceColors.accent}`, pl: 1.8 }}>
-          <Typography sx={{ fontSize: { xs: 27, sm: 32 }, fontWeight: 950, color: invoiceColors.navy, lineHeight: 1.02, letterSpacing: '-.025em' }}>
+          <Typography sx={{ fontSize: 32, fontWeight: 950, color: invoiceColors.navy, lineHeight: 1.02, letterSpacing: '-.025em' }}>
             {company.name || 'PATEL BRICKS'}
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.65, maxWidth: 465, color: invoiceColors.muted, lineHeight: 1.42 }}>{company.address || '—'}</Typography>
@@ -52,12 +52,12 @@ const InvoiceDocument = React.forwardRef(({ sale, settings }, ref) => {
         <InvoiceTypeBadge label={sale.isGst ? 'TAX INVOICE' : 'SALES INVOICE'} number={sale.invoiceNumber} date={sale.date} tone={sale.isGst ? 'accent' : 'green'} />
       </Stack>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mt: 1.6, py: 0.85, px: 1.35, bgcolor: invoiceColors.soft, borderTop: `1px solid ${invoiceColors.line}`, borderBottom: `1px solid ${invoiceColors.line}` }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{ mt: 1.6, py: 0.85, px: 1.35, bgcolor: invoiceColors.soft, borderTop: `1px solid ${invoiceColors.line}`, borderBottom: `1px solid ${invoiceColors.line}` }}>
         <Typography variant="caption" sx={{ color: invoiceColors.muted, fontWeight: 800 }}>Supply type: <Box component="span" sx={{ color: invoiceColors.ink }}>{taxLabel}</Box></Typography>
         <Typography variant="caption" sx={{ color: statusColor, fontWeight: 950, letterSpacing: '.08em' }}>{paymentStatus}</Typography>
       </Stack>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5, mt: 1.7 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mt: 1.7 }}>
         {format.showCustomerDetails !== false && (
           <InfoPanel eyebrow="Bill to" title={sale.customerName} accent>
             <Typography variant="body2">{sale.customerAddress || sale.location || 'Address not available'}</Typography>
@@ -94,7 +94,7 @@ const InvoiceDocument = React.forwardRef(({ sale, settings }, ref) => {
         </Box>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) 320px' }, gap: 2, mt: 1.8, alignItems: 'start' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 2, mt: 1.8, alignItems: 'start' }}>
         <Box>
           <Box sx={{ border: `1px solid ${invoiceColors.line}`, bgcolor: invoiceColors.soft, p: 1.2 }}>
             <Typography sx={{ fontSize: 9.5, fontWeight: 900, letterSpacing: '.12em', color: invoiceColors.muted }}>SUPPLY SUMMARY</Typography>

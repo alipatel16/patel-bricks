@@ -96,26 +96,63 @@ const InvoiceReportsPanel = ({ settings, refreshToken = 0, initialInvoice = null
     { key: 'actions', label: '', align: 'right', render: actions, mobileHidden: true },
   ], [actions]);
 
+  const buildInvoicePdf = async () => {
+    if (!documentRef.current || !viewer) return null;
+    const canvas = await html2canvas(documentRef.current, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      windowWidth: documentRef.current.scrollWidth,
+      windowHeight: documentRef.current.scrollHeight,
+    });
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const image = canvas.toDataURL('image/png');
+    const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+    const imageWidth = canvas.width * scale;
+    const imageHeight = canvas.height * scale;
+    const x = (pageWidth - imageWidth) / 2;
+    const y = (pageHeight - imageHeight) / 2;
+    pdf.addImage(image, 'PNG', x, y, imageWidth, imageHeight);
+    return pdf;
+  };
+
   const downloadPdf = async () => {
     if (!documentRef.current || !viewer) return;
     setBusy(true);
     try {
-      const canvas = await html2canvas(documentRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const image = canvas.toDataURL('image/png');
-      const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-      const imageWidth = canvas.width * scale;
-      const imageHeight = canvas.height * scale;
-      const x = (pageWidth - imageWidth) / 2;
-      const y = (pageHeight - imageHeight) / 2;
-      // Generated GST / Non-GST invoices are always exported as a single A4 page.
-      pdf.addImage(image, 'PNG', x, y, imageWidth, imageHeight);
+      const pdf = await buildInvoicePdf();
+      if (!pdf) return;
       const fileLabel = viewer.gstInvoiceNumber || `non-gst-${viewer.id?.slice(-8) || 'invoice'}`;
       pdf.save(`${fileLabel}-${component}.pdf`);
     } catch (error) {
       toast.error(error.message || 'Unable to generate PDF.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const printPdf = async () => {
+    if (!documentRef.current || !viewer) return;
+    const printWindow = window.open('', '_blank');
+    setBusy(true);
+    try {
+      if (printWindow) {
+        printWindow.document.write('<title>Preparing invoice…</title><p style="font-family:sans-serif;padding:24px">Preparing invoice…</p>');
+      }
+      const pdf = await buildInvoicePdf();
+      if (!pdf) return;
+      const blobUrl = URL.createObjectURL(pdf.output('blob'));
+      if (printWindow) {
+        printWindow.location.replace(blobUrl);
+      } else {
+        window.location.href = blobUrl;
+      }
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+    } catch (error) {
+      if (printWindow && !printWindow.closed) printWindow.close();
+      toast.error(error.message || 'Unable to prepare invoice for printing.');
     } finally {
       setBusy(false);
     }
@@ -162,7 +199,7 @@ const InvoiceReportsPanel = ({ settings, refreshToken = 0, initialInvoice = null
     <Dialog open={Boolean(viewer)} onClose={busy ? undefined : () => setViewer(null)} maxWidth="lg" fullWidth>
       <DialogTitle className="no-print"><Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1}>
         <span>{viewer ? invoiceLabel(viewer) : ''}</span>
-        <Stack direction="row" spacing={1}><TextField size="small" select value={component} onChange={(event) => setComponent(event.target.value)} sx={{ minWidth: 145 }}><MenuItem value="combined">Combined</MenuItem>{Number(viewer?.gstBricks) > 0 && <MenuItem value="gst">GST only</MenuItem>}{Number(viewer?.nonGstBricks) > 0 && <MenuItem value="nonGst">Non-GST only</MenuItem>}</TextField><Button startIcon={<PrintRoundedIcon />} onClick={() => window.print()}>Print</Button><Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={downloadPdf} disabled={busy}>{busy ? 'Preparing…' : 'PDF'}</Button></Stack>
+        <Stack direction="row" spacing={1}><TextField size="small" select value={component} onChange={(event) => setComponent(event.target.value)} sx={{ minWidth: 145 }}><MenuItem value="combined">Combined</MenuItem>{Number(viewer?.gstBricks) > 0 && <MenuItem value="gst">GST only</MenuItem>}{Number(viewer?.nonGstBricks) > 0 && <MenuItem value="nonGst">Non-GST only</MenuItem>}</TextField><Button startIcon={<PrintRoundedIcon />} onClick={printPdf} disabled={busy}>{busy ? 'Preparing…' : 'Print'}</Button><Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={downloadPdf} disabled={busy}>{busy ? 'Preparing…' : 'PDF'}</Button></Stack>
       </Stack></DialogTitle>
       <DialogContent sx={{ p: { xs: 0, sm: 2 }, bgcolor: "#ECE9E4" }}><GeneratedInvoiceDocument ref={documentRef} invoice={viewer} settings={settings} component={component} /></DialogContent>
       <DialogActions className="no-print"><Button onClick={() => setViewer(null)}>Close</Button></DialogActions>
