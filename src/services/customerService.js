@@ -11,7 +11,6 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
   writeBatch,
@@ -88,6 +87,10 @@ const prepareCustomer = (input) => {
     businessNameLower: normalizeText(businessName),
     gstin: String(input.gstin || '').trim().toUpperCase(),
     address,
+    billedToName: String(input.billedToName || input.billed_to_name || '').trim(),
+    billedToAddress: String(input.billedToAddress || input.billed_to_address || '').trim(),
+    receiverName: String(input.receiverName || input.receiver_name || '').trim(),
+    receiverAddress: String(input.receiverAddress || input.receiver_address || '').trim(),
     locations,
     brickRates,
     notes: String(input.notes || '').trim(),
@@ -97,6 +100,10 @@ const prepareCustomer = (input) => {
       phone,
       businessName,
       input.gstin,
+      input.billedToName,
+      input.billedToAddress,
+      input.receiverName,
+      input.receiverAddress,
       ...locations.flatMap((location) => [location.name, location.address]),
     ),
   };
@@ -259,6 +266,10 @@ const propagateCustomerHistory = async ({ customerId, previous, next, updateHist
       customerName: next.name,
       customerPhone: next.phone,
       customerGstin: next.gstin,
+      billedToName: next.billedToName,
+      billedToAddress: next.billedToAddress,
+      receiverName: next.receiverName,
+      receiverAddress: next.receiverAddress,
       selectedSite,
       originalInvoiceData: {
         ...existingInvoiceData,
@@ -269,6 +280,10 @@ const propagateCustomerHistory = async ({ customerId, previous, next, updateHist
           phone: next.phone,
           gstin: next.gstin,
           address: newLocation?.address || existingCustomerData.address || selectedSite,
+          billedToName: next.billedToName,
+          billedToAddress: next.billedToAddress,
+          receiverName: next.receiverName,
+          receiverAddress: next.receiverAddress,
         },
       },
       searchPrefixes: makeSearchPrefixes(
@@ -580,28 +595,99 @@ export const customerService = {
 
   getCustomerLedger: async ({ customerId, dateFrom = '', dateTo = '' }) => {
     try {
-      const [salesSnapshot, paymentsSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'sales'), where('customerId', '==', customerId), limit(1000))),
-        getDocs(query(collection(db, 'payments'), where('customerId', '==', customerId), limit(1000))),
+      // Match the legacy ledger: debit entries come ONLY from GST / Non-GST
+      // invoices generated in Customer Report, while credits come from payments.
+      const [generatedInvoicesSnapshot, paymentsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'legacyInvoices'), where('customerId', '==', customerId), limit(2000))),
+        getDocs(query(collection(db, 'payments'), where('customerId', '==', customerId), limit(2000))),
       ]);
-      const allEntries = [
-        ...salesSnapshot.docs.map(toPlainData).map((sale) => ({
-          id: `sale-${sale.id}`, date: sale.date, type: 'invoice', reference: sale.invoiceNumber, description: `${sale.location || 'Sale'} · ${sale.quantity || 0} bricks`, debit: asNumber(sale.totalAmount), credit: 0,
-        })),
-        ...paymentsSnapshot.docs.map(toPlainData).map((payment) => ({
-          id: `payment-${payment.id}`, date: payment.date, type: 'payment', reference: payment.invoiceNumber || 'Customer payment', description: `Payment · ${payment.method || 'cash'}`, debit: 0, credit: asNumber(payment.amount),
-        })),
-      ].sort((left, right) => left.date.localeCompare(right.date) || left.type.localeCompare(right.type));
-      const openingBalance = allEntries
-        .filter((entry) => dateFrom && entry.date < dateFrom)
-        .reduce((balance, entry) => balance + entry.debit - entry.credit, 0);
-      const entries = allEntries.filter((entry) => (!dateFrom || entry.date >= dateFrom) && (!dateTo || entry.date <= dateTo));
+
+      const generatedEntries = [];
+      generatedInvoicesSnapshot.docs.map(toPlainData).forEach((invoice) => {
+        const invoiceData = invoice.originalInvoiceData || invoice.invoiceData || {};
+        const invoiceDate = invoice.date || invoiceData.invoiceDate || invoice.createdDate || '';
+        const rate = asNumber(invoice.rate ?? invoiceData.actualRate);
+        const gstRate = asNumber(invoice.gstRate ?? invoiceData.gstRate, 12);
+        const gstBricks = asNumber(invoice.gstBricks ?? invoiceData.gstBricks);
+        const nonGstBricks = asNumber(invoice.nonGstBricks ?? invoiceData.nonGstBricks);
+        const gstAmount = asNumber(invoice.gstAmount ?? invoiceData.gstAmount);
+        const nonGstAmount = asNumber(invoice.nonGstAmount ?? invoiceData.nonGstAmount);
+
+        if (gstBricks > 0) {
+          generatedEntries.push({
+            id: `${invoice.id}-gst`,
+            sourceId: invoice.id,
+            date: invoiceDate,
+            type: 'gst_invoice',
+            reference: invoice.gstInvoiceNumber || `${invoice.id}-GST`,
+            description: `GST Invoice - ${gstBricks.toLocaleString('en-IN')} pieces bricks @ ₹${rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} each (with ${gstRate}% GST)`,
+            debit: gstAmount,
+            credit: 0,
+          });
+        }
+
+        if (nonGstBricks > 0) {
+          generatedEntries.push({
+            id: `${invoice.id}-non-gst`,
+            sourceId: invoice.id,
+            date: invoiceDate,
+            type: 'non_gst_invoice',
+            reference: `${invoice.id}-NonGST`,
+            description: `Non-GST Invoice - ${nonGstBricks.toLocaleString('en-IN')} pieces bricks @ ₹${rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} each (without GST)`,
+            debit: nonGstAmount,
+            credit: 0,
+          });
+        }
+      });
+
+      const paymentEntries = paymentsSnapshot.docs.map(toPlainData)
+        .map((payment) => ({
+          id: `payment-${payment.id}`,
+          sourceId: payment.id,
+          date: payment.date || '',
+          type: 'payment',
+          reference: payment.invoiceNumber || payment.id,
+          description: `Payment received via ${payment.method || payment.modeOfPayment || 'cash'}${payment.notes ? ` - ${payment.notes}` : ''}`,
+          debit: 0,
+          credit: Math.abs(asNumber(payment.amount ?? payment.creditAmount)),
+        }))
+        .filter((entry) => entry.credit > 0);
+
+      const allEntries = [...generatedEntries, ...paymentEntries]
+        .filter((entry) => entry.date)
+        .sort((left, right) => (
+          left.date.localeCompare(right.date)
+          || String(left.id).localeCompare(String(right.id))
+        ));
+
+      const entries = allEntries.filter((entry) => (
+        (!dateFrom || entry.date >= dateFrom)
+        && (!dateTo || entry.date <= dateTo)
+      ));
+
+      // The legacy ledger starts the selected period at zero and calculates
+      // the running Dr/Cr balance only from rows inside that period.
+      const openingBalance = 0;
       let balance = openingBalance;
       const rows = entries.map((entry) => {
         balance += entry.debit - entry.credit;
         return { ...entry, balance };
       });
-      return resultOk({ rows, openingBalance, closingBalance: balance });
+
+      const totalInvoices = rows.reduce((sum, entry) => sum + asNumber(entry.debit), 0);
+      const totalCredits = rows.reduce((sum, entry) => sum + asNumber(entry.credit), 0);
+
+      return resultOk({
+        rows,
+        openingBalance,
+        closingBalance: balance,
+        summary: {
+          totalInvoices,
+          totalCredits,
+          totalTransactions: rows.length,
+          outstandingBalance: balance,
+        },
+      });
     } catch (error) {
       return resultError(error);
     }

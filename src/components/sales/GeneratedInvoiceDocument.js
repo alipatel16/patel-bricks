@@ -22,6 +22,12 @@ const GeneratedInvoiceDocument = React.forwardRef(({ invoice, settings, componen
   const showGst = component !== 'nonGst' && Number(invoice.gstBricks) > 0;
   const showNonGst = component !== 'gst' && Number(invoice.nonGstBricks) > 0;
   const customerData = invoice.originalInvoiceData?.customerData || {};
+  const fallbackCustomerName = invoice.customerName || customerData.name || '';
+  const fallbackCustomerAddress = customerData.address || invoice.customerAddress || invoice.selectedSite || 'Address not available';
+  const billedToName = invoice.billedToName || customerData.billedToName || fallbackCustomerName;
+  const billedToAddress = invoice.billedToAddress || customerData.billedToAddress || fallbackCustomerAddress;
+  const receiverName = invoice.receiverName || customerData.receiverName || fallbackCustomerName;
+  const receiverAddress = invoice.receiverAddress || customerData.receiverAddress || fallbackCustomerAddress;
   const gstTaxable = Number(invoice.gstTaxableAmount ?? invoice.originalInvoiceData?.gstTaxableAmount ?? (Number(invoice.gstBricks || 0) * Number(invoice.rate || 0)));
   const gstTax = Number(invoice.gstTaxAmount ?? invoice.originalInvoiceData?.gstTaxAmount ?? Math.max(0, Number(invoice.gstAmount || 0) - gstTaxable));
   const visibleTotal = (showGst ? Number(invoice.gstAmount || 0) : 0) + (showNonGst ? Number(invoice.nonGstAmount || 0) : 0);
@@ -85,18 +91,24 @@ const GeneratedInvoiceDocument = React.forwardRef(({ invoice, settings, componen
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5, mt: 1.7 }}>
         {format.showCustomerDetails !== false && (
-          <InfoPanel eyebrow="Bill to" title={invoice.customerName || customerData.name} accent>
-            <Typography variant="body2">{customerData.address || invoice.customerAddress || invoice.selectedSite || 'Address not available'}</Typography>
+          <InfoPanel eyebrow="Billed to name and address" title={billedToName} accent>
+            <Typography variant="body2">{billedToAddress}</Typography>
             {(invoice.customerPhone || customerData.phone) && <Typography variant="body2">Phone: {invoice.customerPhone || customerData.phone}</Typography>}
             {showGst && (invoice.customerGstin || customerData.gstin) && <Typography variant="body2" sx={{ fontWeight: 900 }}>GSTIN: {invoice.customerGstin || customerData.gstin}</Typography>}
           </InfoPanel>
         )}
-        <InfoPanel eyebrow="Invoice details" title={invoice.selectedSite || 'All sites'}>
-          <Typography variant="body2">Linked sales: {formatNumber(invoice.saleIds?.length || 0)}</Typography>
-          <Typography variant="body2">Rate applied: {formatCurrency(invoice.rate)} per brick</Typography>
-          <Typography variant="body2">Total bricks: {formatNumber(totalVisibleBricks)}</Typography>
-          {invoice.notes && <Typography variant="body2">Remarks: {invoice.notes}</Typography>}
+        <InfoPanel eyebrow="Details of receiver name and address" title={receiverName}>
+          <Typography variant="body2">{receiverAddress}</Typography>
+          {invoice.selectedSite && <Typography variant="body2">Delivery site: {invoice.selectedSite}</Typography>}
         </InfoPanel>
+      </Box>
+
+      <Box sx={{ mt: 1.15, px: 1.35, py: 0.85, border: `1px solid ${invoiceColors.line}`, bgcolor: invoiceColors.soft, display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 1 }}>
+        <Box><Typography sx={{ fontSize: 9, color: invoiceColors.muted, fontWeight: 900, letterSpacing: '.08em' }}>SITE</Typography><Typography variant="body2" sx={{ fontWeight: 850 }}>{invoice.selectedSite || 'All sites'}</Typography></Box>
+        <Box><Typography sx={{ fontSize: 9, color: invoiceColors.muted, fontWeight: 900, letterSpacing: '.08em' }}>LINKED SALES</Typography><Typography variant="body2" sx={{ fontWeight: 850 }}>{formatNumber(invoice.saleIds?.length || 0)}</Typography></Box>
+        <Box><Typography sx={{ fontSize: 9, color: invoiceColors.muted, fontWeight: 900, letterSpacing: '.08em' }}>RATE</Typography><Typography variant="body2" sx={{ fontWeight: 850 }}>{formatCurrency(invoice.rate)} / brick</Typography></Box>
+        <Box><Typography sx={{ fontSize: 9, color: invoiceColors.muted, fontWeight: 900, letterSpacing: '.08em' }}>TOTAL BRICKS</Typography><Typography variant="body2" sx={{ fontWeight: 850 }}>{formatNumber(totalVisibleBricks)}</Typography></Box>
+        {invoice.notes && <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: invoiceColors.muted }}>Remarks: {invoice.notes}</Typography>}
       </Box>
 
       <Box sx={{ mt: 1.8, border: `1px solid ${invoiceColors.line}` }}>

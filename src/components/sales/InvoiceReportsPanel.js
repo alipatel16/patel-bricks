@@ -104,18 +104,14 @@ const InvoiceReportsPanel = ({ settings, refreshToken = 0, initialInvoice = null
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imageHeight = (canvas.height * pageWidth) / canvas.width;
       const image = canvas.toDataURL('image/png');
-      let remaining = imageHeight;
-      let position = 0;
-      pdf.addImage(image, 'PNG', 0, position, pageWidth, imageHeight);
-      remaining -= pageHeight;
-      while (remaining > 0) {
-        position = remaining - imageHeight;
-        pdf.addPage();
-        pdf.addImage(image, 'PNG', 0, position, pageWidth, imageHeight);
-        remaining -= pageHeight;
-      }
+      const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+      const imageWidth = canvas.width * scale;
+      const imageHeight = canvas.height * scale;
+      const x = (pageWidth - imageWidth) / 2;
+      const y = (pageHeight - imageHeight) / 2;
+      // Generated GST / Non-GST invoices are always exported as a single A4 page.
+      pdf.addImage(image, 'PNG', x, y, imageWidth, imageHeight);
       const fileLabel = viewer.gstInvoiceNumber || `non-gst-${viewer.id?.slice(-8) || 'invoice'}`;
       pdf.save(`${fileLabel}-${component}.pdf`);
     } catch (error) {

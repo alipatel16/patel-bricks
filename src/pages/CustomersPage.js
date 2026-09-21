@@ -46,6 +46,10 @@ const blankCustomer = {
   businessName: '',
   gstin: '',
   address: '',
+  billedToName: '',
+  billedToAddress: '',
+  receiverName: '',
+  receiverAddress: '',
   notes: '',
   status: 'active',
   locations: [],
@@ -149,6 +153,10 @@ const CustomersPage = () => {
       businessName: customer.businessName || '',
       gstin: customer.gstin || '',
       address: customer.address || '',
+      billedToName: customer.billedToName || '',
+      billedToAddress: customer.billedToAddress || '',
+      receiverName: customer.receiverName || '',
+      receiverAddress: customer.receiverAddress || '',
       notes: customer.notes || '',
       status: customer.status || 'active',
       locations: (customer.locations || []).map((location) => ({
@@ -281,6 +289,20 @@ const CustomersPage = () => {
               <TextField select label="Status" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}><MenuItem value="active">Active</MenuItem><MenuItem value="inactive">Inactive</MenuItem></TextField>
 
               <Divider />
+              <Box>
+                <Typography variant="h6">Invoice party details</Typography>
+                <Typography variant="body2" color="text.secondary">Optional details used only on generated GST / Non-GST invoices. When left blank, the invoice keeps using the customer's existing name and selected-site address.</Typography>
+              </Box>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+                <TextField label="Billed to name" value={form.billedToName} onChange={(event) => setForm((current) => ({ ...current, billedToName: event.target.value }))} fullWidth />
+                <TextField label="Details of receiver name" value={form.receiverName} onChange={(event) => setForm((current) => ({ ...current, receiverName: event.target.value }))} fullWidth />
+              </Stack>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+                <TextField label="Billed to address" value={form.billedToAddress} onChange={(event) => setForm((current) => ({ ...current, billedToAddress: event.target.value }))} multiline minRows={3} fullWidth />
+                <TextField label="Details of receiver address" value={form.receiverAddress} onChange={(event) => setForm((current) => ({ ...current, receiverAddress: event.target.value }))} multiline minRows={3} fullWidth />
+              </Stack>
+
+              <Divider />
               <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1}>
                 <Box><Typography variant="h6">Delivery locations</Typography><Typography variant="body2" color="text.secondary">Set a separate brick rate for every customer site. Selecting that site on an invoice fills the rate automatically.</Typography></Box>
                 <Button startIcon={<AddLocationAltRoundedIcon />} onClick={() => openLocation()}>Add location</Button>
@@ -311,7 +333,7 @@ const CustomersPage = () => {
               <TextField label="Notes" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} multiline minRows={2} />
               {dialog.customer && (
                 <Box sx={{ p: 1.5, bgcolor: '#FAF8F4', borderRadius: 2 }}>
-                  <FormControlLabel control={<Switch checked={form.propagateHistory} onChange={(event) => setForm((current) => ({ ...current, propagateHistory: event.target.checked }))} />} label="Update customer name, phone, GSTIN and site information in historical sales, payments and generated invoices" />
+                  <FormControlLabel control={<Switch checked={form.propagateHistory} onChange={(event) => setForm((current) => ({ ...current, propagateHistory: event.target.checked }))} />} label="Update customer, billing/receiver and site information in historical sales, payments and generated invoices" />
                   <FormControlLabel disabled={!form.propagateHistory} control={<Switch checked={form.updateHistoricalRates} onChange={(event) => setForm((current) => ({ ...current, updateHistoricalRates: event.target.checked }))} />} label="Also recalculate matching historical sales and generated invoices when a site rate changes" />
                   <Typography variant="caption" color="text.secondary">This is an explicit on-demand update. Only records belonging to this customer are read and changed.</Typography>
                 </Box>

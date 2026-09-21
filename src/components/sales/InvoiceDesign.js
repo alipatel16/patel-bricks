@@ -57,9 +57,9 @@ export const InvoiceCanvas = React.forwardRef(({ children }, ref) => (
     ref={ref}
     className="invoice-print-area"
     sx={{
-      width: '100%',
+      width: { xs: '100%', sm: '210mm' },
       maxWidth: '210mm',
-      minHeight: 0,
+      minHeight: { xs: 0, sm: '297mm' },
       boxSizing: 'border-box',
       mx: 'auto',
       bgcolor: '#FFFFFF',

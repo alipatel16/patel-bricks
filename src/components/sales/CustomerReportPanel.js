@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,6 +16,12 @@ import {
   Stack,
   Switch,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Tabs,
   TextField,
   Tooltip,
@@ -84,10 +91,139 @@ const AccountDialog = ({ customer, onClose, onPayment }) => {
 };
 
 
+const DEFAULT_COMPANY = {
+  name: 'PATEL BRICKS',
+  address: 'Behind Patel Petroleum, Mandal Road, Bhojva, Viramgam - 382150',
+  phone: '9898032192, 8000001819',
+  email: 'patelbricks1819@gmail.com',
+  gstin: '24BLLPP8863R1ZX',
+};
+
+const reportDate = (value) => {
+  if (!value) return '';
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-GB');
+};
+
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+const printMoney = (value) => `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const openReportPrintWindow = ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
+  const popup = window.open('', '_blank', 'width=1000,height=800');
+  if (!popup) {
+    toast.error('Could not open the print window. Please allow popups for this site.');
+    return;
+  }
+  const companyData = { ...DEFAULT_COMPANY, ...(company || {}) };
+  popup.document.write(`<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>${escapeHtml(title)}</title>
+      <style>
+        @page { size: A4 portrait; margin: 12mm 10mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: #1d2927; font-family: Arial, Helvetica, sans-serif; font-size: 11px; background: #fff; }
+        .page { width: 100%; }
+        .company { text-align: center; padding: 0 0 12px; border-bottom: 2px solid #173f72; margin-bottom: 14px; }
+        .company h1 { margin: 0; color: #173f72; font-size: 23px; letter-spacing: .5px; }
+        .company .subtitle { margin-top: 4px; font-weight: 700; font-size: 12px; }
+        .company .meta { margin-top: 4px; color: #4f5c59; line-height: 1.45; }
+        .report-title { margin-top: 8px; font-size: 17px; font-weight: 700; letter-spacing: .04em; }
+        .customer-box { border: 1px solid #b7c0bd; padding: 10px 12px; margin-bottom: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px 22px; }
+        .customer-box .row { display: flex; justify-content: space-between; gap: 12px; }
+        .customer-box .label { font-weight: 700; color: #465451; }
+        .customer-box .value { text-align: right; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+        thead { display: table-header-group; }
+        tfoot { display: table-row-group; }
+        tr { break-inside: avoid; page-break-inside: avoid; }
+        th { background: #173f72; color: #fff; font-weight: 700; padding: 7px 6px; border: 1px solid #173f72; font-size: 10px; }
+        td { padding: 6px; border: 1px solid #c9cfcd; vertical-align: top; }
+        .num { text-align: right; white-space: nowrap; }
+        .center { text-align: center; }
+        .debit { color: #b3261e; font-weight: 700; }
+        .credit { color: #237a51; font-weight: 700; }
+        .badge { display: inline-block; margin-top: 3px; padding: 2px 5px; border-radius: 3px; font-size: 8px; font-weight: 700; }
+        .badge.gst { color: #a12a24; background: #fdeceb; }
+        .badge.non-gst { color: #b66b00; background: #fff2df; }
+        .badge.payment { color: #237a51; background: #e9f6ef; }
+        .total-row td { font-weight: 700; background: #f4f6f5; }
+        .summary { margin-top: 14px; padding: 11px 13px; border: 1px solid #c9d8e8; background: #f3f8fd; break-inside: avoid; page-break-inside: avoid; }
+        .summary h3 { margin: 0 0 8px; color: #173f72; font-size: 14px; }
+        .summary-row { display: flex; justify-content: space-between; gap: 20px; margin: 5px 0; }
+        .footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #d4d9d7; text-align: center; color: #6c7673; font-size: 9px; break-inside: avoid; }
+        @media print { .no-print { display: none !important; } }
+      </style>
+    </head>
+    <body>
+      <div class="page">
+        <div class="company">
+          <h1>${escapeHtml(companyData.name || 'PATEL BRICKS')}</h1>
+          <div class="subtitle">Manufacturer of Fly Ash Bricks</div>
+          <div class="meta">${escapeHtml(companyData.address || '')}<br>${companyData.phone ? `Phone: ${escapeHtml(companyData.phone)}` : ''}${companyData.email ? ` &nbsp; • &nbsp; Email: ${escapeHtml(companyData.email)}` : ''}${companyData.gstin ? `<br>GSTIN: ${escapeHtml(companyData.gstin)}` : ''}</div>
+          <div class="report-title">${escapeHtml(title)}</div>
+        </div>
+        <div class="customer-box">
+          <div class="row"><span class="label">Customer Name:</span><span class="value">${escapeHtml(customer?.name || '')}</span></div>
+          <div class="row"><span class="label">Phone:</span><span class="value">${escapeHtml(customer?.phone || '')}</span></div>
+          ${customer?.gstin ? `<div class="row"><span class="label">GSTIN:</span><span class="value">${escapeHtml(customer.gstin)}</span></div>` : '<div></div>'}
+          <div class="row"><span class="label">Period:</span><span class="value">${escapeHtml(period)}</span></div>
+          <div class="row"><span class="label">Generated On:</span><span class="value">${escapeHtml(new Date().toLocaleDateString('en-GB'))}</span></div>
+        </div>
+        ${bodyHtml}
+        ${summaryHtml}
+        <div class="footer">Computer-generated report from Patel Bricks Management.</div>
+      </div>
+      <script>window.onload = function () { window.focus(); window.print(); };</script>
+    </body>
+  </html>`);
+  popup.document.close();
+};
+
+const CompanyReportHeader = ({ company, title, customer, period, extra }) => {
+  const current = { ...DEFAULT_COMPANY, ...(company || {}) };
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Box sx={{ textAlign: 'center', pb: 1.5, borderBottom: '2px solid #173F72' }}>
+        <Typography sx={{ color: '#173F72', fontWeight: 950, fontSize: 24 }}>{current.name}</Typography>
+        <Typography sx={{ fontWeight: 800, fontSize: 12 }}>Manufacturer of Fly Ash Bricks</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.4 }}>{current.address}</Typography>
+        <Typography variant="caption" color="text.secondary">{current.phone ? `Phone: ${current.phone}` : ''}{current.phone && current.email ? ' • ' : ''}{current.email ? `Email: ${current.email}` : ''}</Typography>
+        {current.gstin && <Typography variant="caption" sx={{ display: 'block', fontWeight: 800 }}>GSTIN: {current.gstin}</Typography>}
+        <Typography sx={{ mt: 1, fontWeight: 900, fontSize: 18, letterSpacing: '.04em' }}>{title}</Typography>
+      </Box>
+      <Box sx={{ mt: 1.5, p: 1.5, border: '1px solid #C8D0CD', display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 3, rowGap: 0.6 }}>
+        <Typography variant="body2"><strong>Customer Name:</strong> {customer.name}</Typography>
+        <Typography variant="body2" sx={{ textAlign: { sm: 'right' } }}><strong>Phone:</strong> {customer.phone}</Typography>
+        {customer.gstin && <Typography variant="body2"><strong>GSTIN:</strong> {customer.gstin}</Typography>}
+        <Typography variant="body2" sx={{ textAlign: { sm: 'right' } }}><strong>Period:</strong> {period}</Typography>
+        {extra && <Typography variant="body2" sx={{ gridColumn: { sm: '1 / -1' } }}>{extra}</Typography>}
+      </Box>
+    </Box>
+  );
+};
+
 const LedgerDialog = ({ customer, onClose }) => {
   const [form, setForm] = useState({ dateFrom: '', dateTo: dateKey() });
-  const [data, setData] = useState({ rows: [], openingBalance: 0, closingBalance: 0 });
+  const [data, setData] = useState({ rows: [], openingBalance: 0, closingBalance: 0, summary: {} });
+  const [company, setCompany] = useState(DEFAULT_COMPANY);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    settingsService.getAll().then((result) => {
+      if (active && result.success) setCompany({ ...DEFAULT_COMPANY, ...(result.data.company || {}) });
+    });
+    return () => { active = false; };
+  }, []);
+
   const load = async () => {
     setBusy(true);
     const result = await customerService.getCustomerLedger({ customerId: customer.id, ...form });
@@ -96,26 +232,65 @@ const LedgerDialog = ({ customer, onClose }) => {
     setData(result.data);
     return null;
   };
+
+  const period = `${form.dateFrom ? reportDate(form.dateFrom) : 'Beginning'} to ${reportDate(form.dateTo)}`;
+  const summary = data.summary || {};
+
+  const printLedger = () => {
+    if (!data.rows.length) return;
+    const bodyHtml = `<table>
+      <thead><tr><th style="width:14%">Date</th><th>Particulars</th><th style="width:16%">Debit (₹)</th><th style="width:16%">Credit (₹)</th><th style="width:17%">Balance (₹)</th></tr></thead>
+      <tbody>${data.rows.map((row) => {
+        const badgeClass = row.type === 'gst_invoice' ? 'gst' : row.type === 'non_gst_invoice' ? 'non-gst' : 'payment';
+        const badgeLabel = row.type === 'gst_invoice' ? 'GST Invoice' : row.type === 'non_gst_invoice' ? 'Non-GST Invoice' : 'Payment';
+        return `<tr><td>${escapeHtml(reportDate(row.date))}</td><td>${escapeHtml(row.description)}<br><span class="badge ${badgeClass}">${badgeLabel}</span></td><td class="num debit">${row.debit ? escapeHtml(printMoney(row.debit)) : '-'}</td><td class="num credit">${row.credit ? escapeHtml(printMoney(row.credit)) : '-'}</td><td class="num"><strong>${escapeHtml(printMoney(Math.abs(row.balance)))}</strong> ${row.balance < 0 ? '(Cr)' : '(Dr)'}</td></tr>`;
+      }).join('')}</tbody></table>`;
+    const summaryHtml = `<div class="summary"><h3>Ledger Summary</h3><div class="summary-row"><strong>Total Invoices:</strong><span class="debit">${escapeHtml(printMoney(summary.totalInvoices))}</span></div><div class="summary-row"><strong>Total Credits:</strong><span class="credit">${escapeHtml(printMoney(summary.totalCredits))}</span></div><div class="summary-row"><strong>Total Transactions:</strong><span>${Number(summary.totalTransactions || 0)}</span></div><hr><div class="summary-row"><strong>Outstanding Balance:</strong><strong>${escapeHtml(printMoney(Math.abs(summary.outstandingBalance || 0)))} ${(summary.outstandingBalance || 0) < 0 ? '(Credit)' : '(Debit)'}</strong></div></div>`;
+    openReportPrintWindow({ title: 'CUSTOMER LEDGER STATEMENT', company, customer, period, bodyHtml, summaryHtml });
+  };
+
   return (
-    <Dialog open onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { maxHeight: '94vh' } }}>
       <DialogTitle>Printable ledger · {customer.name}</DialogTitle>
-      <DialogContent>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ py: 1.5 }}><TextField type="date" label="From" InputLabelProps={{ shrink: true }} value={form.dateFrom} onChange={(event) => setForm((current) => ({ ...current, dateFrom: event.target.value }))} fullWidth /><TextField type="date" label="To" InputLabelProps={{ shrink: true }} value={form.dateTo} onChange={(event) => setForm((current) => ({ ...current, dateTo: event.target.value }))} fullWidth /><Button variant="contained" onClick={load} disabled={busy}>Generate ledger</Button></Stack>
-        <Box className="invoice-print-area" sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'white' }}>
-          <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}><Box><Typography variant="h5">Customer Ledger</Typography><Typography>{customer.name} · {customer.phone}</Typography></Box><Typography variant="body2">{form.dateFrom || 'Beginning'} to {form.dateTo}</Typography></Stack>
-          {form.dateFrom && <Typography variant="body2" sx={{ mb: 1 }}><strong>Opening balance:</strong> {formatCurrency(data.openingBalance)}</Typography>}
-          <ResponsiveRecordTable rows={data.rows} columns={[
-            { key: 'date', label: 'Date' },
-            { key: 'reference', label: 'Reference' },
-            { key: 'description', label: 'Description' },
-            { key: 'debit', label: 'Debit', align: 'right', render: (row) => row.debit ? formatCurrency(row.debit) : '—' },
-            { key: 'credit', label: 'Credit', align: 'right', render: (row) => row.credit ? formatCurrency(row.credit) : '—' },
-            { key: 'balance', label: 'Balance', align: 'right', render: (row) => formatCurrency(row.balance) },
-          ]} emptyTitle="Generate the ledger to view entries" mobileTitle={(row) => row.reference} mobileSubtitle={(row) => `${row.date} · Balance ${formatCurrency(row.balance)}`} />
-          {data.rows.length > 0 && <Typography variant="h6" sx={{ textAlign: 'right', mt: 2 }}>Closing balance: {formatCurrency(data.closingBalance)}</Typography>}
+      <DialogContent sx={{ overflowY: 'auto' }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ py: 1.5 }}>
+          <TextField type="date" label="From" InputLabelProps={{ shrink: true }} value={form.dateFrom} onChange={(event) => setForm((current) => ({ ...current, dateFrom: event.target.value }))} fullWidth />
+          <TextField type="date" label="To" InputLabelProps={{ shrink: true }} value={form.dateTo} onChange={(event) => setForm((current) => ({ ...current, dateTo: event.target.value }))} fullWidth />
+          <Button variant="contained" onClick={load} disabled={busy} sx={{ minWidth: 150 }}>Generate ledger</Button>
+        </Stack>
+        <Box sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'white', maxHeight: '62vh', overflowY: 'auto', border: '1px solid #E4E8E6' }}>
+          <CompanyReportHeader company={company} title="CUSTOMER LEDGER STATEMENT" customer={customer} period={period} />
+          <TableContainer>
+            <Table size="small" sx={{ '& th': { bgcolor: '#173F72', color: '#fff', fontWeight: 800 }, '& td, & th': { border: '1px solid #D5DAD8' } }}>
+              <TableHead><TableRow><TableCell>Date</TableCell><TableCell>Particulars</TableCell><TableCell align="right">Debit (₹)</TableCell><TableCell align="right">Credit (₹)</TableCell><TableCell align="right">Balance (₹)</TableCell></TableRow></TableHead>
+              <TableBody>
+                {data.rows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{reportDate(row.date)}</TableCell>
+                    <TableCell><Typography variant="body2" sx={{ fontWeight: 700 }}>{row.description}</Typography><Chip size="small" variant="outlined" color={row.type === 'gst_invoice' ? 'error' : row.type === 'non_gst_invoice' ? 'warning' : 'success'} label={row.type === 'gst_invoice' ? 'GST Invoice' : row.type === 'non_gst_invoice' ? 'Non-GST Invoice' : 'Payment'} sx={{ mt: 0.5 }} /></TableCell>
+                    <TableCell align="right" sx={{ color: row.debit ? 'error.main' : 'text.secondary', fontWeight: row.debit ? 800 : 400 }}>{row.debit ? formatCurrency(row.debit) : '—'}</TableCell>
+                    <TableCell align="right" sx={{ color: row.credit ? 'success.main' : 'text.secondary', fontWeight: row.credit ? 800 : 400 }}>{row.credit ? formatCurrency(row.credit) : '—'}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>{formatCurrency(Math.abs(row.balance))} {row.balance < 0 ? '(Cr)' : '(Dr)'}</TableCell>
+                  </TableRow>
+                ))}
+                {!data.rows.length && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 5, color: 'text.secondary' }}>Generate the ledger to view Customer Report GST / Non-GST invoices and payments.</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {data.rows.length > 0 && (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F3F8FD', border: '1px solid #C9D8E8' }}>
+              <Typography sx={{ fontWeight: 900, color: '#173F72', mb: 0.8 }}>Ledger Summary</Typography>
+              <Stack spacing={0.55}>
+                <Stack direction="row" justifyContent="space-between"><Typography variant="body2">Total Invoices</Typography><Typography variant="body2" color="error.main" sx={{ fontWeight: 800 }}>{formatCurrency(summary.totalInvoices)}</Typography></Stack>
+                <Stack direction="row" justifyContent="space-between"><Typography variant="body2">Total Credits</Typography><Typography variant="body2" color="success.main" sx={{ fontWeight: 800 }}>{formatCurrency(summary.totalCredits)}</Typography></Stack>
+                <Stack direction="row" justifyContent="space-between"><Typography variant="body2">Total Transactions</Typography><Typography variant="body2" sx={{ fontWeight: 800 }}>{summary.totalTransactions || 0}</Typography></Stack>
+                <Stack direction="row" justifyContent="space-between" sx={{ pt: 0.8, mt: 0.4, borderTop: '1px solid #D7E1EB' }}><Typography sx={{ fontWeight: 900 }}>Outstanding Balance</Typography><Typography sx={{ fontWeight: 950 }}>{formatCurrency(Math.abs(summary.outstandingBalance || 0))} {(summary.outstandingBalance || 0) < 0 ? '(Credit)' : '(Debit)'}</Typography></Stack>
+              </Stack>
+            </Box>
+          )}
         </Box>
       </DialogContent>
-      <DialogActions><Button onClick={onClose}>Close</Button><Button startIcon={<PrintRoundedIcon />} disabled={!data.rows.length} onClick={() => window.print()}>Print ledger</Button></DialogActions>
+      <DialogActions><Button onClick={onClose}>Close</Button><Button startIcon={<PrintRoundedIcon />} disabled={!data.rows.length} onClick={printLedger}>Print ledger</Button></DialogActions>
     </Dialog>
   );
 };
@@ -123,8 +298,17 @@ const LedgerDialog = ({ customer, onClose }) => {
 const StatementDialog = ({ customer, onClose }) => {
   const [form, setForm] = useState({ dateFrom: '', dateTo: dateKey(), location: 'all' });
   const [rows, setRows] = useState([]);
+  const [company, setCompany] = useState(DEFAULT_COMPANY);
   const [busy, setBusy] = useState(false);
-  const statementRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    settingsService.getAll().then((result) => {
+      if (active && result.success) setCompany({ ...DEFAULT_COMPANY, ...(result.data.company || {}) });
+    });
+    return () => { active = false; };
+  }, []);
+
   const load = async () => {
     setBusy(true);
     const result = await customerService.getCustomerSalesForStatement({ customerId: customer.id, ...form });
@@ -133,29 +317,51 @@ const StatementDialog = ({ customer, onClose }) => {
     setRows(result.data);
     return null;
   };
+
   const totalQuantity = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
   const totalAmount = rows.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
-  const totalDue = rows.reduce((sum, row) => sum + Number(row.balanceDue || 0), 0);
+  const siteTotals = rows.reduce((result, row) => {
+    const key = row.location || 'Unknown Site';
+    result[key] = (result[key] || 0) + Number(row.quantity || 0);
+    return result;
+  }, {});
+  const period = `${form.dateFrom ? reportDate(form.dateFrom) : 'Beginning'} to ${reportDate(form.dateTo)}`;
+  const selectedSite = form.location === 'all' ? 'All sites' : form.location;
+
+  const printStatement = () => {
+    if (!rows.length) return;
+    const statementRows = rows.map((row, index) => `<tr><td class="center">${index + 1}</td><td class="center">${escapeHtml(reportDate(row.date))}</td><td class="center">${escapeHtml(row.vehicleNumber || '')}</td><td class="center">${escapeHtml(row.challanNumber || row.id || '')}</td><td class="center">${escapeHtml(row.location || '')}</td><td class="num">${escapeHtml(formatNumber(row.quantity))}</td><td class="num">${escapeHtml(printMoney(row.rate))}</td><td class="num">${escapeHtml(printMoney(row.totalAmount))}</td></tr>`).join('');
+    const siteRows = Object.entries(siteTotals).length > 1 ? Object.entries(siteTotals).map(([site, quantity]) => `<tr class="total-row"><td></td><td></td><td></td><td class="center">${escapeHtml(site)}</td><td></td><td class="num">${escapeHtml(formatNumber(quantity))}</td><td></td><td></td></tr>`).join('') : '';
+    const bodyHtml = `<table><thead><tr><th>SR NO</th><th>DATE</th><th>VEHICLE NO</th><th>DOC NO</th><th>SITE NAME</th><th>QUANTITY</th><th>RATE</th><th>AMOUNT</th></tr></thead><tbody>${statementRows}<tr class="total-row"><td></td><td></td><td></td><td class="center">TOTAL</td><td></td><td class="num">${escapeHtml(formatNumber(totalQuantity))}</td><td></td><td class="num">${escapeHtml(printMoney(totalAmount))}</td></tr>${siteRows}</tbody></table>`;
+    openReportPrintWindow({ title: 'CUSTOMER STATEMENT', company, customer, period: `${period} · ${selectedSite}`, bodyHtml });
+  };
+
   return (
-    <Dialog open onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { maxHeight: '94vh' } }}>
       <DialogTitle>Customer statement · {customer.name}</DialogTitle>
-      <DialogContent>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ py: 1.5 }}><TextField type="date" label="From" InputLabelProps={{ shrink: true }} value={form.dateFrom} onChange={(event) => setForm((current) => ({ ...current, dateFrom: event.target.value }))} fullWidth /><TextField type="date" label="To" InputLabelProps={{ shrink: true }} value={form.dateTo} onChange={(event) => setForm((current) => ({ ...current, dateTo: event.target.value }))} fullWidth /><TextField select label="Site" value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} fullWidth><MenuItem value="all">All sites</MenuItem>{(customer.locations || []).map((location) => <MenuItem key={location.id} value={location.name}>{location.name}</MenuItem>)}</TextField><Button variant="contained" onClick={load} disabled={busy}>Generate</Button></Stack>
-        <Box ref={statementRef} className="invoice-print-area" sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'white' }}>
-          <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}><Box><Typography variant="h5">Customer Statement</Typography><Typography>{customer.name} · {customer.phone}</Typography></Box><Typography variant="body2">{form.dateFrom || 'Beginning'} to {form.dateTo}</Typography></Stack>
-          <ResponsiveRecordTable rows={rows} columns={[
-            { key: 'date', label: 'Date' },
-            { key: 'invoiceNumber', label: 'Invoice' },
-            { key: 'location', label: 'Site' },
-            { key: 'quantity', label: 'Bricks', align: 'right', render: (row) => formatNumber(row.quantity) },
-            { key: 'rate', label: 'Rate', align: 'right', render: (row) => formatCurrency(row.rate) },
-            { key: 'totalAmount', label: 'Amount', align: 'right', render: (row) => formatCurrency(row.totalAmount) },
-            { key: 'balanceDue', label: 'Due', align: 'right', render: (row) => formatCurrency(row.balanceDue) },
-          ]} emptyTitle="Generate the statement to view sales" mobileTitle={(row) => row.invoiceNumber} mobileSubtitle={(row) => `${row.date} · ${formatCurrency(row.totalAmount)}`} />
-          {rows.length > 0 && <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="flex-end" spacing={3} sx={{ mt: 2 }}><Typography><strong>Bricks:</strong> {formatNumber(totalQuantity)}</Typography><Typography><strong>Amount:</strong> {formatCurrency(totalAmount)}</Typography><Typography><strong>Due:</strong> {formatCurrency(totalDue)}</Typography></Stack>}
+      <DialogContent sx={{ overflowY: 'auto' }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ py: 1.5 }}>
+          <TextField type="date" label="From" InputLabelProps={{ shrink: true }} value={form.dateFrom} onChange={(event) => setForm((current) => ({ ...current, dateFrom: event.target.value }))} fullWidth />
+          <TextField type="date" label="To" InputLabelProps={{ shrink: true }} value={form.dateTo} onChange={(event) => setForm((current) => ({ ...current, dateTo: event.target.value }))} fullWidth />
+          <TextField select label="Site" value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} fullWidth><MenuItem value="all">All sites</MenuItem>{(customer.locations || []).map((location) => <MenuItem key={location.id} value={location.name}>{location.name}</MenuItem>)}</TextField>
+          <Button variant="contained" onClick={load} disabled={busy} sx={{ minWidth: 125 }}>Generate</Button>
+        </Stack>
+        <Box sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'white', maxHeight: '62vh', overflowY: 'auto', border: '1px solid #E4E8E6' }}>
+          <CompanyReportHeader company={company} title="CUSTOMER STATEMENT" customer={customer} period={period} extra={`Site: ${selectedSite}`} />
+          <TableContainer>
+            <Table size="small" sx={{ '& th': { bgcolor: '#173F72', color: '#fff', fontWeight: 800, textAlign: 'center' }, '& td, & th': { border: '1px solid #D5DAD8' } }}>
+              <TableHead><TableRow><TableCell>SR NO</TableCell><TableCell>DATE</TableCell><TableCell>VEHICLE NO</TableCell><TableCell>DOC NO</TableCell><TableCell>SITE NAME</TableCell><TableCell align="right">QUANTITY</TableCell><TableCell align="right">RATE</TableCell><TableCell align="right">AMOUNT</TableCell></TableRow></TableHead>
+              <TableBody>
+                {rows.map((row, index) => <TableRow key={row.id}><TableCell align="center">{index + 1}</TableCell><TableCell align="center">{reportDate(row.date)}</TableCell><TableCell align="center">{row.vehicleNumber || ''}</TableCell><TableCell align="center">{row.challanNumber || row.id || ''}</TableCell><TableCell align="center">{row.location || ''}</TableCell><TableCell align="right">{formatNumber(row.quantity)}</TableCell><TableCell align="right">{formatCurrency(row.rate)}</TableCell><TableCell align="right">{formatCurrency(row.totalAmount)}</TableCell></TableRow>)}
+                {!rows.length && <TableRow><TableCell colSpan={8} align="center" sx={{ py: 5, color: 'text.secondary' }}>Generate the statement to view sales.</TableCell></TableRow>}
+                {rows.length > 0 && <TableRow sx={{ bgcolor: '#F4F6F5' }}><TableCell /><TableCell /><TableCell /><TableCell align="center" sx={{ fontWeight: 900 }}>TOTAL</TableCell><TableCell /><TableCell align="right" sx={{ fontWeight: 900 }}>{formatNumber(totalQuantity)}</TableCell><TableCell /><TableCell align="right" sx={{ fontWeight: 900 }}>{formatCurrency(totalAmount)}</TableCell></TableRow>}
+                {rows.length > 0 && Object.entries(siteTotals).length > 1 && Object.entries(siteTotals).map(([site, quantity]) => <TableRow key={site} sx={{ bgcolor: '#FAFAF8' }}><TableCell /><TableCell /><TableCell /><TableCell align="center" sx={{ fontWeight: 800 }}>{site}</TableCell><TableCell /><TableCell align="right" sx={{ fontWeight: 800 }}>{formatNumber(quantity)}</TableCell><TableCell /><TableCell /></TableRow>)}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Box>
       </DialogContent>
-      <DialogActions><Button onClick={onClose}>Close</Button><Button startIcon={<PrintRoundedIcon />} disabled={!rows.length} onClick={() => window.print()}>Print statement</Button></DialogActions>
+      <DialogActions><Button onClick={onClose}>Close</Button><Button startIcon={<PrintRoundedIcon />} disabled={!rows.length} onClick={printStatement}>Print statement</Button></DialogActions>
     </Dialog>
   );
 };
