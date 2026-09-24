@@ -34,8 +34,6 @@ import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import PrintRoundedIcon from '@mui/icons-material/PrintRounded';
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
 import toast from 'react-hot-toast';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import CursorPagination from '../common/CursorPagination';
 import ResponsiveRecordTable from '../data/ResponsiveRecordTable';
 import { useCursorPager } from '../../hooks/useCursorPager';
@@ -124,58 +122,57 @@ const isIOSDevice = () => {
   return isClassicIOS || isIPadDesktopMode;
 };
 
-const IOS_REPORT_PAGE_WIDTH = 718;
-const IOS_REPORT_PAGE_HEIGHT = 1047;
-const IOS_REPORT_CONTENT_HEIGHT = 1000;
+const IOS_FIRST_PAGE_ROWS = {
+  ledger: 10,
+  statement: 16,
+};
 
-const IOS_REPORT_CSS = `
-  * { box-sizing: border-box; }
-  .ios-report-pdf-page { position: relative; width: ${IOS_REPORT_PAGE_WIDTH}px; height: ${IOS_REPORT_PAGE_HEIGHT}px; overflow: hidden; color: #1d2927; font-family: Arial, Helvetica, sans-serif; font-size: 11px; background: #fff; }
-  .ios-page-content { width: 100%; max-height: ${IOS_REPORT_CONTENT_HEIGHT}px; overflow: hidden; }
-  .company { text-align: center; padding: 0 0 12px; border-bottom: 2px solid #173f72; margin-bottom: 14px; }
-  .company h1 { margin: 0; color: #173f72; font-size: 23px; letter-spacing: .5px; }
-  .company .subtitle { margin-top: 4px; font-weight: 700; font-size: 12px; }
-  .company .meta { margin-top: 4px; color: #4f5c59; line-height: 1.45; }
-  .report-title { margin-top: 8px; font-size: 17px; font-weight: 700; letter-spacing: .04em; }
-  .customer-box { border: 1px solid #b7c0bd; padding: 10px 12px; margin-bottom: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px 22px; }
-  .customer-box .row { display: flex; justify-content: space-between; gap: 12px; }
-  .customer-box .label { font-weight: 700; color: #465451; }
-  .customer-box .value { text-align: right; font-weight: 600; }
-  .continuation-header { margin-bottom: 10px; padding: 7px 9px; border: 1px solid #c9cfcd; background: #f5f7f6; display: flex; justify-content: space-between; gap: 12px; font-size: 9px; color: #465451; }
-  .continuation-header strong { color: #173f72; font-size: 10px; }
-  table { width: 100%; border-collapse: collapse; }
-  thead { display: table-header-group; }
-  tr { break-inside: avoid; page-break-inside: avoid; }
-  th { background: #173f72; color: #fff; font-weight: 700; padding: 7px 6px; border: 1px solid #173f72; font-size: 10px; }
-  td { padding: 6px; border: 1px solid #c9cfcd; vertical-align: top; }
-  .num { text-align: right; white-space: nowrap; }
-  .center { text-align: center; }
-  .debit { color: #b3261e; font-weight: 700; }
-  .credit { color: #237a51; font-weight: 700; }
-  .badge { display: inline-block; margin-top: 3px; padding: 2px 5px; border-radius: 3px; font-size: 8px; font-weight: 700; }
-  .badge.gst { color: #a12a24; background: #fdeceb; }
-  .badge.non-gst { color: #b66b00; background: #fff2df; }
-  .badge.payment { color: #237a51; background: #e9f6ef; }
-  .total-row td { font-weight: 700; background: #f4f6f5; }
-  .summary { margin-top: 14px; padding: 11px 13px; border: 1px solid #c9d8e8; background: #f3f8fd; }
-  .summary h3 { margin: 0 0 8px; color: #173f72; font-size: 14px; }
-  .summary-row { display: flex; justify-content: space-between; gap: 20px; margin: 5px 0; }
-  .footer { position: absolute; left: 0; right: 0; bottom: 0; padding-top: 8px; border-top: 1px solid #d4d9d7; text-align: center; color: #6c7673; font-size: 9px; background: #fff; }
-`;
+const IOS_CONTINUATION_ROWS = {
+  ledger: 14,
+  statement: 22,
+};
 
-const createIOSReportSource = ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
+const buildIOSPrintPages = ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
+  const parser = document.createElement('div');
+  parser.innerHTML = bodyHtml;
+  const table = parser.querySelector('table');
+  if (!table) throw new Error('Unable to prepare report table.');
+
+  const headHtml = table.querySelector('thead')?.outerHTML || '';
+  const rowHtml = Array.from(table.querySelectorAll('tbody > tr')).map((row) => row.outerHTML);
+  const isLedger = /ledger/i.test(title);
+  const reportType = isLedger ? 'ledger' : 'statement';
+  const firstCapacity = IOS_FIRST_PAGE_ROWS[reportType];
+  const continuationCapacity = IOS_CONTINUATION_ROWS[reportType];
+  const pages = [];
+  let cursor = 0;
+
+  if (!rowHtml.length) {
+    pages.push({ first: true, rows: [] });
+  } else {
+    pages.push({ first: true, rows: rowHtml.slice(0, firstCapacity) });
+    cursor = firstCapacity;
+    while (cursor < rowHtml.length) {
+      pages.push({ first: false, rows: rowHtml.slice(cursor, cursor + continuationCapacity) });
+      cursor += continuationCapacity;
+    }
+  }
+
+  // Keep the ledger summary on a page where it has enough room. This is deliberately
+  // conservative for iOS Safari so rows are never clipped at a page boundary.
+  if (summaryHtml) {
+    const last = pages[pages.length - 1];
+    const summarySafeRows = isLedger ? 8 : 15;
+    if (last.rows.length > summarySafeRows) {
+      pages.push({ first: false, rows: [], summaryOnly: true });
+    }
+  }
+
   const companyData = { ...DEFAULT_COMPANY, ...(company || {}) };
-  const wrapper = document.createElement('div');
-  wrapper.style.position = 'fixed';
-  wrapper.style.left = '-100000px';
-  wrapper.style.top = '0';
-  wrapper.style.width = `${IOS_REPORT_PAGE_WIDTH}px`;
-  wrapper.style.background = '#fff';
-  wrapper.style.zIndex = '-1';
-  wrapper.setAttribute('aria-hidden', 'true');
-  wrapper.innerHTML = `
-    <style>${IOS_REPORT_CSS}</style>
-    <div class="ios-report-source" style="width:${IOS_REPORT_PAGE_WIDTH}px;color:#1d2927;font-family:Arial,Helvetica,sans-serif;font-size:11px;background:#fff;">
+  const totalPages = pages.length;
+
+  return pages.map((page, index) => {
+    const firstHeader = page.first ? `
       <div class="company">
         <h1>${escapeHtml(companyData.name || 'PATEL BRICKS')}</h1>
         <div class="subtitle">Manufacturer of Fly Ash Bricks</div>
@@ -188,139 +185,97 @@ const createIOSReportSource = ({ title, company, customer, period, bodyHtml, sum
         ${customer?.gstin ? `<div class="row"><span class="label">GSTIN:</span><span class="value">${escapeHtml(customer.gstin)}</span></div>` : '<div></div>'}
         <div class="row"><span class="label">Period:</span><span class="value">${escapeHtml(period)}</span></div>
         <div class="row"><span class="label">Generated On:</span><span class="value">${escapeHtml(new Date().toLocaleDateString('en-GB'))}</span></div>
-      </div>
-      <div class="ios-body">${bodyHtml}</div>
-      <div class="ios-summary">${summaryHtml}</div>
-      <div class="footer">Computer-generated report from Patel Bricks Management.</div>
-    </div>`;
-  document.body.appendChild(wrapper);
-  return { wrapper, companyData };
+      </div>` : `
+      <div class="continuation-header">
+        <strong>${escapeHtml(companyData.name || 'PATEL BRICKS')} · ${escapeHtml(title)}</strong>
+        <span>${escapeHtml(customer?.name || '')} · ${escapeHtml(period)}</span>
+      </div>`;
+
+    const tableHtml = page.summaryOnly ? '' : `<table>${headHtml}<tbody>${page.rows.join('')}</tbody></table>`;
+    const includeSummary = summaryHtml && index === totalPages - 1;
+
+    return `<section class="ios-print-page">
+      ${firstHeader}
+      ${tableHtml}
+      ${includeSummary ? summaryHtml : ''}
+      <div class="ios-page-footer">Computer-generated report from Patel Bricks Management. &nbsp; Page ${index + 1} of ${totalPages}</div>
+    </section>`;
+  }).join('');
 };
 
-const buildIOSReportPdf = async ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
-  const { wrapper, companyData } = createIOSReportSource({ title, company, customer, period, bodyHtml, summaryHtml });
-  try {
-    if (document.fonts?.ready) await document.fonts.ready;
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-    const source = wrapper.querySelector('.ios-report-source');
-    const sourceCompany = source?.querySelector('.company');
-    const sourceCustomer = source?.querySelector('.customer-box');
-    const sourceTable = source?.querySelector('.ios-body table');
-    const sourceHead = sourceTable?.querySelector('thead');
-    const sourceRows = Array.from(sourceTable?.querySelectorAll('tbody > tr') || []);
-    const sourceSummary = source?.querySelector('.ios-summary .summary');
-    const sourceFooter = source?.querySelector('.footer');
-
-    if (!source || !sourceTable || !sourceHead) throw new Error('Unable to prepare report layout.');
-
-    const pagesHost = document.createElement('div');
-    pagesHost.style.width = `${IOS_REPORT_PAGE_WIDTH}px`;
-    wrapper.appendChild(pagesHost);
-    const pages = [];
-
-    const createPage = ({ first = false, withTable = true } = {}) => {
-      const page = document.createElement('div');
-      page.className = 'ios-report-pdf-page';
-      const content = document.createElement('div');
-      content.className = 'ios-page-content';
-      page.appendChild(content);
-
-      if (first) {
-        if (sourceCompany) content.appendChild(sourceCompany.cloneNode(true));
-        if (sourceCustomer) content.appendChild(sourceCustomer.cloneNode(true));
-      } else {
-        const continuation = document.createElement('div');
-        continuation.className = 'continuation-header';
-        continuation.innerHTML = `<strong>${escapeHtml(companyData.name || 'PATEL BRICKS')} · ${escapeHtml(title)}</strong><span>${escapeHtml(customer?.name || '')} · ${escapeHtml(period)}</span>`;
-        content.appendChild(continuation);
-      }
-
-      let tbody = null;
-      if (withTable) {
-        const table = sourceTable.cloneNode(false);
-        table.appendChild(sourceHead.cloneNode(true));
-        tbody = document.createElement('tbody');
-        table.appendChild(tbody);
-        content.appendChild(table);
-      }
-
-      pagesHost.appendChild(page);
-      pages.push(page);
-      return { page, content, tbody };
-    };
-
-    const fits = (content) => content.scrollHeight <= IOS_REPORT_CONTENT_HEIGHT + 1;
-    let current = createPage({ first: true, withTable: true });
-
-    sourceRows.forEach((row) => {
-      const clone = row.cloneNode(true);
-      current.tbody.appendChild(clone);
-      if (!fits(current.content)) {
-        current.tbody.removeChild(clone);
-        current = createPage({ first: false, withTable: true });
-        current.tbody.appendChild(clone);
-      }
-    });
-
-    if (sourceSummary) {
-      const summaryClone = sourceSummary.cloneNode(true);
-      current.content.appendChild(summaryClone);
-      if (!fits(current.content)) {
-        current.content.removeChild(summaryClone);
-        current = createPage({ first: false, withTable: false });
-        current.content.appendChild(summaryClone);
-      }
-    }
-
-    if (sourceFooter) pages[pages.length - 1].appendChild(sourceFooter.cloneNode(true));
-
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    for (let index = 0; index < pages.length; index += 1) {
-      if (index > 0) pdf.addPage('a4', 'p');
-      const canvas = await html2canvas(pages[index], {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: IOS_REPORT_PAGE_WIDTH,
-        height: IOS_REPORT_PAGE_HEIGHT,
-        windowWidth: IOS_REPORT_PAGE_WIDTH,
-        windowHeight: IOS_REPORT_PAGE_HEIGHT,
-        scrollX: 0,
-        scrollY: 0,
-      });
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.96), 'JPEG', 10, 10, 190, 277, undefined, 'FAST');
-    }
-    return pdf;
-  } finally {
-    wrapper.remove();
-  }
-};
-
-const openIOSReportPdf = ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
+const openIOSReportPrintWindow = ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
   const popup = window.open('', '_blank');
   if (!popup) {
     toast.error('Could not open the report. Please allow popups for this site.');
     return;
   }
-  popup.document.write('<title>Preparing report…</title><p style="font-family:Arial,sans-serif;padding:24px">Preparing report for iOS…</p>');
-  popup.document.close();
 
-  buildIOSReportPdf({ title, company, customer, period, bodyHtml, summaryHtml })
-    .then((pdf) => {
-      const blobUrl = URL.createObjectURL(pdf.output('blob'));
-      popup.location.replace(blobUrl);
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
-    })
-    .catch((error) => {
-      if (!popup.closed) popup.close();
-      toast.error(error.message || 'Unable to prepare the report for printing.');
-    });
+  try {
+    const pagesHtml = buildIOSPrintPages({ title, company, customer, period, bodyHtml, summaryHtml });
+    popup.document.open();
+    popup.document.write(`<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>${escapeHtml(title)}</title>
+          <style>
+            @page { size: A4 portrait; margin: 0; }
+            * { box-sizing: border-box; }
+            html, body { margin: 0; padding: 0; background: #fff; color: #1d2927; font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .ios-print-page { position: relative; width: 210mm; height: 297mm; padding: 11mm 10mm 13mm; overflow: hidden; background: #fff; page-break-after: always; break-after: page; font-size: 10px; }
+            .ios-print-page:last-child { page-break-after: auto; break-after: auto; }
+            .company { text-align: center; padding: 0 0 9px; border-bottom: 2px solid #173f72; margin-bottom: 10px; }
+            .company h1 { margin: 0; color: #173f72; font-size: 21px; letter-spacing: .5px; }
+            .company .subtitle { margin-top: 3px; font-weight: 700; font-size: 11px; }
+            .company .meta { margin-top: 3px; color: #4f5c59; line-height: 1.35; font-size: 9px; }
+            .report-title { margin-top: 6px; font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+            .customer-box { border: 1px solid #b7c0bd; padding: 7px 9px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+            .customer-box .row { display: flex; justify-content: space-between; gap: 10px; }
+            .customer-box .label { font-weight: 700; color: #465451; }
+            .customer-box .value { text-align: right; font-weight: 600; }
+            .continuation-header { margin-bottom: 9px; padding: 6px 8px; border: 1px solid #c9cfcd; background: #f5f7f6; display: flex; justify-content: space-between; gap: 10px; font-size: 8.5px; color: #465451; }
+            .continuation-header strong { color: #173f72; font-size: 9.5px; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            thead { display: table-header-group; }
+            tr { page-break-inside: avoid; break-inside: avoid; }
+            th { background: #173f72 !important; color: #fff !important; font-weight: 700; padding: 5px 4px; border: 1px solid #173f72; font-size: 8.5px; }
+            td { padding: 5px 4px; border: 1px solid #c9cfcd; vertical-align: top; font-size: 9px; line-height: 1.28; word-break: break-word; }
+            .num { text-align: right; white-space: nowrap; }
+            .center { text-align: center; }
+            .debit { color: #b3261e; font-weight: 700; }
+            .credit { color: #237a51; font-weight: 700; }
+            .badge { display: inline-block; margin-top: 2px; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 700; }
+            .badge.gst { color: #a12a24; background: #fdeceb; }
+            .badge.non-gst { color: #b66b00; background: #fff2df; }
+            .badge.payment { color: #237a51; background: #e9f6ef; }
+            .total-row td { font-weight: 700; background: #f4f6f5; }
+            .summary { margin-top: 10px; padding: 9px 11px; border: 1px solid #c9d8e8; background: #f3f8fd; page-break-inside: avoid; break-inside: avoid; }
+            .summary h3 { margin: 0 0 6px; color: #173f72; font-size: 12px; }
+            .summary-row { display: flex; justify-content: space-between; gap: 18px; margin: 4px 0; }
+            .ios-page-footer { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; padding-top: 5px; border-top: 1px solid #d4d9d7; text-align: center; color: #6c7673; font-size: 7.5px; background: #fff; }
+            @media screen { body { background: #e8e8e8; } .ios-print-page { margin: 0 auto 8px; box-shadow: 0 1px 8px rgba(0,0,0,.15); } }
+            @media print { body { background: #fff; } .ios-print-page { margin: 0; box-shadow: none; } }
+          </style>
+        </head>
+        <body>${pagesHtml}
+          <script>
+            window.addEventListener('load', function () {
+              window.setTimeout(function () { window.focus(); window.print(); }, 250);
+            });
+          </script>
+        </body>
+      </html>`);
+    popup.document.close();
+  } catch (error) {
+    if (!popup.closed) popup.close();
+    toast.error(error.message || 'Unable to prepare the report for printing.');
+  }
 };
 
 const openReportPrintWindow = ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
   if (isIOSDevice()) {
-    openIOSReportPdf({ title, company, customer, period, bodyHtml, summaryHtml });
+    openIOSReportPrintWindow({ title, company, customer, period, bodyHtml, summaryHtml });
     return;
   }
 
