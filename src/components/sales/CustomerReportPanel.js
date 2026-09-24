@@ -124,12 +124,17 @@ const isIOSDevice = () => {
 
 const IOS_FIRST_PAGE_ROWS = {
   ledger: 10,
-  statement: 16,
+  // The statement has eight columns and site names can wrap on iOS. Keep the
+  // first page conservative because it also contains the full company/customer header.
+  statement: 14,
 };
 
 const IOS_CONTINUATION_ROWS = {
   ledger: 14,
-  statement: 22,
+  // iOS Safari fits fewer statement rows than the ledger because the wider table
+  // produces taller wrapped cells. 18 keeps every logical statement page inside
+  // one physical A4 page, including the repeated header.
+  statement: 18,
 };
 
 const buildIOSPrintPages = ({ title, company, customer, period, bodyHtml, summaryHtml = '' }) => {
@@ -194,11 +199,15 @@ const buildIOSPrintPages = ({ title, company, customer, period, bodyHtml, summar
     const tableHtml = page.summaryOnly ? '' : `<table>${headHtml}<tbody>${page.rows.join('')}</tbody></table>`;
     const includeSummary = summaryHtml && index === totalPages - 1;
 
-    return `<section class="ios-print-page">
+    const footerHtml = isLedger
+      ? `<div class="ios-page-footer">Computer-generated report from Patel Bricks Management. &nbsp; Page ${index + 1} of ${totalPages}</div>`
+      : '';
+
+    return `<section class="ios-print-page ${isLedger ? 'ledger-print-page' : 'statement-print-page'}">
       ${firstHeader}
       ${tableHtml}
       ${includeSummary ? summaryHtml : ''}
-      <div class="ios-page-footer">Computer-generated report from Patel Bricks Management. &nbsp; Page ${index + 1} of ${totalPages}</div>
+      ${footerHtml}
     </section>`;
   }).join('');
 };
@@ -258,6 +267,11 @@ const openIOSReportPrintWindow = ({ title, company, customer, period, bodyHtml, 
             .summary h3 { margin: 0 0 6px; color: #173f72; font-size: 12px; }
             .summary-row { display: flex; justify-content: space-between; gap: 18px; margin: 4px 0; }
             .ios-page-footer { position: static; margin-top: 10px; padding-top: 5px; border-top: 1px solid #d4d9d7; text-align: center; color: #6c7673; font-size: 7.5px; background: #fff; }
+            /* Statement rows are wider than ledger rows and Safari increases their
+               height when site names wrap. Keep the iOS-only statement table compact. */
+            .statement-print-page td { padding-top: 4px; padding-bottom: 4px; line-height: 1.18; }
+            .statement-print-page th { padding-top: 4px; padding-bottom: 4px; }
+            .statement-print-page .continuation-header { margin-bottom: 7px; }
             @media screen { body { background: #e8e8e8; padding: 8px; } .ios-print-page { max-width: 194mm; margin: 0 auto 8px; padding: 9mm 8mm 10mm; box-shadow: 0 1px 8px rgba(0,0,0,.15); } }
             @media print { body { background: #fff; } .ios-print-page { margin: 0; box-shadow: none; } }
           </style>
