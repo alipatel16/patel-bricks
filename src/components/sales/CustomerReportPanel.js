@@ -220,11 +220,15 @@ const openIOSReportPrintWindow = ({ title, company, customer, period, bodyHtml, 
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>${escapeHtml(title)}</title>
           <style>
-            @page { size: A4 portrait; margin: 0; }
+            @page { size: A4 portrait; margin: 9mm 8mm 10mm; }
             * { box-sizing: border-box; }
             html, body { margin: 0; padding: 0; background: #fff; color: #1d2927; font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .ios-print-page { position: relative; width: 210mm; height: 297mm; padding: 11mm 10mm 13mm; overflow: hidden; background: #fff; page-break-after: always; break-after: page; font-size: 10px; }
-            .ios-print-page:last-child { page-break-after: auto; break-after: auto; }
+            /* iOS Safari reserves part of the physical sheet for its own print header/footer.
+               A fixed 210mm x 297mm wrapper therefore overflows by a few millimetres and
+               Safari emits a second blank sheet. Keep each logical report page inside the
+               @page content box and force page breaks only *before* continuation pages. */
+            .ios-print-page { position: relative; width: 100%; height: auto; min-height: 0; padding: 0; overflow: visible; background: #fff; font-size: 10px; page-break-after: auto; break-after: auto; }
+            .ios-print-page + .ios-print-page { page-break-before: always; break-before: page; }
             .company { text-align: center; padding: 0 0 9px; border-bottom: 2px solid #173f72; margin-bottom: 10px; }
             .company h1 { margin: 0; color: #173f72; font-size: 21px; letter-spacing: .5px; }
             .company .subtitle { margin-top: 3px; font-weight: 700; font-size: 11px; }
@@ -253,8 +257,8 @@ const openIOSReportPrintWindow = ({ title, company, customer, period, bodyHtml, 
             .summary { margin-top: 10px; padding: 9px 11px; border: 1px solid #c9d8e8; background: #f3f8fd; page-break-inside: avoid; break-inside: avoid; }
             .summary h3 { margin: 0 0 6px; color: #173f72; font-size: 12px; }
             .summary-row { display: flex; justify-content: space-between; gap: 18px; margin: 4px 0; }
-            .ios-page-footer { position: absolute; left: 10mm; right: 10mm; bottom: 6mm; padding-top: 5px; border-top: 1px solid #d4d9d7; text-align: center; color: #6c7673; font-size: 7.5px; background: #fff; }
-            @media screen { body { background: #e8e8e8; } .ios-print-page { margin: 0 auto 8px; box-shadow: 0 1px 8px rgba(0,0,0,.15); } }
+            .ios-page-footer { position: static; margin-top: 10px; padding-top: 5px; border-top: 1px solid #d4d9d7; text-align: center; color: #6c7673; font-size: 7.5px; background: #fff; }
+            @media screen { body { background: #e8e8e8; padding: 8px; } .ios-print-page { max-width: 194mm; margin: 0 auto 8px; padding: 9mm 8mm 10mm; box-shadow: 0 1px 8px rgba(0,0,0,.15); } }
             @media print { body { background: #fff; } .ios-print-page { margin: 0; box-shadow: none; } }
           </style>
         </head>
