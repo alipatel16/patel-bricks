@@ -95,7 +95,9 @@ const normalizeInward = (purchase, settings) => {
     billNumber: purchase.billNumber || purchase.purchaseNumber || '—',
     supplierName: purchase.supplierName || 'Direct purchase',
     supplierGstin: purchase.supplierGstin || 'UNREGISTERED',
-    material: purchase.stockType || purchase.description || 'Purchase',
+    material: purchase.stockType === 'other'
+      ? (purchase.customPurchaseType || purchase.description || 'Other purchase')
+      : (purchase.stockType || purchase.description || 'Purchase'),
     quantity: asNumber(purchase.quantity),
     unit: purchase.unit || '',
     taxableValue,

@@ -87,6 +87,7 @@ export const inventoryService = {
 
   recordPurchase: async ({
     stockType,
+    customPurchaseType = '',
     quantity,
     unit = '',
     unitCost = 0,
@@ -99,35 +100,49 @@ export const inventoryService = {
     try {
       const amount = Math.abs(asNumber(quantity));
       const cost = Math.max(0, asNumber(unitCost));
+      const normalizedCustomPurchaseType = String(customPurchaseType || '').trim();
+      const affectsInventory = stockType !== 'other';
       if (!amount) throw new Error('Enter a purchase quantity greater than zero.');
+      if (stockType === 'other' && !normalizedCustomPurchaseType) {
+        throw new Error('Enter the type or description for this Other purchase.');
+      }
       const taxableAmount = amount * cost;
       const gstAmount = taxableAmount * (asNumber(gstRate) / 100);
       const totalAmount = taxableAmount + gstAmount;
       const inventoryRef = doc(db, 'system', 'inventory');
       const purchaseRef = doc(collection(db, 'purchases'));
-      const transactionRef = doc(collection(db, 'inventoryTransactions'));
+      const transactionRef = affectsInventory ? doc(collection(db, 'inventoryTransactions')) : null;
       const supplierRef = supplier?.id ? doc(db, 'suppliers', supplier.id) : null;
       const dailyRef = doc(db, 'dailyStats', date);
       const monthlyRef = doc(db, 'monthlyStats', monthKey(date));
       const metricsRef = doc(db, 'metrics', 'current');
-      const field = fieldForStockType(stockType);
+      const field = affectsInventory ? fieldForStockType(stockType) : null;
+      const purchaseDescription = stockType === 'other' ? normalizedCustomPurchaseType : '';
 
       await runTransaction(db, async (transaction) => {
-        const reads = [transaction.get(inventoryRef)];
+        const reads = [];
+        if (affectsInventory) reads.push(transaction.get(inventoryRef));
         if (supplierRef) reads.push(transaction.get(supplierRef));
         const snapshots = await Promise.all(reads);
-        if (supplierRef && !snapshots[1]?.exists()) throw new Error('Selected supplier no longer exists.');
+        const supplierSnapshotIndex = affectsInventory ? 1 : 0;
+        if (supplierRef && !snapshots[supplierSnapshotIndex]?.exists()) throw new Error('Selected supplier no longer exists.');
 
-        transaction.set(inventoryRef, {
-          [field]: increment(amount),
-          ...(stockType === 'cement' ? { cementCostPerBag: cost } : {}),
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
+        if (affectsInventory) {
+          transaction.set(inventoryRef, {
+            [field]: increment(amount),
+            ...(stockType === 'cement' ? { cementCostPerBag: cost } : {}),
+            updatedAt: serverTimestamp(),
+          }, { merge: true });
+        }
+
         transaction.set(purchaseRef, {
           purchaseNumber: `PUR-${Date.now()}`,
           stockType,
+          customPurchaseType: purchaseDescription,
+          description: purchaseDescription,
+          affectsInventory,
           quantity: amount,
-          unit: unit || (stockType === 'cement' ? 'bags' : stockType === 'chemical' ? 'litres' : stockType === 'bricks' ? 'bricks' : 'tons'),
+          unit: unit || (stockType === 'cement' ? 'bags' : stockType === 'chemical' ? 'litres' : stockType === 'bricks' ? 'bricks' : stockType === 'other' ? 'nos' : 'tons'),
           unitCost: cost,
           taxableAmount,
           gstRate: asNumber(gstRate),
@@ -140,21 +155,25 @@ export const inventoryService = {
           notes,
           date,
           createdAt: serverTimestamp(),
-          inventoryTransactionId: transactionRef.id,
+          inventoryTransactionId: transactionRef?.id || null,
           updatedAt: serverTimestamp(),
         });
-        transaction.set(transactionRef, {
-          stockType,
-          transactionType: 'purchase',
-          operation: 'add',
-          quantity: amount,
-          delta: amount,
-          amount: totalAmount,
-          referenceId: purchaseRef.id,
-          notes: notes || `Purchase ${billNumber || purchaseRef.id}`,
-          date,
-          createdAt: serverTimestamp(),
-        });
+
+        if (transactionRef) {
+          transaction.set(transactionRef, {
+            stockType,
+            transactionType: 'purchase',
+            operation: 'add',
+            quantity: amount,
+            delta: amount,
+            amount: totalAmount,
+            referenceId: purchaseRef.id,
+            notes: notes || `Purchase ${billNumber || purchaseRef.id}`,
+            date,
+            createdAt: serverTimestamp(),
+          });
+        }
+
         if (supplierRef) {
           transaction.update(supplierRef, {
             totalPurchases: increment(1),
@@ -186,17 +205,24 @@ export const inventoryService = {
         const purchaseSnapshot = await transaction.get(purchaseRef);
         if (!purchaseSnapshot.exists()) throw new Error('Purchase record not found.');
         const purchase = purchaseSnapshot.data();
-        const inventorySnapshot = await transaction.get(inventoryRef);
-        const inventory = inventorySnapshot.exists() ? inventorySnapshot.data() : INVENTORY_DEFAULTS;
-        if (currentStockFor(inventory, purchase.stockType) < asNumber(purchase.quantity)) {
-          throw new Error('This purchase cannot be deleted because part of its stock has already been consumed.');
+        // Backward compatibility: existing records created before this field was
+        // introduced continue to behave as inventory purchases.
+        const affectsInventory = purchase.affectsInventory !== false;
+
+        if (affectsInventory) {
+          const inventorySnapshot = await transaction.get(inventoryRef);
+          const inventory = inventorySnapshot.exists() ? inventorySnapshot.data() : INVENTORY_DEFAULTS;
+          if (currentStockFor(inventory, purchase.stockType) < asNumber(purchase.quantity)) {
+            throw new Error('This purchase cannot be deleted because part of its stock has already been consumed.');
+          }
+          const field = fieldForStockType(purchase.stockType);
+          transaction.set(inventoryRef, { [field]: increment(-asNumber(purchase.quantity)), updatedAt: serverTimestamp() }, { merge: true });
         }
-        const field = fieldForStockType(purchase.stockType);
+
         transaction.delete(purchaseRef);
         if (purchase.inventoryTransactionId) {
           transaction.delete(doc(db, 'inventoryTransactions', purchase.inventoryTransactionId));
         }
-        transaction.set(inventoryRef, { [field]: increment(-asNumber(purchase.quantity)), updatedAt: serverTimestamp() }, { merge: true });
         if (purchase.supplierId) {
           transaction.update(doc(db, 'suppliers', purchase.supplierId), {
             totalPurchases: increment(-1),

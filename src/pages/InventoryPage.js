@@ -53,6 +53,8 @@ const stockTypes = [
   ['chemical', 'Chemical'],
 ];
 
+const purchaseTypes = [...stockTypes, ['other', 'Other']];
+
 const materialDefinitions = [
   { key: 'sand', label: 'Sand', icon: LandscapeRoundedIcon, tone: 'warning' },
   { key: 'fly_ash', label: 'Fly ash', icon: LocalShippingRoundedIcon, tone: 'info' },
@@ -64,6 +66,7 @@ const materialDefinitions = [
 const defaultUnitFor = (stockType, materialUnits = {}) => {
   if (stockType === 'cement') return 'bags';
   if (stockType === 'bricks') return 'bricks';
+  if (stockType === 'other') return 'nos';
   return materialUnits[stockType] || (stockType === 'chemical' ? 'litres' : 'tons');
 };
 
@@ -111,7 +114,7 @@ const InventoryPage = () => {
   const [busy, setBusy] = useState(false);
   const [deleteRecord, setDeleteRecord] = useState(null);
   const [adjustForm, setAdjustForm] = useState({ stockType: 'bricks', quantity: '', operation: 'add', date: dateKey(), notes: '' });
-  const [purchaseForm, setPurchaseForm] = useState({ stockType: 'cement', quantity: '', unit: 'bags', unitCost: '', gstRate: '0', billNumber: '', date: dateKey(), notes: '', supplier: null });
+  const [purchaseForm, setPurchaseForm] = useState({ stockType: 'cement', customPurchaseType: '', quantity: '', unit: 'bags', unitCost: '', gstRate: '0', billNumber: '', date: dateKey(), notes: '', supplier: null });
 
   const loadInventory = useCallback(async () => {
     const result = await inventoryService.getInventory();
@@ -145,9 +148,9 @@ const InventoryPage = () => {
     const result = await inventoryService.recordPurchase(purchaseForm);
     setBusy(false);
     if (!result.success) return toast.error(result.error);
-    toast.success('Purchase recorded and stock updated.');
+    toast.success(purchaseForm.stockType === 'other' ? 'Other purchase recorded for supplier and GST reporting.' : 'Purchase recorded and stock updated.');
     setPurchaseOpen(false);
-    setPurchaseForm({ stockType: 'cement', quantity: '', unit: 'bags', unitCost: '', gstRate: '0', billNumber: '', date: dateKey(), notes: '', supplier: null });
+    setPurchaseForm({ stockType: 'cement', customPurchaseType: '', quantity: '', unit: 'bags', unitCost: '', gstRate: '0', billNumber: '', date: dateKey(), notes: '', supplier: null });
     setTab('purchases');
     loadInventory();
     pager.refresh();
@@ -159,7 +162,7 @@ const InventoryPage = () => {
     const result = await inventoryService.deletePurchase(deleteRecord.id);
     setBusy(false);
     if (!result.success) return toast.error(result.error);
-    toast.success('Purchase deleted and stock reversed.');
+    toast.success(deleteRecord?.affectsInventory === false ? 'Other purchase deleted and supplier/GST totals reversed.' : 'Purchase deleted and stock reversed.');
     setDeleteRecord(null);
     loadInventory();
     pager.refresh();
@@ -173,7 +176,7 @@ const InventoryPage = () => {
   const columns = useMemo(() => tab === 'purchases' ? [
     { key: 'date', label: 'Date', nowrap: true },
     { key: 'purchaseNumber', label: 'Purchase' },
-    { key: 'stockType', label: 'Material', render: (row) => stockTypes.find(([value]) => value === row.stockType)?.[1] || row.stockType },
+    { key: 'stockType', label: 'Purchase type', render: (row) => row.stockType === 'other' ? (row.customPurchaseType || row.description || 'Other') : (stockTypes.find(([value]) => value === row.stockType)?.[1] || row.stockType) },
     { key: 'supplierName', label: 'Supplier', render: (row) => row.supplierName || 'Direct purchase' },
     { key: 'quantity', label: 'Quantity', align: 'right', render: (row) => `${formatNumber(row.quantity)} ${row.unit || ''}` },
     { key: 'unitCost', label: 'Rate', align: 'right', render: (row) => formatCurrency(row.unitCost) },
@@ -226,12 +229,12 @@ const InventoryPage = () => {
         <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
           <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2 }}><Tab value="transactions" label="Stock movement" /><Tab value="purchases" label="Purchase history" /></Tabs>
           <Grid container spacing={1.25} alignItems="center" sx={{ mb: 2.25 }}>
-            <Grid item xs={12} sm="auto"><TextField select label="Stock type" value={filters.stockType} onChange={(event) => setFilters((current) => ({ ...current, stockType: event.target.value }))} sx={{ minWidth: { sm: 180 } }} fullWidth><MenuItem value="all">All stock</MenuItem>{stockTypes.map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></Grid>
+            <Grid item xs={12} sm="auto"><TextField select label={tab === 'purchases' ? 'Purchase type' : 'Stock type'} value={filters.stockType} onChange={(event) => setFilters((current) => ({ ...current, stockType: event.target.value }))} sx={{ minWidth: { sm: 180 } }} fullWidth><MenuItem value="all">{tab === 'purchases' ? 'All purchases' : 'All stock'}</MenuItem>{(tab === 'purchases' ? purchaseTypes : stockTypes).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></Grid>
             {tab === 'transactions' && <Grid item xs={12} sm="auto"><TextField select label="Movement" value={filters.transactionType} onChange={(event) => setFilters((current) => ({ ...current, transactionType: event.target.value }))} sx={{ minWidth: { sm: 190 } }} fullWidth><MenuItem value="all">All movement</MenuItem><MenuItem value="production">Production</MenuItem><MenuItem value="sale">Sale</MenuItem><MenuItem value="purchase">Purchase</MenuItem><MenuItem value="adjustment">Adjustment</MenuItem><MenuItem value="legacy">Legacy</MenuItem></TextField></Grid>}
             <Grid item xs={12} sm="auto"><Button onClick={() => setFilters({ stockType: 'all', transactionType: 'all' })} fullWidth>Clear filters</Button></Grid>
           </Grid>
           {pager.error && <Alert severity="error" sx={{ mb: 2 }}>{pager.error}</Alert>}
-          <ResponsiveRecordTable rows={pager.rows} columns={columns} loading={pager.loading} emptyTitle={tab === 'purchases' ? 'No purchases recorded' : 'No stock movements'} mobileTitle={(row) => tab === 'purchases' ? (row.supplierName || row.purchaseNumber) : `${formatNumber(row.quantity)} ${row.stockType}`} mobileSubtitle={(row) => `${row.date} · ${row.transactionType || row.stockType}`} mobileActions={tab === 'purchases' ? purchaseActions : undefined} />
+          <ResponsiveRecordTable rows={pager.rows} columns={columns} loading={pager.loading} emptyTitle={tab === 'purchases' ? 'No purchases recorded' : 'No stock movements'} mobileTitle={(row) => tab === 'purchases' ? (row.supplierName || row.purchaseNumber) : `${formatNumber(row.quantity)} ${row.stockType}`} mobileSubtitle={(row) => tab === 'purchases' ? `${row.date} · ${row.stockType === 'other' ? (row.customPurchaseType || row.description || 'Other') : (stockTypes.find(([value]) => value === row.stockType)?.[1] || row.stockType)}` : `${row.date} · ${row.transactionType || row.stockType}`} mobileActions={tab === 'purchases' ? purchaseActions : undefined} />
           <CursorPagination page={pager.page} hasMore={pager.hasMore} loading={pager.loading} onPrevious={pager.previous} onNext={pager.next} />
         </CardContent>
       </Card>
@@ -247,10 +250,12 @@ const InventoryPage = () => {
       </Dialog>
 
       <Dialog open={purchaseOpen} onClose={busy ? undefined : () => setPurchaseOpen(false)} maxWidth="md" fullWidth>
-        <form onSubmit={submitPurchase}><DialogTitle>Record material purchase</DialogTitle><DialogContent dividers sx={{ bgcolor: '#FAF8F4' }}><Grid container spacing={2} sx={{ pt: 0.5 }}>
+        <form onSubmit={submitPurchase}><DialogTitle>Record purchase</DialogTitle><DialogContent dividers sx={{ bgcolor: '#FAF8F4' }}><Grid container spacing={2} sx={{ pt: 0.5 }}>
           <Grid item xs={12}><AsyncSearchField label="Supplier" value={purchaseForm.supplier} onChange={(supplier) => setPurchaseForm((current) => ({ ...current, supplier }))} search={supplierService.searchSuppliers} getOptionLabel={(option) => `${option.name}${option.gstin ? ` · ${option.gstin}` : ''}`} required={false} helperText="Optional. Type 2 characters to search suppliers." /></Grid>
-          <Grid item xs={12} sm={6}><TextField select label="Material" value={purchaseForm.stockType} onChange={(event) => { const stockType = event.target.value; setPurchaseForm((current) => ({ ...current, stockType, unit: defaultUnitFor(stockType, materialUnits) })); }} fullWidth>{stockTypes.map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></Grid>
-          <Grid item xs={12} sm={6}><TextField label="Unit" value={purchaseForm.unit} onChange={(event) => setPurchaseForm((current) => ({ ...current, unit: event.target.value }))} helperText="This unit is displayed in stock and GST purchase history." fullWidth /></Grid>
+          <Grid item xs={12} sm={6}><TextField select label="Purchase type" value={purchaseForm.stockType} onChange={(event) => { const stockType = event.target.value; setPurchaseForm((current) => ({ ...current, stockType, customPurchaseType: stockType === 'other' ? current.customPurchaseType : '', unit: defaultUnitFor(stockType, materialUnits) })); }} fullWidth>{purchaseTypes.map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></Grid>
+          {purchaseForm.stockType === 'other' && <Grid item xs={12} sm={6}><TextField label="Other purchase description" value={purchaseForm.customPurchaseType} onChange={(event) => setPurchaseForm((current) => ({ ...current, customPurchaseType: event.target.value }))} placeholder="e.g. Truck tyre, machine spare part" helperText="This description will appear in purchase history and GST inward reports." required fullWidth /></Grid>}
+          {purchaseForm.stockType === 'other' && <Grid item xs={12}><Alert severity="info">Other purchases are recorded for supplier/accounting and GST reporting only. They do not increase physical inventory stock. GST entered here is included in inward GST reports; verify input-credit eligibility before filing.</Alert></Grid>}
+          <Grid item xs={12} sm={6}><TextField label="Unit" value={purchaseForm.unit} onChange={(event) => setPurchaseForm((current) => ({ ...current, unit: event.target.value }))} helperText={purchaseForm.stockType === 'other' ? 'Used only to describe this purchase and in GST purchase history.' : 'This unit is displayed in stock and GST purchase history.'} fullWidth /></Grid>
           <Grid item xs={12} sm={6}><TextField label="Quantity" type="number" value={purchaseForm.quantity} onChange={(event) => setPurchaseForm((current) => ({ ...current, quantity: event.target.value }))} inputProps={{ min: 0.01, step: '0.01' }} required fullWidth /></Grid>
           <Grid item xs={12} sm={6}><TextField label="Cost per unit" type="number" value={purchaseForm.unitCost} onChange={(event) => setPurchaseForm((current) => ({ ...current, unitCost: event.target.value }))} inputProps={{ min: 0, step: '0.01' }} required fullWidth /></Grid>
           <Grid item xs={12} sm={6}><TextField label="GST rate %" type="number" value={purchaseForm.gstRate} onChange={(event) => setPurchaseForm((current) => ({ ...current, gstRate: event.target.value }))} inputProps={{ min: 0, max: 28, step: '0.01' }} fullWidth /></Grid>
@@ -261,7 +266,7 @@ const InventoryPage = () => {
         </Grid></DialogContent><DialogActions sx={{ p: 2.5 }}><Button onClick={() => setPurchaseOpen(false)}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? 'Saving…' : 'Record purchase'}</Button></DialogActions></form>
       </Dialog>
 
-      <ConfirmDialog open={Boolean(deleteRecord)} title="Delete this purchase?" description="The purchased quantity will be removed from stock and supplier totals will be reversed. Deletion is blocked when that stock has already been consumed." busy={busy} onClose={() => setDeleteRecord(null)} onConfirm={confirmDelete} />
+      <ConfirmDialog open={Boolean(deleteRecord)} title="Delete this purchase?" description={deleteRecord?.affectsInventory === false ? 'This purchase will be removed from purchase history and supplier/GST totals will be reversed. Physical inventory stock is not affected.' : 'The purchased quantity will be removed from stock and supplier totals will be reversed. Deletion is blocked when that stock has already been consumed.'} busy={busy} onClose={() => setDeleteRecord(null)} onConfirm={confirmDelete} />
     </>
   );
 };
